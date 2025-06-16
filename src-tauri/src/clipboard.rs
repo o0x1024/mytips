@@ -121,115 +121,67 @@ pub fn get_selected_text() -> Option<String> {
 /// 获取当前选中的文本（Windows）
 #[cfg(target_os = "windows")]
 pub fn get_selected_text() -> Option<String> {
-    println!("Windows: 开始获取选中文本...");
-    
     // 标记我们正在模拟复制，防止剪贴板监听器触发
     SIMULATING_COPY.store(true, Ordering::SeqCst);
     
     // 在Windows上模拟Ctrl+C获取选中文本
     // 使用临时剪贴板存储原始内容
-    let mut clipboard = match Clipboard::new() {
-        Ok(clipboard) => clipboard,
-        Err(e) => {
-            eprintln!("Windows: 无法初始化剪贴板: {}", e);
-            SIMULATING_COPY.store(false, Ordering::SeqCst);
-            return None;
-        }
-    };
-    
+    let mut clipboard = Clipboard::new().ok()?;
     let original_content = clipboard.get_text().unwrap_or_default();
-    println!("Windows: 原始剪贴板内容长度: {}", original_content.len());
     
     // 模拟Ctrl+C按键
-    use enigo::{Enigo, Key, Keyboard, Settings, Direction};
+    use enigo::{Enigo, Key, Keyboard, Settings};
     
+    // 创建enigo实例
     let mut enigo = match Enigo::new(&Settings::default()) {
         Ok(enigo) => enigo,
         Err(e) => {
-            eprintln!("Windows: 无法创建Enigo实例: {}", e);
+            eprintln!("无法创建Enigo实例: {}", e);
             SIMULATING_COPY.store(false, Ordering::SeqCst);
             return None;
         }
     };
     
-    println!("Windows: 开始模拟Ctrl+C按键...");
-    
-    // 使用更稳定的按键模拟方式
-    let copy_result = (|| -> Result<(), Box<dyn std::error::Error>> {
-        // 按下Ctrl键
-        enigo.key(Key::Control, Direction::Press)?;
-        std::thread::sleep(Duration::from_millis(50));
-        
-        // 按下C键
-        enigo.key(Key::Unicode('c'), Direction::Press)?;
-        std::thread::sleep(Duration::from_millis(50));
-        
-        // 释放C键
-        enigo.key(Key::Unicode('c'), Direction::Release)?;
-        std::thread::sleep(Duration::from_millis(50));
-        
-        // 释放Ctrl键
-        enigo.key(Key::Control, Direction::Release)?;
-        std::thread::sleep(Duration::from_millis(100));
-        
-        Ok(())
-    })();
-    
-    if let Err(e) = copy_result {
-        eprintln!("Windows: 按键模拟失败: {}", e);
+    // 模拟Ctrl+C按键组合
+    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Press) {
+        eprintln!("按下Ctrl键失败: {}", e);
         SIMULATING_COPY.store(false, Ordering::SeqCst);
         return None;
     }
     
-    println!("Windows: 按键模拟完成，等待剪贴板更新...");
-    
-    // 等待剪贴板更新，最多等待1秒
-    let mut attempts = 0;
-    let max_attempts = 10;
-    let mut selected_text = String::new();
-    
-    while attempts < max_attempts {
-        std::thread::sleep(Duration::from_millis(100));
-        
-        match clipboard.get_text() {
-            Ok(current_text) => {
-                if !current_text.is_empty() && current_text != original_content {
-                    selected_text = current_text;
-                    println!("Windows: 检测到剪贴板更新，内容长度: {}", selected_text.len());
-                    break;
-                }
-            },
-            Err(e) => {
-                eprintln!("Windows: 获取剪贴板内容失败: {}", e);
-            }
-        }
-        
-        attempts += 1;
+    if let Err(e) = enigo.key(Key::Unicode('c'), enigo::Direction::Click) {
+        eprintln!("按下C键失败: {}", e);
+        let _ = enigo.key(Key::Control, enigo::Direction::Release);
+        SIMULATING_COPY.store(false, Ordering::SeqCst);
+        return None;
     }
+    
+    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Release) {
+        eprintln!("释放Ctrl键失败: {}", e);
+    }
+    
+    // 等待一小段时间确保剪贴板已更新
+    thread::sleep(Duration::from_millis(200));
+    
+    // 获取剪贴板内容（即选中文本）
+    let selected_text = clipboard.get_text().unwrap_or_default();
     
     // 处理结果
     let result = if !selected_text.is_empty() && selected_text != original_content {
-        println!("Windows: 成功获取选中文本: {}", &selected_text[..std::cmp::min(selected_text.len(), 100)]);
         Some(selected_text)
     } else {
-        println!("Windows: 未检测到新的选中文本");
         None
     };
     
-    // 尝试恢复原始剪贴板内容
+    // 恢复原始剪贴板内容
     if !original_content.is_empty() {
-        if let Err(e) = clipboard.set_text(original_content) {
-            eprintln!("Windows: 恢复原始剪贴板内容失败: {}", e);
-        } else {
-            println!("Windows: 已恢复原始剪贴板内容");
-        }
+        let _ = clipboard.set_text(original_content);
     }
     
     // 延迟一小段时间后重置标记
-    std::thread::spawn(|| {
-        std::thread::sleep(Duration::from_millis(1000));
+    thread::spawn(|| {
+        thread::sleep(Duration::from_millis(1000));
         SIMULATING_COPY.store(false, Ordering::SeqCst);
-        println!("Windows: SIMULATING_COPY标记已重置");
     });
     
     result
@@ -247,8 +199,9 @@ pub fn get_selected_text() -> Option<String> {
     let original_content = clipboard.get_text().unwrap_or_default();
     
     // 模拟Ctrl+C按键
-    use enigo::{Enigo, Key, Keyboard, Settings, Direction};
+    use enigo::{Enigo, Key, Keyboard, Settings};
     
+    // 创建enigo实例
     let mut enigo = match Enigo::new(&Settings::default()) {
         Ok(enigo) => enigo,
         Err(e) => {
@@ -258,21 +211,21 @@ pub fn get_selected_text() -> Option<String> {
         }
     };
     
-    // 使用正确的API模拟Ctrl+C
-    if let Err(e) = enigo.key(Key::Control, Direction::Press) {
+    // 模拟Ctrl+C按键组合
+    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Press) {
         eprintln!("按下Ctrl键失败: {}", e);
         SIMULATING_COPY.store(false, Ordering::SeqCst);
         return None;
     }
     
-    if let Err(e) = enigo.key(Key::Unicode('c'), Direction::Click) {
+    if let Err(e) = enigo.key(Key::Unicode('c'), enigo::Direction::Click) {
         eprintln!("按下C键失败: {}", e);
-        let _ = enigo.key(Key::Control, Direction::Release);
+        let _ = enigo.key(Key::Control, enigo::Direction::Release);
         SIMULATING_COPY.store(false, Ordering::SeqCst);
         return None;
     }
     
-    if let Err(e) = enigo.key(Key::Control, Direction::Release) {
+    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Release) {
         eprintln!("释放Ctrl键失败: {}", e);
     }
     
@@ -280,14 +233,7 @@ pub fn get_selected_text() -> Option<String> {
     thread::sleep(Duration::from_millis(200));
     
     // 获取剪贴板内容（即选中文本）
-    let selected_text = match clipboard.get_text() {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("获取剪贴板内容失败: {}", e);
-            SIMULATING_COPY.store(false, Ordering::SeqCst);
-            return None;
-        }
-    };
+    let selected_text = clipboard.get_text().unwrap_or_default();
     
     // 处理结果
     let result = if !selected_text.is_empty() && selected_text != original_content {
@@ -303,7 +249,7 @@ pub fn get_selected_text() -> Option<String> {
     
     // 延迟一小段时间后重置标记
     thread::spawn(|| {
-        thread::sleep(Duration::from_millis(500));
+        thread::sleep(Duration::from_millis(1000));
         SIMULATING_COPY.store(false, Ordering::SeqCst);
     });
     
@@ -362,33 +308,21 @@ fn is_sensitive_content(content: &str) -> bool {
     let is_password_like = content.len() >= 6 
                           && content.len() <= 64
                           && !content.contains(' ')
-                          && !content.contains('\n')
-                          && !content.contains('\t')
                           && (content.contains(|c: char| c.is_ascii_punctuation()) 
                              || content.contains(|c: char| c.is_ascii_digit())
                              || content.contains(|c: char| c.is_uppercase()));
     
     // 检查是否是特定格式的敏感数据
-    let content_lower = content.to_lowercase();
-    let contains_sensitive_pattern = content_lower.contains("password") 
-                                  || content_lower.contains("密码")
-                                  || content_lower.contains("token")
-                                  || content_lower.contains("api key")
-                                  || content_lower.contains("secret")
-                                  || content_lower.contains("private key")
-                                  || content_lower.contains("credit card")
-                                  || content_lower.contains("信用卡")
-                                  || content_lower.contains("ssh")
-                                  || content_lower.contains("rsa")
-                                  || content_lower.contains("-----begin")
-                                  || content_lower.contains("-----end");
+    let contains_sensitive_pattern = content.contains("password") 
+                                  || content.contains("密码")
+                                  || content.contains("token")
+                                  || content.contains("api key")
+                                  || content.contains("secret")
+                                  || content.contains("private key")
+                                  || content.contains("credit card")
+                                  || content.contains("信用卡");
     
-    // 检查是否看起来像Base64编码的密钥或令牌
-    let looks_like_base64_key = content.len() > 20 
-                               && content.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '=')
-                               && content.chars().filter(|&c| c == '=').count() <= 2;
-    
-    is_password_like || contains_sensitive_pattern || looks_like_base64_key
+    is_password_like || contains_sensitive_pattern
 }
 
 /// 清理过期的剪贴板条目

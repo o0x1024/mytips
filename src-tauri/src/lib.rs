@@ -5,7 +5,7 @@ pub mod db;
 use tauri::menu::Menu;
 use tauri::menu::MenuItem;
 use tauri::tray::TrayIconBuilder;
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 // 直接导入api模块提供的所有公共API
@@ -158,73 +158,105 @@ pub fn run() {
                     Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState,
                 };
 
-                // 根据操作系统设置不同的快捷键
-                #[cfg(target_os = "macos")]
-                let shortcut_modifiers = Modifiers::META | Modifiers::ALT;
-                #[cfg(not(target_os = "macos"))]
-                let shortcut_modifiers = Modifiers::CONTROL | Modifiers::ALT;
+                // 从数据库获取快捷键配置
+                let shortcut_config = {
+                    let db_state = app.state::<std::sync::Mutex<DbManager>>();
+                    let db = db_state.lock().unwrap();
+                    match db.get_setting("global_shortcut") {
+                        Ok(Some(config_str)) => {
+                            match serde_json::from_str::<crate::api::shortcuts::ShortcutConfig>(&config_str) {
+                                Ok(config) => config,
+                                Err(_) => crate::api::shortcuts::ShortcutConfig::default(),
+                            }
+                        },
+                        _ => crate::api::shortcuts::ShortcutConfig::default(),
+                    }
+                };
 
-                let ctrl_alt_c_shortcut: Shortcut =
-                    Shortcut::new(Some(shortcut_modifiers), Code::KeyC);
+                // 构建修饰键
+                let mut modifiers = Modifiers::empty();
+                for modifier in &shortcut_config.modifiers {
+                    match modifier.as_str() {
+                        "meta" => {
+                            // 在Windows下，meta键对应Control键
+                            #[cfg(target_os = "windows")]
+                            { modifiers |= Modifiers::CONTROL; }
+                            // 在macOS下，meta键对应Command键
+                            #[cfg(target_os = "macos")]
+                            { modifiers |= Modifiers::META; }
+                            // 在Linux下，meta键对应Super键，但通常使用Control
+                            #[cfg(target_os = "linux")]
+                            { modifiers |= Modifiers::CONTROL; }
+                        },
+                        "shift" => modifiers |= Modifiers::SHIFT,
+                        "alt" => modifiers |= Modifiers::ALT,
+                        "control" => modifiers |= Modifiers::CONTROL,
+                        _ => {}
+                    }
+                }
+
+                // 构建按键码
+                let key_code = match shortcut_config.key.to_lowercase().as_str() {
+                    "a" => Code::KeyA, "b" => Code::KeyB, "c" => Code::KeyC, "d" => Code::KeyD,
+                    "e" => Code::KeyE, "f" => Code::KeyF, "g" => Code::KeyG, "h" => Code::KeyH,
+                    "i" => Code::KeyI, "j" => Code::KeyJ, "k" => Code::KeyK, "l" => Code::KeyL,
+                    "m" => Code::KeyM, "n" => Code::KeyN, "o" => Code::KeyO, "p" => Code::KeyP,
+                    "q" => Code::KeyQ, "r" => Code::KeyR, "s" => Code::KeyS, "t" => Code::KeyT,
+                    "u" => Code::KeyU, "v" => Code::KeyV, "w" => Code::KeyW, "x" => Code::KeyX,
+                    "y" => Code::KeyY, "z" => Code::KeyZ,
+                    "1" => Code::Digit1, "2" => Code::Digit2, "3" => Code::Digit3, "4" => Code::Digit4,
+                    "5" => Code::Digit5, "6" => Code::Digit6, "7" => Code::Digit7, "8" => Code::Digit8,
+                    "9" => Code::Digit9, "0" => Code::Digit0,
+                    _ => Code::KeyC, // 默认使用C键
+                };
+
+                let global_shortcut = Shortcut::new(Some(modifiers), key_code);
 
                 app.handle().plugin(
                     tauri_plugin_global_shortcut::Builder::new()
                         .with_handler(move |app, shortcut, event| {
-                            println!("快捷键事件: {:?}, 状态: {:?}", shortcut, event.state());
-                            if shortcut == &ctrl_alt_c_shortcut {
+                            println!("快捷键触发: {:?}", shortcut);
+                            if shortcut == &global_shortcut {
                                 match event.state() {
                                     ShortcutState::Pressed => {
-                                        #[cfg(target_os = "macos")]
-                                        println!("快捷键 Cmd+Alt+C 被按下！");
                                         #[cfg(target_os = "windows")]
-                                        println!("快捷键 Ctrl+Alt+C 被按下！");
+                                        println!("快捷键 Ctrl+Shift+C 被按下！");
+                                        #[cfg(target_os = "macos")]
+                                        println!("快捷键 Cmd+Shift+C 被按下！");
                                         #[cfg(target_os = "linux")]
-                                        println!("快捷键 Ctrl+Alt+C 被按下！");
+                                        println!("快捷键 Ctrl+Shift+C 被按下！");
+                                        
+                                        // 首先标记我们正在模拟复制，防止剪贴板监听器触发
+                                        crate::clipboard::SIMULATING_COPY.store(true, std::sync::atomic::Ordering::SeqCst);
+                                        
+                                        // 给标记有时间生效
+                                        std::thread::sleep(std::time::Duration::from_millis(100));
                                         
                                         // 获取应用句柄，用于调用剪贴板API
                                         let app_handle = app.app_handle().clone();
                                         
-                                        // 在单独的线程中处理快捷键操作，避免阻塞UI
+                                        // 在单独线程中处理，避免阻塞快捷键处理
                                         std::thread::spawn(move || {
-                                            println!("开始处理快捷键操作...");
-                                            
                                             // 获取当前选中的文本并添加到临时笔记区
                                             match crate::api::clipboard_api::add_selection_to_clipboard(app_handle.clone()) {
                                                 Ok(_) => {
-                                                    println!("✅ 已将选中内容添加到临时笔记区");
-                                                    
-                                                    // 可选：显示系统通知
-                                                    #[cfg(target_os = "windows")]
-                                                    {
-                                                        use std::process::Command;
-                                                        let _ = Command::new("powershell")
-                                                            .args(&[
-                                                                "-Command",
-                                                                "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('已添加到临时笔记区', 'MyTips', 'OK', 'Information')"
-                                                            ])
-                                                            .output();
+                                                    println!("已将选中内容添加到临时笔记区");
+                                                    // 通知前端更新
+                                                    if let Err(e) = app_handle.emit("new-clipboard-entry", ()) {
+                                                        eprintln!("发送new-clipboard-entry事件失败: {}", e);
                                                     }
                                                 },
-                                                Err(e) => {
-                                                    eprintln!("❌ 添加选中内容到临时笔记区失败: {}", e);
-                                                    
-                                                    // 显示错误通知
-                                                    #[cfg(target_os = "windows")]
-                                                    {
-                                                        use std::process::Command;
-                                                        let _ = Command::new("powershell")
-                                                            .args(&[
-                                                                "-Command",
-                                                                &format!("Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('操作失败: {}', 'MyTips', 'OK', 'Error')", e)
-                                                            ])
-                                                            .output();
-                                                    }
-                                                }
+                                                Err(e) => eprintln!("添加选中内容到临时笔记区失败: {}", e)
                                             }
+                                            
+                                            // 延迟后重置标记
+                                            std::thread::sleep(std::time::Duration::from_millis(2000));
+                                            crate::clipboard::SIMULATING_COPY.store(false, std::sync::atomic::Ordering::SeqCst);
+                                            println!("SIMULATING_COPY标记已重置");
                                         });
                                     }
                                     ShortcutState::Released => {
-                                        // 释放事件通常不需要处理
+                                        // 快捷键释放时不需要特殊处理
                                     }
                                 }
                             }
@@ -233,18 +265,10 @@ pub fn run() {
                 )?;
 
                 // 注册快捷键
-                match app.global_shortcut().register(ctrl_alt_c_shortcut.clone()) {
-                    Ok(_) => {
-                        #[cfg(target_os = "macos")]
-                        println!("✅ 全局快捷键 Cmd+Alt+C 注册成功");
-                        #[cfg(not(target_os = "macos"))]
-                        println!("✅ 全局快捷键 Ctrl+Alt+C 注册成功");
-                    },
-                    Err(e) => {
-                        eprintln!("❌ 全局快捷键注册失败: {}", e);
-                        #[cfg(target_os = "windows")]
-                        eprintln!("提示：在Windows上，请确保以管理员权限运行应用程序");
-                    }
+                if let Err(e) = app.global_shortcut().register(global_shortcut) {
+                    eprintln!("注册全局快捷键失败: {}", e);
+                } else {
+                    println!("全局快捷键注册成功: {:?}", global_shortcut);
                 }
             }
 

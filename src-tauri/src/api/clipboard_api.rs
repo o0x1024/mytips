@@ -38,49 +38,29 @@ pub fn add_clipboard_entry(content: String, source: Option<String>, db: State<Mu
 
 #[tauri::command]
 pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
-    println!("开始获取选中文本...");
-    
     // 尝试获取当前选中文本
     let selected_text = match crate::clipboard::get_selected_text() {
         Some(text) => {
             if text.is_empty() {
-                println!("选中文本为空");
                 return Err("没有选中文本".to_string());
             }
-            println!("获取到选中文本，长度: {}", text.len());
             text
         },
-        None => {
-            println!("无法获取选中文本");
-            return Err("无法获取选中文本".to_string());
-        },
+        None => return Err("无法获取选中文本".to_string()),
     };
     
     // 获取当前窗口标题作为来源
     let source = crate::clipboard::get_active_window_title();
-    println!("获取到的选中文本: {}", &selected_text[..std::cmp::min(selected_text.len(), 100)]);
-    if let Some(ref source_name) = source {
-        println!("来源: {}", source_name);
-    } else {
-        println!("未能获取窗口标题");
-    }
+    println!("获取到的选中文本: {}", selected_text);
+    println!("来源: {:?}", source);
     
     // 获取数据库连接
     let db_state: State<Mutex<DbManager>> = app.state();
-    let db_guard = db_state.lock().map_err(|e| {
-        let error_msg = format!("无法锁定数据库: {}", e);
-        eprintln!("{}", error_msg);
-        error_msg
-    })?;
+    let db_guard = db_state.lock().map_err(|e| format!("无法锁定数据库: {}", e))?;
     
     // 检查是否已经存在相同内容
     let content_exists = match db_guard.check_clipboard_entry_exists(&selected_text) {
-        Ok(exists) => {
-            if exists {
-                println!("相同内容已存在，跳过添加");
-            }
-            exists
-        },
+        Ok(exists) => exists,
         Err(e) => {
             eprintln!("检查剪贴板内容是否存在失败: {}", e);
             false // 如果检查失败，继续尝试添加
@@ -88,17 +68,14 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
     };
     
     if content_exists {
+        println!("相同内容已存在，跳过添加");
         return Ok(());
     }
     
     // 添加到数据库
     if let Err(e) = db_guard.add_clipboard_entry(&selected_text, source.as_deref()) {
-        let error_msg = format!("添加到临时笔记区失败: {}", e);
-        eprintln!("{}", error_msg);
-        return Err(error_msg);
+        return Err(format!("添加到临时笔记区失败: {}", e));
     }
-    
-    println!("成功添加选中内容到临时笔记区");
     
     // 通知前端更新
     let app_handle = app.clone();
@@ -107,7 +84,6 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
         return Err(format!("发送更新事件失败: {}", e));
     }
     
-    println!("已发送前端更新事件");
     Ok(())
 }
 
@@ -138,35 +114,13 @@ pub fn create_note_from_history(ids: Vec<i64>, db: State<Mutex<DbManager>>) -> R
         })
         .collect::<String>();
 
-    // 查找或创建"未分类"笔记本
-    let uncategorized_category = match db_guard.get_all_categories() {
-        Ok(categories) => {
-            // 查找是否已存在"未分类"笔记本
-            categories.into_iter().find(|cat| cat.name == "未分类")
-        },
-        Err(_) => None,
-    };
-
-    let category_id = if let Some(category) = uncategorized_category {
-        Some(category.id)
-    } else {
-        // 如果不存在"未分类"笔记本，则创建一个
-        match db_guard.create_category("未分类", None) {
-            Ok(new_category) => Some(new_category.id),
-            Err(e) => {
-                eprintln!("创建未分类笔记本失败: {}", e);
-                None // 如果创建失败，使用None
-            }
-        }
-    };
-
     let tip = Tip {
         id: Uuid::new_v4().to_string(),
         title: "来自临时笔记的内容".to_string(),
         content,
         tip_type: TipType::Markdown,
         language: None,
-        category_id,
+        category_id: None,
         created_at: chrono::Utc::now().timestamp(),
         updated_at: chrono::Utc::now().timestamp(),
     };

@@ -1457,17 +1457,8 @@ const saveNoteAsTip = async () => {
   isNoteSaving.value = true
 
   try {
-    // 查找或创建"未分类"笔记本
-    let uncategorizedCategory = tipsStore.categories.find(cat => cat.name === '未分类')
-    
-    if (!uncategorizedCategory) {
-      // 如果不存在"未分类"笔记本，则创建一个
-      const newCategory = await tipsStore.createCategory('未分类')
-      if (!newCategory) {
-        throw new Error('无法创建未分类笔记本')
-      }
-      uncategorizedCategory = newCategory
-    }
+    // 获取第一个分类作为默认分类
+    const defaultCategoryId = tipsStore.categories.length > 0 ? tipsStore.categories[0].id : undefined
 
     // 创建新的tip
     const newTip = {
@@ -1476,7 +1467,7 @@ const saveNoteAsTip = async () => {
       content: noteContent.value,
       tip_type: 'markdown', // 默认为markdown
       language: undefined, // 不需要单独指定语言
-      category_id: uncategorizedCategory.id, // 使用未分类笔记本的ID
+      category_id: defaultCategoryId,
       tags: []
     }
 
