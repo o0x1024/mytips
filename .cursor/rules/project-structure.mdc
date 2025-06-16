@@ -1,0 +1,30 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# 项目结构与主要约定
+
+本项目为tauri+rust + Vue3 + TypeScript + Pinia 状态管理的桌面应用，目录结构如下：
+
+- [src/](mdc:src)：主源码目录
+  - [components/](mdc:src/components)：核心 UI 组件（如 NoteList、MainLayout、NotebookItem、NoteEditor、SideNavBar 等）
+  - [views/](mdc:src/views)：页面级组件（如 Settings、AIAssistant、Home、Editor）
+  - [stores/](mdc:src/stores)：Pinia 状态管理（如 tipsStore、uiStore）
+  - [assets/](mdc:src/assets)：静态资源
+  - [App.vue](mdc:src/App.vue)：应用根组件
+  - [main.ts](mdc:src/main.ts)：应用入口，挂载根组件
+- [src-tauri/](mdc:src-tauri)：Tauri 桌面端相关代码
+- [public/](mdc:public)：静态文件
+- [.cursor/rules/](mdc:.cursor/rules)：Cursor 规则文件
+
+## 主要约定
+- 组件采用单文件组件（.vue），风格统一，支持 TypeScript。
+- 状态管理统一通过 Pinia 实现。
+- 页面级组件在 views 目录，复用组件在 components 目录。
+- 入口为 [src/main.ts](mdc:src/main.ts)，根组件为 [src/App.vue](mdc:src/App.vue)。
+- Tauri 相关逻辑在 src-tauri 目录。
+
+如需了解具体组件或页面结构，请参考对应目录下的文件。
+
+
