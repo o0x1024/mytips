@@ -446,7 +446,7 @@ const emit = defineEmits([
 
 // 状态
 const localNote = ref<Note>({...props.note})
-const isPreviewMode = ref(true)
+const isPreviewMode = ref(false)
 const editorTextarea = ref<HTMLTextAreaElement | null>(null)
 const autoSaveTimeout = ref<number | null>(null)
 const showContextMenu = ref(false)
@@ -454,7 +454,7 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const isAIProcessing = ref(false)
 const isEditOnly = ref(false)
-const isSplitMode = ref(false)
+const isSplitMode = ref(true)
 const streamingContent = ref('')  // 用于存储流式输出的内容
 const isStreaming = ref(false)    // 是否正在流式输出
 const currentStreamingId = ref<string | null>(null)  // 当前流式输出的ID
@@ -830,35 +830,48 @@ const wordCount = computed(() => {
 })
 
 // 监听外部note变化
-watch(() => props.note, async (newNote) => {
-  // 深拷贝对象，保留图片数据
-  const images = newNote.images ? {...newNote.images} : undefined;
-  localNote.value = {...newNote, images};
-  
-  // 如果笔记有ID但没有images数据，尝试从后端加载
-  if (newNote.id && !newNote.images) {
-    try {
-      console.log(`尝试加载笔记(${newNote.id})的图片...`)
-      const images = await invoke('get_tip_images', { tip_id: newNote.id }) as Record<string, string>
-      console.log(`获取到的图片数: ${Object.keys(images).length}`)
-      
-      if (Object.keys(images).length > 0) {
-        localNote.value.images = images
-        console.log('图片已加载到本地状态')
+watch(() => props.note, async (newNote, oldNote) => {
+  // 如果是初始化（oldNote为undefined）或者笔记ID发生变化（切换到不同的笔记），才完全重新设置localNote
+  if (!oldNote || oldNote.id !== newNote.id) {
+    // 深拷贝对象，保留图片数据
+    const images = newNote.images ? {...newNote.images} : undefined;
+    localNote.value = {...newNote, images};
+    
+    // 如果笔记有ID但没有images数据，尝试从后端加载
+    if (newNote.id && !newNote.images) {
+      try {
+        console.log(`尝试加载笔记(${newNote.id})的图片...`)
+        const images = await invoke('get_tip_images', { tip_id: newNote.id }) as Record<string, string>
+        console.log(`获取到的图片数: ${Object.keys(images).length}`)
+        
+        if (Object.keys(images).length > 0) {
+          localNote.value.images = images
+          console.log('图片已加载到本地状态')
+        }
+      } catch (error) {
+        console.error('加载笔记图片失败:', error)
+        
+        // 获取详细的错误信息
+        let errorMessage = '加载笔记图片失败';
+        if (error instanceof Error) {
+          errorMessage = `${errorMessage}: ${error.message}`;
+          console.error('错误详情:', error.stack);
+        } else {
+          errorMessage = `${errorMessage}: ${String(error)}`;
+        }
+        
+        console.error(errorMessage)
       }
-    } catch (error) {
-      console.error('加载笔记图片失败:', error)
-      
-      // 获取详细的错误信息
-      let errorMessage = '加载笔记图片失败';
-      if (error instanceof Error) {
-        errorMessage = `${errorMessage}: ${error.message}`;
-        console.error('错误详情:', error.stack);
-      } else {
-        errorMessage = `${errorMessage}: ${String(error)}`;
-      }
-      
-      console.error(errorMessage)
+    }
+  }
+  // 如果是同一个笔记的更新，只更新非编辑相关的字段（如category_id等）
+  else {
+    // 只更新非内容相关的字段，避免覆盖用户正在编辑的内容
+    if (newNote.category_id !== localNote.value.category_id) {
+      localNote.value.category_id = newNote.category_id;
+    }
+    if (newNote.tags && JSON.stringify(newNote.tags) !== JSON.stringify(localNote.value.tags)) {
+      localNote.value.tags = newNote.tags;
     }
   }
 }, { immediate: true, deep: true })

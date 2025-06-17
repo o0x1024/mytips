@@ -47,6 +47,7 @@
             @delete-note="deleteNote"
             @export-note="exportNote"
             @move-to-category="moveNoteToCategory"
+            @refresh="refreshNotes"
             :key="selectedNotebookId"
           />
       </div>
@@ -287,12 +288,41 @@ const navFilteredNotebooks = computed(() => {
 })
 
 const navFilteredNotes = computed(() => {
-  if (!navSearchQuery.value.trim()) return notes.value
-  const query = navSearchQuery.value.trim().toLowerCase()
-  return notes.value.filter(note =>
-    note.title.toLowerCase().includes(query) ||
-    note.content.toLowerCase().includes(query)
-  )
+  let result = [...notes.value]
+  
+  // 首先处理导航搜索
+  if (navSearchQuery.value.trim()) {
+    const query = navSearchQuery.value.trim().toLowerCase()
+    result = result.filter(note =>
+      note.title.toLowerCase().includes(query) ||
+      note.content.toLowerCase().includes(query)
+    )
+  }
+  
+  // 处理笔记本筛选
+  if (selectedNotebookId.value) {
+    const notebookIds = collectNotebookIds(notebooks.value, selectedNotebookId.value)
+    result = result.filter(note => notebookIds.includes(String(note.category_id)))
+  }
+  
+  // 处理标签筛选
+  if (selectedTags.value.length > 0) {
+    result = result.filter(note => {
+      return (note.tags || []).some(tag => selectedTags.value.includes(tag.id))
+    })
+  }
+  
+  // 处理列表搜索
+  if (listSearchQuery.value.trim()) {
+    const query = listSearchQuery.value.trim().toLowerCase()
+    result = result.filter(note =>
+      note.title.toLowerCase().includes(query) ||
+      note.content.toLowerCase().includes(query) ||
+      (note.tags || []).some(tag => tag.name.toLowerCase().includes(query))
+    )
+  }
+  
+  return result
 })
 
 // 方法
@@ -316,6 +346,8 @@ function handleNavSearch(query: string) {
   // 侧边栏搜索时，清除选中笔记本和标签，显示搜索结果
   selectedNotebookId.value = undefined
   selectedTags.value = []
+  listSearchQuery.value = ''
+  selectedNoteId.value = undefined
   // 可选：如果你希望搜索时自动切换到列表区域
   if (isFocusMode.value) {
     focusSection.value = 'list'
@@ -324,7 +356,8 @@ function handleNavSearch(query: string) {
 
 function handleListSearch(query: string) {
   listSearchQuery.value = query
-  // 列表搜索由计算属性处理
+  // 列表搜索时清除当前选中的笔记
+  selectedNoteId.value = undefined
 }
 
 function selectNotebook(id: string) {
@@ -369,9 +402,34 @@ function toggleTag(id: string) {
     selectedTags.value.push(id)
   }
   
-  // 如果有标签选择，则清除笔记本选择
+  // 如果有标签选择，则清除笔记本选择和搜索条件
   if (selectedTags.value.length > 0) {
     selectedNotebookId.value = undefined
+    listSearchQuery.value = ''
+    
+    // 获取包含所选标签的所有笔记
+    const notesWithTags = notes.value.filter(note => {
+      return (note.tags || []).some(tag => selectedTags.value.includes(tag.id))
+    })
+    
+    // 如果有符合条件的笔记，自动选择第一个
+    if (notesWithTags.length > 0) {
+      // 优先选择固定的笔记
+      const pinnedNotes = notesWithTags.filter(note => note.isPinned)
+      if (pinnedNotes.length > 0) {
+        selectedNoteId.value = pinnedNotes[0].id
+      } else {
+        // 否则按照更新时间排序，选择最近更新的
+        const sortedNotes = [...notesWithTags].sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+        selectedNoteId.value = sortedNotes[0].id
+      }
+    } else {
+      // 如果没有符合条件的笔记，清除当前选择
+      selectedNoteId.value = undefined
+    }
+  } else {
+    // 如果没有选中任何标签，清除笔记选择
+    selectedNoteId.value = undefined
   }
   
   // 如果在专注模式下，切换到列表区域
@@ -456,12 +514,13 @@ async function createNewNote() {
   }
 }
 
-async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOnly?: boolean, _fromBlur?: boolean }) {
+async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOnly?: boolean, _fromBlur?: boolean, _autoSave?: boolean, _pageSwitch?: boolean }) {
   // 只更新标题，不刷新/重排列表
   if (updatedNote._titleOnly) {
     const idx = notes.value.findIndex(n => n.id === updatedNote.id)
     if (idx !== -1) {
       notes.value[idx].title = updatedNote.title
+      notes.value[idx].updated_at = Date.now()
     }
     return
   }
@@ -470,12 +529,17 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
   try {
     // 提取标记
     const isContentOnlyUpdate = updatedNote._contentOnly === true
-    const isFromBlur = updatedNote._fromBlur === true
+    const isAutoSave = updatedNote._autoSave === true
+    const isPageSwitch = updatedNote._pageSwitch === true
+    
     // 清除自定义标记，避免发送到后端
     const cleanedNote = { ...updatedNote }
     delete cleanedNote._contentOnly
     delete cleanedNote._fromBlur
     delete cleanedNote._titleOnly
+    delete cleanedNote._autoSave
+    delete cleanedNote._pageSwitch
+    
     // 提取图片数据以单独处理
     const imageData = cleanedNote.images ? {...cleanedNote.images} : undefined
     const tipData = {
@@ -487,15 +551,15 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
       category_id: cleanedNote.category_id,
       tags: Array.isArray(cleanedNote.tags) ? cleanedNote.tags.map(tag => tag.id) : []
     }
-    // 如果是仅内容更新，使用防抖避免频繁调用后端API
-    if (isContentOnlyUpdate) {
+    
+    // 情况1：自动保存 - 仅内容更新，不触发列表重排序
+    if (isAutoSave || isContentOnlyUpdate) {
       // 使用本地数据更新界面，而不是立即发送到后端
-      // 查找现有笔记
       const index = notes.value.findIndex(note => note.id === cleanedNote.id)
       if (index >= 0) {
         // 仅更新内容、更新时间和图片数据
         notes.value[index].content = cleanedNote.content
-        notes.value[index].updated_at = cleanedNote.updated_at
+        notes.value[index].updated_at = cleanedNote.updated_at || Date.now()
         // 更新图片数据
         if (imageData) {
           if (!notes.value[index].images) {
@@ -508,16 +572,13 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
       return
     }
     
-    // 正常保存到后端的逻辑
+    // 情况2：页面切换时的完整保存 - 保存到后端并更新列表
     const savedNote = await tipsStore.saveTip(tipData)
     if (savedNote) {
       // 查找现有笔记
       const index = notes.value.findIndex(note => note.id === savedNote.id)
       
       if (index >= 0) {
-        // 判断是否有标题变化
-        const titleChanged = notes.value[index].title !== savedNote.title
-        
         // 保存原始图片数据
         const originalImages = notes.value[index].images
         
@@ -540,14 +601,12 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
           }
         }
         
-        // 只有在标题变化或编辑完成（失去焦点）时才重新排序
-        if (titleChanged && isFromBlur) {
-          // 将笔记按照当前排序规则重新排序
+        // 页面切换时重新排序列表
+        if (isPageSwitch) {
           sortNotes()
         }
       } else {
         // 如果找不到，可能是新笔记，添加到列表开头
-        // 确保新笔记包含图片数据
         if (imageData) {
           savedNote.images = imageData 
         }
@@ -1221,6 +1280,20 @@ function collectAllChildIds(notebook: any): string[] {
     }
   }
   return ids
+}
+
+// 添加 refreshNotes 方法
+async function refreshNotes() {
+  isLoading.value = true
+  try {
+    await tipsStore.fetchAllTips()
+    notes.value = tipsStore.tips
+    recountAllNotebookCounts()
+  } catch (error) {
+    console.error('刷新笔记失败:', error)
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 

@@ -1,9 +1,38 @@
 <template>
   <div class="h-full flex flex-col border-r border-base-300 relative">
-    <!-- 顶部区域 -->
-    <div class="p-10 border-b border-base-300">
-      <!-- 标题和计数 -->
-
+    <!-- 顶部区域：笔记统计和快速操作 -->
+    <div class="p-3 border-b border-base-300 bg-base-100">
+      <!-- 笔记统计信息 -->
+      <div class="flex items-center justify-between mb-5">
+        <div class="flex items-center gap-2 mt-2">
+          <h2 class="text-lg font-semibold text-base-content">笔记</h2>
+          <div class="badge badge-outline">{{ filteredNotes.length }}</div>
+        </div>
+        <div class="flex items-center gap-1">
+          <!-- 快速新建按钮 -->
+          <button 
+            class="btn btn-sm btn-ghost" 
+            @click="$emit('new-note')" 
+            title="新建笔记 (Ctrl+N)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          <!-- 刷新按钮 -->
+          <button 
+            class="btn btn-sm btn-ghost" 
+            @click="$emit('refresh')" 
+            title="刷新列表"
+            :class="{ 'loading': loading }">
+            <svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- 快速搜索框 -->
+      
     </div>
 
     <!-- 工具栏：排序和视图切换 -->
@@ -258,7 +287,7 @@ const props = defineProps({
 })
 
 // 组件事件
-const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'export-note', 'move-to-category'])
+const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'export-note', 'move-to-category', 'refresh'])
 
 // 状态
 const searchQuery = ref('')
@@ -311,43 +340,13 @@ function throttle<T extends (...args: any[]) => any>(func: T, limit: number): (.
 // 使用计算属性的getter和setter来优化笔记列表的渲染
 const internalFilteredNotes = ref([] as Note[])
 
-// 递归收集所有子节点id
-function collectNotebookIds(notebooks: any[], targetId: string): string[] {
-  for (const nb of notebooks) {
-    if (nb.id === targetId) {
-      return [nb.id, ...collectAllChildIds(nb)]
-    }
-    if (nb.children && nb.children.length > 0) {
-      const found = collectNotebookIds(nb.children, targetId)
-      if (found.length > 0) return found
-    }
-  }
-  return []
-}
-function collectAllChildIds(notebook: any): string[] {
-  let ids: string[] = []
-  if (notebook.children && notebook.children.length > 0) {
-    for (const child of notebook.children) {
-      ids.push(child.id)
-      ids = ids.concat(collectAllChildIds(child))
-    }
-  }
-  return ids
-}
-
 // 笔记列表更新计算 - 使用防抖+缓存的方式优化性能
 watch(
-  () => [props.notes, searchQuery.value, sortField.value, sortOrder.value, props.selectedTags, props.selectedNotebookId, props.notebooks],
+  () => [props.notes, searchQuery.value, sortField.value, sortOrder.value],
   throttle(() => {
     let result = [...props.notes]
 
-    // 只显示当前选中笔记本及其所有子孙节点下的笔记
-    if (props.selectedNotebookId) {
-      const ids = collectNotebookIds(props.notebooks, props.selectedNotebookId!)
-      result = result.filter(note => ids.includes(String(note.category_id)))
-    }
-
-    // 搜索过滤
+    // 本地搜索过滤（列表内搜索）
     if (searchQuery.value) {
       const query = searchQuery.value.toLowerCase()
       result = result.filter(note => {
@@ -356,13 +355,6 @@ watch(
           (note.content || '').toLowerCase().includes(query) ||
           (note.tags || []).some(tag => tag.name.toLowerCase().includes(query))
         )
-      })
-    }
-
-    // 标签过滤
-    if (props.selectedTags && props.selectedTags.length > 0) {
-      result = result.filter(note => {
-        return (note.tags || []).some(tag => props.selectedTags.includes(tag.id))
       })
     }
 
@@ -584,6 +576,7 @@ onActivated(() => {
     })
   }
 })
+
 </script>
 
 <style scoped>

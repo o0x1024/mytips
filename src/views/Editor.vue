@@ -137,9 +137,32 @@ onMounted(async () => {
     tipsStore.fetchAllTags()
   ])
   
-  // 设置默认分类（如果有）
-  if (categories.value.length > 0 && !tip.value.category_id) {
-    tip.value.category_id = categories.value[0].id
+  // 如果是从临时笔记区创建的笔记，优先设置为"未分类"笔记本
+  if (route.query.from === 'clipboard') {
+    // 查找"未分类"笔记本
+    const uncategorizedCategory = categories.value.find(cat => cat.name === '未分类')
+    if (uncategorizedCategory) {
+      tip.value.category_id = uncategorizedCategory.id
+    } else {
+      // 如果没有找到"未分类"笔记本，创建一个
+      try {
+        const newCategory = await tipsStore.createCategory('未分类')
+        if (newCategory) {
+          tip.value.category_id = newCategory.id
+        }
+      } catch (error) {
+        console.error('创建未分类笔记本失败:', error)
+        // 如果创建失败，使用第一个可用的分类
+        if (categories.value.length > 0) {
+          tip.value.category_id = categories.value[0].id
+        }
+      }
+    }
+  } else {
+    // 设置默认分类（如果有）
+    if (categories.value.length > 0 && !tip.value.category_id) {
+      tip.value.category_id = categories.value[0].id
+    }
   }
   
   // 如果是编辑模式，加载笔记数据
@@ -162,10 +185,8 @@ onMounted(async () => {
     } catch (error) {
       console.error('加载笔记失败:', error)
     }
-  } else if (route.query.from === 'clipboard') {
-    // 如果是从临时笔记区创建，自动填充临时标题
-    tip.value.title = '来自临时笔记区的笔记'
   }
+  // 如果是新建笔记且没有ID，保持默认的空笔记状态
 })
 
 // 创建新分类

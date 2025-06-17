@@ -523,6 +523,7 @@
                   <option value="deepseek">DeepSeek</option>
                   <option value="qwen">通义千问</option>
                   <option value="claude">Anthropic Claude</option>
+                  <option value="doubao">字节豆包</option>
                   <option value="custom">自定义API</option>
                 </select>
                 <p class="text-xs text-base-content/70 mt-1">设置后，AI相关功能将默认使用该模型</p>
