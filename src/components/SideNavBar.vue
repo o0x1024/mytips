@@ -23,7 +23,7 @@
                class="input input-bordered input-sm w-full pl-8" 
                v-model="searchQuery" 
                @input="$emit('search', searchQuery)" />
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1/2 transform -translate-y-1/2 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-2 top-1/2 transform -translate-y-1/2 text-base-content/80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       </div>
@@ -34,7 +34,7 @@
       <!-- 笔记本区域 -->
       <div class="mb-1">
         <div v-if="!isCollapsed" class="flex justify-between items-center mt-2 px-2">
-          <span class="text-base font-bold uppercase text-base-content/70 ">笔记本</span>
+          <span class="text-base font-bold uppercase text-base-content/80 ">笔记本</span>
           <button class="btn btn-xs btn-ghost" @click="$emit('add-notebook')" title="添加笔记本">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -63,7 +63,7 @@
               </div>
             </template>
           </template>
-          <div v-else class="text-center text-base-content/60 py-4">
+          <div v-else class="text-center text-base-content/80 py-4">
             <span v-if="searchQuery">未找到相关笔记本</span>
             <span v-else>暂无笔记本</span>
           </div>
@@ -138,7 +138,7 @@
                   </li>
                 </template>
               </ul>
-              <div v-if="notebooks.length === 0" class="px-4 py-2 text-sm text-base-content/60">
+              <div v-if="notebooks.length === 0" class="px-4 py-2 text-sm text-base-content/80">
                 暂无笔记本
               </div>
               <div class="p-3 flex justify-end">
@@ -152,7 +152,7 @@
       <!-- 标签区域 -->
       <div class="mb-4" v-if="!isCollapsed">
         <div class="flex justify-between items-center mb-2 px-2">
-          <span class="text-base font-bold uppercase text-base-content/70">标签</span>
+          <span class="text-base font-bold uppercase text-base-content/80">标签</span>
           <div class="flex items-center gap-1">
             <!-- 标签搜索按钮和输入框 -->
             <div class="relative">
@@ -248,7 +248,7 @@
               </div>
             </template>
           </div>
-          <div v-else class="text-xs text-base-content/60 py-2">
+          <div v-else class="text-xs text-base-content/80 py-2">
             暂无标签，请添加
           </div>
         </div>
@@ -616,47 +616,86 @@ const highlightKeyword = (text: string, keyword: string) => {
 </script>
 
 <style scoped>
-/* 折叠侧边栏样式 */
-.tooltip-right:before {
-  left: 105%;
+/* SideNavBar特有的样式 */
+
+/* 侧边栏折叠动画 */
+.sidebar-transition {
+  transition: width 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* 弹出面板动画 */
-@keyframes slide-right {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+/* 导航项的特殊动画效果 */
+.nav-item {
+  transition: all 0.2s ease;
+  position: relative;
 }
 
-.animate-slide-right {
-  animation: slide-right 0.2s ease-out;
+.nav-item:hover {
+  transform: translateX(2px);
 }
 
-/* 菜单项的样式 */
-.menu-title {
-  font-size: 0.75rem;
+.nav-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--primary);
+  transform: scaleY(0);
+  transition: transform 0.2s ease;
+}
+
+.nav-item.active::before {
+  transform: scaleY(1);
+}
+
+/* 折叠状态下的tooltip样式 */
+.tooltip-collapsed {
+  position: absolute;
+  left: 110%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1000;
+  white-space: nowrap;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.nav-item:hover .tooltip-collapsed {
+  opacity: 1;
+}
+
+/* 徽章计数的特殊样式 */
+.nav-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: 600;
-  text-transform: uppercase;
-  color: var(--color-base-content, #666);
-  opacity: 0.7;
-  margin-top: 0.5rem;
 }
 
-/* 子菜单样式 */
-.menu li > ul {
-  margin-left: 1rem;
-  border-left: 1px solid var(--color-base-300, #ddd);
-  padding-left: 0.5rem;
+/* 折叠状态特殊样式 */
+.collapsed .nav-text {
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-/* 菜单项悬停样式 */
-.menu li > a:hover {
-  background-color: var(--color-base-200, #eee);
-}
-
-/* 子菜单项样式 */
-.menu li.bordered {
-  border-bottom: 1px solid var(--color-base-300, #ddd);
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.5rem;
+.expanded .nav-text {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.3s ease 0.1s, transform 0.3s ease 0.1s;
 }
 </style> 

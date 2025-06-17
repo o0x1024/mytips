@@ -62,7 +62,7 @@
       </div>
 
       <!-- 无结果提示 -->
-      <div v-else-if="filteredNotes.length === 0" class="flex flex-col items-center justify-center py-10 text-base-content/60">
+      <div v-else-if="filteredNotes.length === 0" class="flex flex-col items-center justify-center py-10 text-base-content/80">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
         </svg>
@@ -85,7 +85,7 @@
             <div class="flex items-center justify-between">
               <h3 class="font-medium">{{ note.title || '无标题' }}</h3>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-base-content/60">{{ formatDate(note.updated_at) }}</span>
+                <span class="text-xs text-base-content/80">{{ formatDate(note.updated_at) }}</span>
                 <span v-if="note.isPinned" title="已固定" class="text-warning">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -93,12 +93,12 @@
                 </span>
               </div>
             </div>
-            <p class="line-clamp-1 text-xs text-base-content/70 mt-1">{{ getPreviewContent(note) }}</p>
+            <p class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(note) }}</p>
             <div v-if="note.tags && note.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
               <span 
                 v-for="tag in note.tags.slice(0, 3)" 
                 :key="tag.id" 
-                class="badge badge-sm border-base-300 text-base-content/70 bg-transparent">
+                class="badge badge-sm border-base-300 text-base-content/80 bg-transparent">
                 {{ tag.name }}
               </span>
               <span v-if="note.tags.length > 3" class="badge badge-sm">+{{ note.tags.length - 3 }}</span>
@@ -689,5 +689,43 @@ onActivated(() => {
 }
 .note-list-move {
   transition: transform 0.3s cubic-bezier(.55,0,.1,1);
+}
+
+/* NoteList特有的右键菜单样式 */
+.context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 200px;
+  max-width: 300px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* 笔记预览文本的特殊截断样式 */
+.note-preview-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
+}
+
+/* 笔记列表项的特殊悬停效果 */
+.note-list-item:hover {
+  transform: translateY(-1px);
+  transition: transform 0.2s ease;
+}
+
+/* 固定笔记的特殊指示器 */
+.pin-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.note-list-item:hover .pin-indicator {
+  opacity: 1;
 }
 </style> 

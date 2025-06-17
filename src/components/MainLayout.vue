@@ -68,7 +68,7 @@
             @toggle-pin="toggleNotePin"
           />
         </div>
-        <div v-else class="h-full flex items-center justify-center flex-col p-6 bg-base-200 text-base-content/60">
+        <div v-else class="h-full flex items-center justify-center flex-col p-6 bg-base-200 text-base-content/80">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
@@ -1303,5 +1303,23 @@ async function refreshNotes() {
 }
 .fade-list-enter-from, .fade-list-leave-to {
   opacity: 0;
+}
+
+/* MainLayout特有的动画和布局样式 */
+.main-layout-container {
+  transition: all 0.3s ease;
+}
+
+.sidebar-transition {
+  transition: width 0.3s ease, margin 0.3s ease;
+}
+
+.content-transition {
+  transition: margin-left 0.3s ease;
+}
+
+/* 特殊的模态框样式，如果有的话 */
+.modal-overlay {
+  backdrop-filter: blur(4px);
 }
 </style> 

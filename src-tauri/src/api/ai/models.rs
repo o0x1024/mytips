@@ -16,6 +16,12 @@ use crate::api::ai::doubao::{
     doubao_stream_chat_with_images
 };
 
+// 导入grok模块的函数
+use crate::api::ai::grok::{
+    grok_chat_with_images,
+    grok_stream_chat_with_images
+};
+
 // 创建GenAI客户端并添加认证
 pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Client, String> {
     // 获取代理设置
@@ -52,6 +58,7 @@ pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Clie
         "deepseek" => AdapterKind::DeepSeek,
         "claude" => AdapterKind::Anthropic,
         "doubao" => AdapterKind::OpenAI, // 豆包使用OpenAI兼容格式
+        "grok" => AdapterKind::OpenAI, // Grok使用OpenAI兼容格式
         // 为自定义模型设置OpenAI格式的认证（默认行为）
         "custom" | _ => AdapterKind::OpenAI,
     };
@@ -86,6 +93,7 @@ pub fn get_model_name(model_id: &str, custom_model_name: Option<&str>) -> String
         "claude" => "claude-3.5-sonnet".to_string(),
         "qwen" => "qwen-max".to_string(), // 千问暂时不支持，可能需要自定义实现
         "doubao" => "doubao-1.5-pro-32k".to_string(), // 豆包默认模型
+        "grok" => "grok-beta".to_string(), // Grok默认模型
         "custom" => "gpt-3.5-turbo".to_string(), // 自定义默认使用OpenAI格式
         _ => "gpt-3.5-turbo".to_string(),
     }
@@ -480,6 +488,10 @@ pub async fn send_message_with_images_to_ai(
             // 豆包支持视觉理解
             doubao_chat_with_images(api_key, text_message, image_files, custom_model_name).await
         }
+        "grok" => {
+            // Grok目前不支持图片，但为将来做准备
+            grok_chat_with_images(api_key, text_message, image_files, custom_model_name).await
+        }
         "gemini" => {
             // Gemini支持图片，但需要特殊处理
             // 这里暂时返回提示信息，后续可以实现
@@ -510,6 +522,10 @@ pub async fn stream_message_with_images_from_ai(
         "doubao" => {
             // 豆包支持视觉理解的流式输出
             doubao_stream_chat_with_images(api_key, text_message, image_files, custom_model_name).await
+        }
+        "grok" => {
+            // Grok目前不支持图片，但为将来做准备
+            grok_stream_chat_with_images(api_key, text_message, image_files, custom_model_name).await
         }
         "gemini" => {
             // Gemini支持图片，但需要特殊处理
@@ -548,6 +564,7 @@ fn get_model_display_name(model_id: &str) -> &str {
         "claude" => "Claude",
         "qwen" => "通义千问",
         "doubao" => "豆包",
+        "grok" => "Grok",
         "custom" => "自定义模型",
         _ => "未知模型",
     }

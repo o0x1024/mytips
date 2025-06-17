@@ -2,7 +2,7 @@
   <div class="tag-selector w-full">
     <!-- 标签区域 -->
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-xs text-base-content/70">标签:</span>
+      <span class="text-xs text-base-content/80">标签:</span>
       
       <!-- 已选择的标签 -->
       <div class="flex flex-wrap gap-1 items-center">
@@ -60,7 +60,7 @@
             ref="tagDropdownRef"
           >
             <!-- 标签状态信息 -->
-            <div class="p-2 border-b border-base-300 text-xs text-base-content/70 flex justify-between items-center">
+            <div class="p-2 border-b border-base-300 text-xs text-base-content/80 flex justify-between items-center">
               <div>
                 <span v-if="newTag.trim() && filteredAvailableTags.length > 0">
                   找到 {{ filteredAvailableTags.length }} 个匹配标签
@@ -104,7 +104,7 @@
                 >
                   {{ tag.name }}
                 </button>
-                <div v-if="frequentTags.length === 0" class="text-xs text-base-content/50 py-1">
+                <div v-if="frequentTags.length === 0" class="text-xs text-base-content/80 py-1">
                   暂无常用标签
                 </div>
               </div>
@@ -121,7 +121,7 @@
                 >
                   {{ tag.name }}
                 </button>
-                <div v-if="filteredAvailableTags.length === 0" class="text-xs text-base-content/50 py-1">
+                <div v-if="filteredAvailableTags.length === 0" class="text-xs text-base-content/80 py-1">
                   所有标签已添加
                 </div>
               </div>
@@ -511,4 +511,66 @@ watch(() => props.contentText, () => {
 watch(() => props.titleText, () => {
   generateTagSuggestions()
 }, { immediate: true })
-</script> 
+</script>
+
+<style scoped>
+/* TagSelector特有的样式 */
+
+/* 标签输入框的特殊样式 */
+.tag-input {
+  transition: all 0.2s ease;
+}
+
+.tag-input:focus {
+  transform: scale(1.02);
+}
+
+/* 标签项的特殊动画 */
+.tag-item {
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.tag-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 标签删除按钮的特殊样式 */
+.tag-remove-btn {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.tag-item:hover .tag-remove-btn {
+  opacity: 1;
+}
+
+/* 标签建议下拉框的特殊样式 */
+.tag-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+  backdrop-filter: blur(8px);
+}
+
+.tag-suggestion-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.tag-suggestion-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 新标签创建的特殊样式 */
+.new-tag-indicator {
+  font-style: italic;
+  opacity: 0.8;
+}
+</style> 

@@ -310,7 +310,7 @@
         </div>
         
         <!-- 统计信息 -->
-        <div class="text-xs text-base-content/70 flex items-center gap-4 shrink-0">
+        <div class="text-xs text-base-content/80 flex items-center gap-4 shrink-0">
           <span title="字数">{{ wordCount }} 字</span>
           <span title="创建时间">创建: {{ formatDateTime(localNote.created_at) }}</span>
           <span title="修改时间">修改: {{ formatDateTime(localNote.updated_at) }}</span>
@@ -2355,5 +2355,170 @@ onActivated(() => {
   display: block;
   content: '';
   margin-top: 0.25em;
+}
+
+/* 暗黑主题下增强字体可见性 */
+[data-theme="dark"] .text-xs,
+[data-theme="night"] .text-xs,
+[data-theme="black"] .text-xs,
+[data-theme="dracula"] .text-xs,
+[data-theme="halloween"] .text-xs,
+[data-theme="business"] .text-xs,
+[data-theme="luxury"] .text-xs,
+[data-theme="coffee"] .text-xs {
+  color: rgb(203, 213, 225) !important;
+}
+
+[data-theme="dark"] .text-sm,
+[data-theme="night"] .text-sm,
+[data-theme="black"] .text-sm,
+[data-theme="dracula"] .text-sm,
+[data-theme="halloween"] .text-sm,
+[data-theme="business"] .text-sm,
+[data-theme="luxury"] .text-sm,
+[data-theme="coffee"] .text-sm {
+  color: rgb(203, 213, 225) !important;
+}
+
+/* 对于特别暗的主题，使用更亮的文字 */
+[data-theme="black"] .text-xs,
+[data-theme="night"] .text-xs {
+  color: rgb(229, 231, 235) !important;
+}
+
+[data-theme="black"] .text-sm,
+[data-theme="night"] .text-sm {
+  color: rgb(229, 231, 235) !important;
+}
+
+/* 增强编辑器内文本的可读性 */
+[data-theme="dark"] :deep(.prose),
+[data-theme="night"] :deep(.prose),
+[data-theme="black"] :deep(.prose),
+[data-theme="dracula"] :deep(.prose),
+[data-theme="halloween"] :deep(.prose),
+[data-theme="business"] :deep(.prose),
+[data-theme="luxury"] :deep(.prose),
+[data-theme="coffee"] :deep(.prose) {
+  color: rgb(226, 232, 240) !important;
+}
+
+/* 确保编辑器文本区域在暗色主题下清晰可见 */
+[data-theme="dark"] textarea,
+[data-theme="night"] textarea,
+[data-theme="black"] textarea,
+[data-theme="dracula"] textarea,
+[data-theme="halloween"] textarea,
+[data-theme="business"] textarea,
+[data-theme="luxury"] textarea,
+[data-theme="coffee"] textarea {
+  color: rgb(226, 232, 240) !important;
+}
+
+/* NoteEditor特有的样式 */
+
+/* 编辑器区域特殊样式 */
+.editor-container {
+  transition: all 0.3s ease;
+}
+
+.editor-toolbar {
+  border-bottom: 1px solid var(--border-color);
+  background: var(--background-secondary);
+  padding: 8px 16px;
+}
+
+/* 代码编辑器的特殊样式 */
+.code-editor {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  line-height: 1.6;
+}
+
+/* Markdown预览的特殊样式 */
+.markdown-preview {
+  padding: 20px;
+  max-width: none;
+}
+
+/* 编辑器分割线 */
+.editor-divider {
+  width: 2px;
+  background: var(--border-color);
+  cursor: col-resize;
+  transition: background 0.2s ease;
+}
+
+.editor-divider:hover {
+  background: var(--primary);
+}
+
+/* 全屏模式样式 */
+.fullscreen-editor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  background: var(--background);
+}
+
+/* 工具栏按钮的特殊样式 */
+.toolbar-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  background: var(--background-hover);
+  transform: translateY(-1px);
+}
+
+.toolbar-btn.active {
+  background: var(--primary);
+  color: var(--primary-content);
+}
+
+/* 编辑器内容区域的暗色主题特殊优化 - 这些是编辑器特有的 */
+[data-theme="dark"] :deep(.prose code),
+[data-theme="night"] :deep(.prose code),
+[data-theme="black"] :deep(.prose code) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgb(251, 191, 36) !important;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+[data-theme="dark"] :deep(.prose pre),
+[data-theme="night"] :deep(.prose pre),
+[data-theme="black"] :deep(.prose pre) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: rgb(229, 231, 235) !important;
+}
+
+[data-theme="dark"] :deep(.prose blockquote),
+[data-theme="night"] :deep(.prose blockquote),
+[data-theme="black"] :deep(.prose blockquote) {
+  border-left: 4px solid rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgb(209, 213, 219) !important;
+}
+
+/* 编辑器textarea的特殊暗色主题优化 */
+[data-theme="dark"] textarea.editor-textarea,
+[data-theme="night"] textarea.editor-textarea,
+[data-theme="black"] textarea.editor-textarea {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: rgb(243, 244, 246) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] textarea.editor-textarea:focus,
+[data-theme="night"] textarea.editor-textarea:focus,
+[data-theme="black"] textarea.editor-textarea:focus {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 </style>

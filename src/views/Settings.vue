@@ -232,7 +232,7 @@
                   <input type="checkbox" class="toggle toggle-primary"
                     v-model="clipboardSettings.enableMonitoring" @change="updateClipboardSettings" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，系统将自动监听并捕获剪贴板变化。关闭后，只能通过快捷键手动添加内容
                 </p>
               </div>
@@ -244,7 +244,7 @@
                   <input type="checkbox" class="toggle toggle-primary"
                     v-model="clipboardSettings.ignoreSensitiveContent" @change="updateClipboardSettings" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，将自动忽略从密码框等敏感区域复制的内容
                 </p>
               </div>
@@ -256,7 +256,7 @@
                   <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.captureImages"
                     @change="updateClipboardSettings" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，临时笔记区将同时捕获剪贴板中的图片内容
                 </p>
               </div>
@@ -268,7 +268,7 @@
                   <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.captureSourceInfo"
                     @change="updateClipboardSettings" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，将记录剪贴板内容的来源应用或窗口名称
                 </p>
               </div>
@@ -286,7 +286,7 @@
                     {{ option.label }}
                   </option>
                 </select>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   设置临时笔记区自动清理数据的时间，选择"永久保留"则不会自动清理
                 </p>
 
@@ -315,7 +315,7 @@
                   <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.encryptStorage"
                     @change="updateClipboardSettings" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，临时笔记将使用加密方式存储在数据库中
                 </p>
               </div>
@@ -350,7 +350,7 @@
                     <option v-for="key in shortcutKeys" :key="key.value" :value="key.value">{{ key.label }}</option>
                   </select>
                 </div>
-                <p class="text-xs text-base-content/70 mt-2">
+                <p class="text-xs text-base-content/80 mt-2">
                   选择修饰键和按键组合，用于将选中文本快速添加到临时笔记区
                 </p>
                 <div class="alert alert-warning mt-3" v-if="isShortcutInvalid">
@@ -502,7 +502,7 @@
                   <input type="checkbox" class="toggle toggle-primary" v-model="autoStartEnabled"
                     @change="toggleAutoStart" />
                 </label>
-                <p class="text-xs text-base-content/70 mt-1">
+                <p class="text-xs text-base-content/80 mt-1">
                   启用后，系统启动时将自动运行 MyTips
                 </p>
               </div>
@@ -524,9 +524,10 @@
                   <option value="qwen">通义千问</option>
                   <option value="claude">Anthropic Claude</option>
                   <option value="doubao">字节豆包</option>
+                  <option value="grok">xAI Grok</option>
                   <option value="custom">自定义API</option>
                 </select>
-                <p class="text-xs text-base-content/70 mt-1">设置后，AI相关功能将默认使用该模型</p>
+                <p class="text-xs text-base-content/80 mt-1">设置后，AI相关功能将默认使用该模型</p>
               </div>
             </div>
           </div>
@@ -536,7 +537,7 @@
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">关于</h2>
               <p>MyTips v1.0.0</p>
-              <p class="text-sm text-base-content/70 mt-2">
+              <p class="text-sm text-base-content/80 mt-2">
                 一个简单的笔记管理应用，帮助你收集和整理有用的代码片段、文档和提示。
               </p>
             </div>
@@ -1014,3 +1015,68 @@ async function cleanExpiredEntries() {
   }
 }
 </script>
+
+<style scoped>
+/* Settings页面特有的样式 - 大部分暗色主题样式已移至全局 */
+
+/* 特殊的设置页面布局优化 */
+.settings-nav-button {
+  transition: all 0.2s ease;
+}
+
+.settings-nav-button:hover {
+  transform: translateX(2px);
+}
+
+/* 设置预览区域的特殊样式 */
+.theme-preview-grid {
+  transition: all 0.3s ease;
+}
+
+/* 字体预览区域的特殊样式 */
+.font-preview-sample {
+  transition: font-size 0.3s ease, color 0.3s ease;
+}
+
+/* 布局预览的特殊间距 */
+.layout-preview-container {
+  min-height: 120px;
+}
+
+/* Range滑块的特殊样式 - 只在设置页面需要 */
+[data-theme="dark"] .range-primary::-webkit-slider-thumb,
+[data-theme="night"] .range-primary::-webkit-slider-thumb,
+[data-theme="black"] .range-primary::-webkit-slider-thumb {
+  border: 2px solid rgba(255, 255, 255, 0.4);
+}
+
+[data-theme="dark"] .range-primary::-moz-range-thumb,
+[data-theme="night"] .range-primary::-moz-range-thumb,
+[data-theme="black"] .range-primary::-moz-range-thumb {
+  border: 2px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 设置卡片的特殊阴影效果 */
+[data-theme="dark"] .settings-card:hover,
+[data-theme="night"] .settings-card:hover,
+[data-theme="black"] .settings-card:hover {
+  box-shadow: 0 8px 25px rgba(255, 255, 255, 0.05);
+}
+
+/* 快捷键显示的特殊样式 */
+.shortcut-display {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  letter-spacing: 0.5px;
+}
+
+/* 主题选择标签的特殊激活状态 */
+.theme-selector-active {
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+[data-theme="dark"] .theme-selector-active,
+[data-theme="night"] .theme-selector-active,
+[data-theme="black"] .theme-selector-active {
+  box-shadow: 0 0 0 2px rgba(147, 197, 253, 0.5);
+}
+</style>

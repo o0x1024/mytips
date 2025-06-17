@@ -1,6 +1,7 @@
 pub mod conversations;
 pub mod models;
 pub mod doubao;
+pub mod grok;
 
 use base64::engine::general_purpose;
 use base64::Engine;
@@ -17,6 +18,7 @@ pub use models::*;
 pub use conversations::*;
 
 use crate::api::ai::doubao::{doubao_stream_chat_with_history, stream_from_doubao};
+use crate::api::ai::grok::{send_to_grok, stream_from_grok, grok_stream_chat_with_history};
 
 // 全局存储流式输出任务
 lazy_static::lazy_static! {
@@ -177,6 +179,7 @@ pub async fn send_ai_message(
     match model_id.as_str() {
         "qwen" => send_to_qwen(api_key, message).await, // 阿里千问暂时没有GenAI支持
         "doubao" => send_to_doubao(api_key, message, None).await, // 豆包模型
+        "grok" => send_to_grok(api_key, message, None).await, // Grok模型
         "custom" => {
             let endpoint = get_api_endpoint(app).await?;
             if endpoint.is_empty() {
@@ -332,6 +335,101 @@ pub async fn send_ai_message_stream(
                             serde_json::json!({
                                 "id": stream_id_clone,
                                 "chunk": format!("无法连接到豆包服务: {}", e),
+                                "done": true
+                            }),
+                        );
+                    }
+                }
+            })
+        }
+        "grok" => {
+            // Grok模型的特殊处理
+            let app_handle = app.clone();
+            let stream_id_clone = stream_id.clone();
+            let model_id_clone = model_id.clone();
+            let custom_model_name = model_name_from_param.or(model_name_from_config);
+            let custom_model_name_for_stream = custom_model_name.clone();
+
+            tauri::async_runtime::spawn(async move {
+                println!("处理Grok流式请求...");
+                if let Some(name) = &custom_model_name_for_stream {
+                    println!("使用自定义Grok模型名称: {}", name);
+                }
+
+                // 根据是否提供了消息历史，选择不同的处理方式
+                let stream_result = if let Some(msg_values) = messages {
+                    println!("转换后有 {} 条有效消息用于Grok对话历史", msg_values.len());
+
+                    // 使用Grok历史对话流式函数
+                    grok_stream_chat_with_history(
+                        api_key,
+                        msg_values,
+                        custom_model_name_for_stream.as_deref(),
+                    )
+                    .await
+                } else {
+                    // 使用Grok单条消息流式函数
+                    println!("使用Grok单条消息: {}", message);
+                    stream_from_grok(
+                        api_key,
+                        message,
+                        custom_model_name_for_stream.as_deref(),
+                    )
+                    .await
+                };
+
+                match stream_result {
+                    Ok(mut stream) => {
+                        println!("开始处理Grok流...");
+
+                        // 处理流式输出
+                        while let Some(chunk) = stream.next().await {
+                            match chunk {
+                                Ok(text) => {
+                                    // 向前端发送事件
+                                    let _ = app_handle.emit(
+                                        "ai-stream-chunk",
+                                        serde_json::json!({
+                                            "id": stream_id_clone,
+                                            "chunk": text,
+                                            "done": false
+                                        }),
+                                    );
+                                }
+                                Err(e) => {
+                                    // 发送错误信息
+                                    let _ = app_handle.emit(
+                                        "ai-stream-chunk",
+                                        serde_json::json!({
+                                            "id": stream_id_clone,
+                                            "chunk": format!("Grok处理错误: {}", e),
+                                            "done": true
+                                        }),
+                                    );
+                                    return;
+                                }
+                            }
+                        }
+
+                        // 流结束
+                        println!("Grok流处理完成");
+                        let _ = app_handle.emit(
+                            "ai-stream-chunk",
+                            serde_json::json!({
+                                "id": stream_id_clone,
+                                "chunk": "",
+                                "done": true
+                            }),
+                        );
+                    }
+                    Err(e) => {
+                        // 初始化流出错
+                        println!("无法初始化Grok流: {}", e);
+                        let _ = app_handle.emit(
+                            "ai-stream-chunk",
+                            serde_json::json!({
+                                "id": stream_id_clone,
+                                "chunk": format!("无法连接到Grok服务: {}", e),
                                 "done": true
                             }),
                         );
