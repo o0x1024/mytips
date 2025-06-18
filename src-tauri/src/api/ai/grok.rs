@@ -358,6 +358,7 @@ pub async fn grok_stream_chat_with_history(
                                     .and_then(|content| content.as_str())
                                 {
                                     if !content.is_empty() {
+                                        // println!("Grok流式响应: {}", content);
                                         let _ = tx.send(Ok(content.to_string())).await;
                                     }
                                 }

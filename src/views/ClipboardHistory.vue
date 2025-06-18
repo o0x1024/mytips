@@ -66,9 +66,19 @@
           </div>
         </div>
 
-        <!-- 搜索结果统计 -->
-        <div v-if="searchQuery && filteredHistory.length > 0" class="text-sm text-base-content/70 mb-2">
-          找到 {{ filteredHistory.length }} 条匹配结果
+        <!-- 搜索结果统计和分页信息 -->
+        <div class="flex justify-between items-center mb-4">
+          <div class="text-sm text-base-content/70">
+            <span v-if="searchQuery && filteredHistory.length > 0">
+              找到 {{ filteredHistory.length }} 条匹配结果
+            </span>
+            <span v-else-if="filteredHistory.length > 0">
+              共 {{ filteredHistory.length }} 条记录
+            </span>
+          </div>
+          <div v-if="totalPages > 1" class="text-sm text-base-content/70">
+            第 {{ currentPage }} / {{ totalPages }} 页
+          </div>
         </div>
 
         <!-- 笔记列表 -->
@@ -84,7 +94,7 @@
             <p class="text-sm mt-2">{{ searchQuery ? '请尝试其他搜索关键词' : '复制文本到剪贴板将自动添加到此处' }}</p>
           </div>
           <div v-else class="space-y-3">
-            <div v-for="item in filteredHistory" :key="item.id"
+            <div v-for="item in paginatedHistory" :key="item.id"
               class="card bg-base-200 cursor-pointer transition-colors duration-200 hover:bg-base-300 border-l-4"
               :class="{ 'border-primary': selectedIds.includes(item.id), 'border-transparent': !selectedIds.includes(item.id) }"
               @click="toggleSelection(item.id)">
@@ -157,6 +167,58 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- 分页控件 -->
+        <div v-if="totalPages > 1" class="mt-4 flex justify-center">
+          <div class="join">
+            <button 
+              class="join-item btn btn-sm" 
+              :class="{ 'btn-disabled': currentPage === 1 }"
+              @click="goToPage(1)"
+              :disabled="currentPage === 1"
+            >
+              «
+            </button>
+            <button 
+              class="join-item btn btn-sm" 
+              :class="{ 'btn-disabled': currentPage === 1 }"
+              @click="goToPage(currentPage - 1)"
+              :disabled="currentPage === 1"
+            >
+              ‹
+            </button>
+            
+            <!-- 页码按钮 -->
+            <template v-for="page in visiblePages" :key="page">
+              <button 
+                v-if="page !== '...'"
+                class="join-item btn btn-sm" 
+                :class="{ 'btn-active': currentPage === page }"
+                @click="goToPage(page as number)"
+              >
+                {{ page }}
+              </button>
+              <span v-else class="join-item btn btn-sm btn-disabled">...</span>
+            </template>
+            
+            <button 
+              class="join-item btn btn-sm" 
+              :class="{ 'btn-disabled': currentPage === totalPages }"
+              @click="goToPage(currentPage + 1)"
+              :disabled="currentPage === totalPages"
+            >
+              ›
+            </button>
+            <button 
+              class="join-item btn btn-sm" 
+              :class="{ 'btn-disabled': currentPage === totalPages }"
+              @click="goToPage(totalPages)"
+              :disabled="currentPage === totalPages"
+            >
+              »
+            </button>
           </div>
         </div>
       </div>
@@ -233,10 +295,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, onActivated, onDeactivated } from 'vue';
+import { ref, onMounted, onUnmounted, computed, onActivated, onDeactivated, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useRouter } from 'vue-router';
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import Prism from 'prismjs'
+import 'prismjs/themes/prism-tomorrow.css'
+import 'prismjs/components/prism-javascript'
+import 'prismjs/components/prism-typescript'
+import 'prismjs/components/prism-python'
+import 'prismjs/components/prism-java'
+import 'prismjs/components/prism-json'
+import 'prismjs/components/prism-bash'
+import 'prismjs/components/prism-css'
+import 'prismjs/components/prism-sql'
+import DOMPurify from 'dompurify'
 
 interface ClipboardHistory {
   id: number;
@@ -254,6 +329,78 @@ const searchQuery = ref('');
 const searchTimeout = ref<number | null>(null);
 const showClearAllConfirm = ref(false);
 const previewItem = ref<ClipboardHistory | null>(null);
+
+// 分页相关状态
+const currentPage = ref(1);
+const pageSize = 20; // 每页显示20条
+
+// 分页计算
+const totalPages = computed(() => {
+  return Math.ceil(filteredHistory.value.length / pageSize);
+});
+
+// 当前页显示的数据
+const paginatedHistory = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  const end = start + pageSize;
+  return filteredHistory.value.slice(start, end);
+});
+
+// 可见的页码按钮
+const visiblePages = computed(() => {
+  const pages: (number | string)[] = [];
+  const total = totalPages.value;
+  const current = currentPage.value;
+  
+  if (total <= 7) {
+    // 总页数少于等于7页，显示所有页码
+    for (let i = 1; i <= total; i++) {
+      pages.push(i);
+    }
+  } else {
+    // 总页数大于7页，智能显示页码
+    if (current <= 4) {
+      // 当前页在前面
+      for (let i = 1; i <= 5; i++) {
+        pages.push(i);
+      }
+      pages.push('...');
+      pages.push(total);
+    } else if (current >= total - 3) {
+      // 当前页在后面
+      pages.push(1);
+      pages.push('...');
+      for (let i = total - 4; i <= total; i++) {
+        pages.push(i);
+      }
+    } else {
+      // 当前页在中间
+      pages.push(1);
+      pages.push('...');
+      for (let i = current - 1; i <= current + 1; i++) {
+        pages.push(i);
+      }
+      pages.push('...');
+      pages.push(total);
+    }
+  }
+  
+  return pages;
+});
+
+// 跳转到指定页面
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+    // 清空当前页的选中项，避免跨页选择问题
+    selectedIds.value = [];
+  }
+};
+
+// 监听搜索变化，重置到第一页
+watch(searchQuery, () => {
+  currentPage.value = 1;
+});
 
 // 高亮显示搜索结果
 const highlightText = (text: string, query: string): string => {
@@ -458,38 +605,87 @@ const clearAllEntries = async () => {
   }
 };
 
-// 渲染Markdown内容（简化版）
+// 安全检查 Prism 语言是否可用
+function isPrismLanguageAvailable(lang: string): boolean {
+  try {
+    // plaintext 总是可用的，因为它不需要特殊的语法高亮
+    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
+      return true;
+    }
+    
+    return !!(
+      typeof Prism !== 'undefined' && 
+      Prism.languages && 
+      typeof Prism.languages === 'object' &&
+      Prism.languages[lang] &&
+      typeof Prism.highlight === 'function'
+    );
+  } catch (error) {
+    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
+    return false;
+  }
+}
+
+// HTML 转义函数
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
+// 渲染Markdown内容（使用marked库）
 const renderMarkdown = (content: string): string => {
-  // 简单的HTML转义和格式处理
-  const htmlEscaped = content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  if (!content) return '';
+  
+  try {
+    // 创建 marked 实例并配置高亮
+    const marked = new Marked();
     
-  // 简单的Markdown转HTML
-  const markdownFormatted = htmlEscaped
-    // 处理图片
-    .replace(/!\[(.*?)\]\((.*?)\)/g, '<img alt="$1" src="$2" style="max-width:100%;">')
-    // 处理链接
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>')
-    // 处理标题
-    .replace(/^# (.*?)$/gm, '<h1>$1</h1>')
-    .replace(/^## (.*?)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.*?)$/gm, '<h3>$1</h3>')
-    // 处理列表
-    .replace(/^- (.*?)$/gm, '<li>$1</li>')
-    // 处理粗体
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    // 处理斜体
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // 处理代码
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    // 处理换行
-    .replace(/\n/g, '<br>');
-    
-  return markdownFormatted;
+    // 使用 marked-highlight 扩展
+    marked.use(markedHighlight({
+      langPrefix: 'language-',
+      highlight(code: string, lang: string) {
+        // 如果没有指定语言，使用 plaintext 作为默认语言
+        const actualLang = lang || 'plaintext';
+        
+        // 使用安全检查函数
+        if (actualLang && isPrismLanguageAvailable(actualLang)) {
+          try {
+            return Prism.highlight(code, Prism.languages[actualLang], actualLang);
+          } catch (error) {
+            console.warn(`Prism 高亮失败 (${actualLang}):`, error);
+            return escapeHtml(code);
+          }
+        }
+        
+        // 如果 plaintext 也不可用，直接返回转义的代码
+        return escapeHtml(code);
+      }
+    }));
+
+    // 配置 marked 选项
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+      silent: true,
+    });
+
+    // 使用 marked 渲染 Markdown
+    const htmlContent = marked.parse(content) as string;
+
+    // 使用DOMPurify清理HTML，防止XSS
+    const cleanHtml = DOMPurify.sanitize(htmlContent, {
+      ADD_TAGS: ['iframe', 'pre', 'code'],
+      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
+    });
+
+    return cleanHtml;
+  } catch (err) {
+    console.error('Markdown渲染错误:', err);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+            <pre>${DOMPurify.sanitize(content)}</pre>`;
+  }
 };
 
 // 检查是否为图片内容
@@ -608,5 +804,20 @@ img {
 .markdown-preview img {
   max-height: 500px;
   margin: 0 auto;
+}
+
+/* 分页控件样式优化 */
+.join .btn {
+  min-width: 2.5rem;
+}
+
+.join .btn-active {
+  background-color: hsl(var(--p));
+  color: hsl(var(--pc));
+}
+
+.join .btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

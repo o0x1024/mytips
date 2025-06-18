@@ -487,6 +487,14 @@
                   </svg>
                   导出为Markdown
                 </button>
+                <button class="btn btn-outline" @click="migrateConfigToDatabase">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  </svg>
+                  迁移配置到数据库
+                </button>
               </div>
             </div>
           </div>
@@ -1012,6 +1020,17 @@ async function cleanExpiredEntries() {
     message('清理过期剪贴板条目失败: ' + error, { title: '错误' })
   } finally {
     isCleaningEntries.value = false
+  }
+}
+
+// 新增迁移配置到数据库的方法
+async function migrateConfigToDatabase() {
+  try {
+    const result = await invoke<string>('migrate_config_to_database')
+    message(result, { title: '迁移成功' })
+  } catch (error) {
+    console.error('迁移配置到数据库失败:', error)
+    message('迁移配置到数据库失败: ' + error, { title: '错误' })
   }
 }
 </script>

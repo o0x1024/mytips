@@ -67,7 +67,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
         </svg>
         <p class="text-lg mb-2">没有找到笔记</p>
-        <button class="btn btn-sm btn-primary" @click="$emit('new-note')">创建新笔记</button>
+        <!-- <button class="btn btn-sm btn-primary" @click="$emit('new-note')">创建新笔记</button> -->
       </div>
 
       <div  class="space-y-0">

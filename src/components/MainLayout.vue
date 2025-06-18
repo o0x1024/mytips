@@ -6,22 +6,28 @@
       <SideNavBar 
         :notebooks="navFilteredNotebooks"
         :tags="tags"
+        :search-query="navSearchQuery"
         :selected-notebook-id="selectedNotebookId"
         :selected-tags="selectedTags"
-        @search="handleNavSearch"
-        @add-notebook="showAddNotebookModal = true"
-        @add-tag="showAddTagModal = true"
+        :selected-note-id="selectedNoteId"
+        :notes="navFilteredNotes"
+        :is-collapsed="sidebarCollapsed"
+        :is-focus-mode="isFocusMode"
+        :focus-section="focusSection"
         @select-notebook="selectNotebook"
         @toggle-tag="toggleTag"
-        @new-note="createNewNote"
-        @ai-assistant="navigateTo('/ai-assistant')"
-        @settings="navigateTo('/settings')"
-        @clipboard="navigateTo('/clipboard')"
-        @toggle-collapse="handleSidebarToggleCollapse"
+        @select-note="selectNote"
+        @add-notebook="showAddNotebookModal = true"
+        @import="openImportDialog"
+        @add-child-notebook="addChildNotebook"
         @edit-notebook="editNotebook"
         @delete-notebook="deleteNotebook"
-        @add-child-notebook="addChildNotebook"
         @delete-tag="deleteTag"
+        @search="(query) => navSearchQuery = query"
+        @new-note="createNewNote"
+        @clipboard="() => navigateTo('/clipboard')"
+        @ai-assistant="() => navigateTo('/ai-assistant')"
+        @settings="() => navigateTo('/settings')"
       />
 
       <!-- 中间笔记列表 -->
@@ -76,7 +82,7 @@
           <p class="mb-4 text-center max-w-md">
             在左侧选择一个笔记本，然后从列表中选择一个笔记进行编辑，或者创建一个新笔记开始记录你的想法。
           </p>
-          <button class="btn btn-primary" @click="createNewNote">创建新笔记</button>
+          <!-- <button class="btn btn-primary" @click="createNewNote">创建新笔记</button> -->
         </div>
       </div>
     </main>
@@ -162,14 +168,31 @@
       </div>
       <div class="modal-backdrop" @click="cancelEditNotebook"></div>
     </div>
+
+    <!-- Import Dialog -->
+    <ImportDialog 
+      :show="showImportDialog"
+      :notebooks="flatNotebooks"
+      @close="showImportDialog = false"
+      @success="handleImportSuccess"
+    />
+
+    <!-- Markdown Drop Preview -->
+    <MarkdownDropPreview 
+      :notebooks="flatNotebooks"
+      @import="handleMarkdownImport"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onActivated, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import SideNavBar from './SideNavBar.vue'
 import NoteList from './NoteList.vue'
 import NoteEditor from './NoteEditor.vue'
+import ImportDialog from './ImportDialog.vue'
+import MarkdownDropPreview from './MarkdownDropPreview.vue'
 import { useTipsStore, Tag, Tip, Category } from '../stores/tipsStore'
 import { useUIStore } from '../stores/uiStore'
 import { invoke } from '@tauri-apps/api/core'
@@ -177,6 +200,9 @@ import { invoke } from '@tauri-apps/api/core'
 // Store
 const tipsStore = useTipsStore()
 const uiStore = useUIStore()
+
+// Router
+const router = useRouter()
 
 // 类型定义
 interface Notebook {
@@ -213,6 +239,7 @@ const sidebarCollapsed = ref(false)
 // 模态框状态
 const showAddNotebookModal = ref(false)
 const showAddTagModal = ref(false)
+const showImportDialog = ref(false)
 const newNotebookName = ref('')
 const newNotebookParentId = ref('')
 const newTagName = ref('')
@@ -338,20 +365,7 @@ function findNotebookById(notebooks: Notebook[], id: string): Notebook | null {
 }
 
 function navigateTo(path: string) {
-  window.location.href = path
-}
-
-function handleNavSearch(query: string) {
-  navSearchQuery.value = query
-  // 侧边栏搜索时，清除选中笔记本和标签，显示搜索结果
-  selectedNotebookId.value = undefined
-  selectedTags.value = []
-  listSearchQuery.value = ''
-  selectedNoteId.value = undefined
-  // 可选：如果你希望搜索时自动切换到列表区域
-  if (isFocusMode.value) {
-    focusSection.value = 'list'
-  }
+  router.push(path)
 }
 
 function handleListSearch(query: string) {
@@ -966,15 +980,6 @@ watch(sidebarCollapsed, (newValue) => {
   }
 })
 
-// 为侧边栏的toggle-collapse事件处理器添加防抖
-function handleSidebarToggleCollapse(collapsed: boolean) {
-  // 确保状态一致
-  if (sidebarCollapsed.value !== collapsed) {
-    sidebarCollapsed.value = collapsed
-    console.log('侧边栏折叠状态从SideNavBar更新:', collapsed)
-  }
-}
-
 // 移动笔记到分类
 async function moveNoteToCategory(noteId: string, newCategoryId: string) {
   isLoading.value = true
@@ -1117,6 +1122,55 @@ function addChildNotebook(parentNotebookId: string) {
   // 存储父笔记本ID并打开添加笔记本模态框
   newNotebookParentId.value = parentNotebookId
   showAddNotebookModal.value = true
+}
+
+// 打开导入对话框
+function openImportDialog() {
+  showImportDialog.value = true
+}
+
+// 处理导入成功
+async function handleImportSuccess() {
+  showImportDialog.value = false
+  await loadData()
+  console.log('导入成功，数据已重新加载')
+}
+
+// 处理markdown文件拖拽导入
+async function handleMarkdownImport(data: {
+  title: string
+  content: string
+  notebookId: string
+  fileName: string
+}) {
+  isLoading.value = true
+  try {
+    // 创建新笔记
+    const newTipData = {
+      title: data.title,
+      content: data.content,
+      tip_type: 'markdown',
+      category_id: data.notebookId,
+      tags: []
+    }
+    
+    const savedTip = await tipsStore.saveTip(newTipData)
+    if (savedTip) {
+      // 更新本地笔记列表
+      notes.value.unshift(savedTip)
+      recountAllNotebookCounts()
+      
+      // 选中新创建的笔记
+      selectedNoteId.value = savedTip.id
+      selectedNotebookId.value = data.notebookId
+      
+      console.log(`Markdown文件 "${data.fileName}" 已成功导入为笔记 "${data.title}"`)
+    }
+  } catch (error) {
+    console.error('导入markdown文件失败:', error)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // 重新加载标签列表

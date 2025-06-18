@@ -266,13 +266,32 @@ pub async fn save_tip_image(image_data: ImageData) -> Result<String, String> {
     Ok(image_data.image_id)
 }
 
-// 实现获取笔记图片的API
+// 实现获取笔记图片的API - 优化版本，支持分页和大小限制
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_tip_images(tip_id: String) -> Result<HashMap<String, String>, String> {
+pub async fn get_tip_images(
+    tip_id: String,
+    limit: Option<i32>,
+    offset: Option<i32>,
+) -> Result<HashMap<String, String>, String> {
     let db = DbManager::init().map_err(|e| e.to_string())?;
-    let images_map = get_images_for_tip(&db, &tip_id)?;
-
+    
+    // 设置默认限制，防止一次性加载过多数据
+    let limit = limit.unwrap_or(10).min(50); // 最多50张图片
+    let offset = offset.unwrap_or(0).max(0);
+    
+    let images_map = get_images_for_tip_paginated(&db, &tip_id, limit, offset)?;
+    
     Ok(images_map.unwrap_or_default())
+}
+
+// 实现获取笔记图片总数的API
+#[tauri::command(rename_all = "snake_case")]
+pub async fn get_tip_images_count(tip_id: String) -> Result<i64, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    
+    let count = db.get_tip_images_count(&tip_id).map_err(|e| e.to_string())?;
+    
+    Ok(count)
 }
 
 // 实现删除图片的API
@@ -290,6 +309,27 @@ fn get_images_for_tip(
     tip_id: &str,
 ) -> Result<Option<HashMap<String, String>>, String> {
     let images = db.get_tip_images(tip_id).map_err(|e| e.to_string())?;
+
+    if images.is_empty() {
+        return Ok(None);
+    }
+
+    let mut images_map = HashMap::new();
+    for (id, data) in images {
+        images_map.insert(id, data);
+    }
+
+    Ok(Some(images_map))
+}
+
+// 工具函数：分页获取笔记的图片并转换为HashMap
+fn get_images_for_tip_paginated(
+    db: &DbManager,
+    tip_id: &str,
+    limit: i32,
+    offset: i32,
+) -> Result<Option<HashMap<String, String>>, String> {
+    let images = db.get_tip_images_paginated(tip_id, limit, offset).map_err(|e| e.to_string())?;
 
     if images.is_empty() {
         return Ok(None);

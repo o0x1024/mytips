@@ -45,6 +45,7 @@ pub fn run() {
             // 图片相关API
             save_tip_image,
             get_tip_images,
+            get_tip_images_count,
             delete_tip_image,
             // 分类相关API
             get_all_categories,
@@ -55,6 +56,10 @@ pub fn run() {
             get_all_tags,
             create_tag,
             delete_tag,
+            // 导入相关API
+            import_from_directory,
+            import_markdown_file,
+            get_import_preview,
             // AI相关API
             send_ai_message,
             send_ai_message_stream,
@@ -69,6 +74,9 @@ pub fn run() {
             get_api_endpoint,
             save_model_name,
             get_model_name_config,
+            save_max_tokens_config,
+            get_max_tokens_config,
+            migrate_config_to_database,
             // AI对话数据库相关API
             list_ai_conversations,
             list_ai_messages,
@@ -76,6 +84,12 @@ pub fn run() {
             delete_ai_conversation,
             update_ai_conversation_title,
             add_ai_message,
+            // AI角色相关API
+            list_ai_roles,
+            create_ai_role,
+            update_ai_role,
+            delete_ai_role,
+            get_ai_role,
             // 设置相关API
             save_proxy_settings,
             get_proxy_settings,

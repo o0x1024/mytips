@@ -12,20 +12,21 @@
   "app": {
     "windows": [
       {
-        "width": 1200,
+        "width": 1400,
         "height": 800,
-        "minWidth": 1200,
+        "minWidth": 1400,
         "minHeight": 800,
         "title": "MyTips",
         "center": true,
         "resizable": true,
-        "label": "main"
+        "label": "main",
+        "dragDropEnabled": true
       }
     ],
     "security": {
       "csp": {
         "default-src": ["'self'"],
-        "img-src": ["'self'", "https://*"],
+        "img-src": ["'self'", "https://*", "data:"],
         "connect-src": ["'self'", "https://*"],
         "script-src": ["'self'"],
         "style-src": ["'self'", "'unsafe-inline'"]
@@ -40,6 +41,26 @@
     "global-shortcut": null
   },
   "bundle": {
+    "macOS": {
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "height": 1400,
+          "width": 800
+        }
+      },
+      "files": {},
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)"
+    },
     "active": true,
     "targets": "all",
     "icon": [

@@ -86,6 +86,16 @@ pub struct ClipboardHistory {
     pub created_at: i64,
 }
 
+// AI角色模型
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AIRole {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 // 数据库管理器
 pub struct DbManager {
     pub conn: Connection,
@@ -191,6 +201,18 @@ impl DbManager {
             [],
         )?;
 
+        // 创建AI角色表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS ai_roles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
         // 创建图片存储表
         conn.execute(
             "CREATE TABLE IF NOT EXISTS images (
@@ -200,6 +222,22 @@ impl DbManager {
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (tip_id) REFERENCES tips (id) ON DELETE CASCADE
             )",
+            [],
+        )?;
+
+        // 创建索引以提高查询性能
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tips_category_id ON tips(category_id)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tip_tags_tip_id ON tip_tags(tip_id)",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tip_tags_tag_id ON tip_tags(tag_id)",
             [],
         )?;
 
@@ -244,7 +282,12 @@ impl DbManager {
             }
         }
 
-        Ok(Self { conn })
+        let db_manager = DbManager { conn };
+
+        // 初始化默认角色
+        db_manager.init_default_roles()?;
+
+        Ok(db_manager)
     }
 
     // 获取所有笔记
@@ -696,6 +739,40 @@ impl DbManager {
         Ok(images)
     }
 
+    // 分页获取笔记的图片
+    pub fn get_tip_images_paginated(&self, tip_id: &str, limit: i32, offset: i32) -> Result<Vec<(String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, image_data FROM images
+             WHERE tip_id = ?
+             ORDER BY created_at DESC
+             LIMIT ? OFFSET ?",
+        )?;
+
+        let image_iter = stmt.query_map(params![tip_id, limit, offset], |row| {
+            let id: String = row.get(0)?;
+            let image_data: String = row.get(1)?;
+            Ok((id, image_data))
+        })?;
+
+        let mut images = Vec::new();
+        for image in image_iter {
+            images.push(image?);
+        }
+
+        Ok(images)
+    }
+
+    // 获取笔记的图片总数
+    pub fn get_tip_images_count(&self, tip_id: &str) -> Result<i64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM images WHERE tip_id = ?",
+            params![tip_id],
+            |row| row.get(0),
+        )?;
+
+        Ok(count)
+    }
+
     // 删除笔记的所有图片
     pub fn delete_tip_images(&self, tip_id: &str) -> Result<()> {
         self.conn
@@ -825,6 +902,129 @@ impl DbManager {
     }
 
     // --- 剪贴板历史记录相关结束 ---
+
+    // --- AI角色相关 ---
+
+    // 获取所有角色
+    pub fn get_all_roles(&self) -> Result<Vec<AIRole>> {
+        let mut stmt = self.conn.prepare("SELECT id, name, description, created_at, updated_at FROM ai_roles ORDER BY created_at DESC")?;
+        let role_iter = stmt.query_map([], |row| {
+            Ok(AIRole {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+
+        let mut roles = Vec::new();
+        for role in role_iter {
+            roles.push(role?);
+        }
+
+        Ok(roles)
+    }
+
+    // 创建角色
+    pub fn create_role(&self, name: &str, description: &str) -> Result<AIRole> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().timestamp_millis();
+
+        self.conn.execute(
+            "INSERT INTO ai_roles (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            params![id, name, description, now, now],
+        )?;
+
+        Ok(AIRole {
+            id,
+            name: name.to_string(),
+            description: description.to_string(),
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    // 更新角色
+    pub fn update_role(&self, id: &str, name: &str, description: &str) -> Result<AIRole> {
+        let now = Utc::now().timestamp_millis();
+
+        self.conn.execute(
+            "UPDATE ai_roles SET name = ?, description = ?, updated_at = ? WHERE id = ?",
+            params![name, description, now, id],
+        )?;
+
+        Ok(AIRole {
+            id: id.to_string(),
+            name: name.to_string(),
+            description: description.to_string(),
+            created_at: 0, // 这里不重新查询created_at，调用方如果需要可以重新获取
+            updated_at: now,
+        })
+    }
+
+    // 删除角色
+    pub fn delete_role(&self, id: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM ai_roles WHERE id = ?", params![id])?;
+        Ok(())
+    }
+
+    // 根据ID获取角色
+    pub fn get_role_by_id(&self, id: &str) -> Result<AIRole> {
+        let mut stmt = self.conn.prepare("SELECT id, name, description, created_at, updated_at FROM ai_roles WHERE id = ?")?;
+        let role = stmt.query_row(params![id], |row| {
+            Ok(AIRole {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        })?;
+
+        Ok(role)
+    }
+
+    // --- AI角色相关结束 ---
+
+    // 初始化默认角色
+    pub fn init_default_roles(&self) -> Result<()> {
+        // 检查是否已经有角色，如果有则不创建默认角色
+        let roles = self.get_all_roles()?;
+        if !roles.is_empty() {
+            return Ok(());
+        }
+
+        // 创建默认角色
+        let default_roles = vec![
+            (
+                "编程助手",
+                "你是一个专业的编程助手，擅长多种编程语言和技术栈。你可以帮助用户解决编程问题、代码调试、架构设计、最佳实践等。请用清晰、准确的方式回答问题，并在适当时提供代码示例。"
+            ),
+            (
+                "写作导师",
+                "你是一个经验丰富的写作导师，精通各种文体的写作技巧。你可以帮助用户改进文章结构、提升表达能力、润色文字、纠正语法错误。请提供建设性的反馈和具体的改进建议。"
+            ),
+            (
+                "学习伙伴",
+                "你是一个耐心的学习伙伴，善于用简单易懂的方式解释复杂概念。你可以帮助用户理解各种学科知识、回答疑问、提供学习建议。请用循序渐进的方式进行讲解，确保用户能够理解。"
+            ),
+            (
+                "创意顾问",
+                "你是一个富有创意的顾问，擅长发散思维和创新思考。你可以帮助用户产生新的想法、解决创意问题、进行头脑风暴、提供不同角度的思考方式。请保持开放的心态，鼓励创新思维。"
+            ),
+            (
+                "翻译专家",
+                "你是一个专业的翻译专家，精通多种语言之间的准确翻译。你不仅能够进行字面翻译，还能考虑文化背景、语境和表达习惯，提供自然流畅的翻译结果。请确保翻译的准确性和地道性。"
+            ),
+        ];
+
+        for (name, description) in default_roles {
+            self.create_role(name, description)?;
+        }
+
+        Ok(())
+    }
 }
 
 // 获取数据库文件路径

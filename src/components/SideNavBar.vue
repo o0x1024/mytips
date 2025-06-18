@@ -35,11 +35,18 @@
       <div class="mb-1">
         <div v-if="!isCollapsed" class="flex justify-between items-center mt-2 px-2">
           <span class="text-base font-bold uppercase text-base-content/80 ">笔记本</span>
-          <button class="btn btn-xs btn-ghost" @click="$emit('add-notebook')" title="添加笔记本">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>  
-          </button>
+          <div class="flex gap-1">
+            <button class="btn btn-xs btn-ghost" @click="$emit('import')" title="导入文档">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              </svg>  
+            </button>
+            <button class="btn btn-xs btn-ghost" @click="$emit('add-notebook')" title="添加笔记本">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>  
+            </button>
+          </div>
         </div>
         
         <!-- 笔记本列表 - 展开模式 -->
@@ -351,7 +358,8 @@ const emit = defineEmits([
   'delete-notebook',
   'add-child-notebook',
   'delete-tag',
-  'clipboard'
+  'clipboard',
+  'import'
 ])
 
 // 状态
