@@ -16,7 +16,7 @@
         "height": 800,
         "minWidth": 1400,
         "minHeight": 800,
-        "title": "MyTips",
+        "title": "MyTips",  
         "center": true,
         "resizable": true,
         "label": "main",

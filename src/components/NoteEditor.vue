@@ -164,11 +164,8 @@
         </button>
         <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
           <li><a href="#" @click.prevent="setHighlightTheme('default')">Default</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('dark')">Dark</a></li>
           <li><a href="#" @click.prevent="setHighlightTheme('tomorrow')">Tomorrow</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('twilight')">Twilight</a></li>
           <li><a href="#" @click.prevent="setHighlightTheme('okaidia')">Okaidia</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('solarizedlight')">Solarized Light</a></li>
           <li><a href="#" @click.prevent="setHighlightTheme('funky')">Funky</a></li>
         </ul>
       </div>
@@ -276,7 +273,7 @@
           </div>
 
           <div v-if="isStreaming && streamingContent" class="mb-4 p-3 bg-base-200 rounded-lg max-h-60 overflow-y-auto">
-            <div class="prose prose-sm">{{ streamingContent }}</div>
+            <div class="prose">{{ streamingContent }}</div>
           </div>
 
           <div class="flex justify-end">
@@ -289,7 +286,7 @@
 
       <!-- Markdown预览区 -->
       <div v-if="isPreviewMode || isSplitMode"
-        class="flex-1 p-4 overflow-auto prose prose-sm md:prose-base lg:prose-lg dark:prose-invert max-w-none"
+        class="flex-1 p-4 overflow-auto prose dark:prose-invert max-w-none"
         :class="{ 'w-1/2': isSplitMode }" @scroll="handlePreviewScroll" ref="previewDiv">
         <div v-html="renderedContent" class="prose max-w-none"></div>
       </div>
@@ -338,7 +335,7 @@
             <p>AI 正在生成解释...</p>
           </div>
 
-          <div v-else class="overflow-y-auto max-h-[60vh] prose prose-sm md:prose-base dark:prose-invert">
+          <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
             <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
               {{ selectedTextForExplanation }}
             </blockquote>
@@ -380,7 +377,7 @@
             <p>AI 正在翻译...</p>
           </div>
 
-          <div v-else class="overflow-y-auto max-h-[60vh] prose prose-sm md:prose-base dark:prose-invert">
+          <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
             <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
               {{ selectedTextForTranslation }}
             </blockquote>
@@ -474,8 +471,6 @@ import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-php'
 import 'prismjs/components/prism-csharp'
 
-// 导入 plaintext 支持（通常 Prism 将 plaintext 作为基础语言支持）
-// 注意：plaintext 通常不需要特殊的语言组件，因为它就是纯文本
 
 // 安全检查 Prism 语言是否可用
 function isPrismLanguageAvailable(lang: string): boolean {
@@ -902,7 +897,6 @@ const renderedContent = computed(() => {
           }
         }
         
-        // 如果 plaintext 也不可用，直接返回转义的代码
         return escapeHtml(code);
       }
     }));
@@ -911,6 +905,7 @@ const renderedContent = computed(() => {
     marked.setOptions({
       breaks: true,
       gfm: true,
+      pedantic: false,
       silent: true,
     })
 
@@ -923,7 +918,6 @@ const renderedContent = computed(() => {
       ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'data-code', 'data-language']
     })
 
-    // 在下一个 tick 中处理代码块UI增强
     nextTick(() => {
       enhanceCodeBlocks()
     })
@@ -936,6 +930,58 @@ const renderedContent = computed(() => {
             <pre>${DOMPurify.sanitize(localNote.value.content)}</pre>`
   }
 })
+
+function enhanceCodeBlocks() {
+  // 查找所有包含language-类的code元素，以及没有language-类的pre>code元素
+  const codeElements = document.querySelectorAll('.prose code[class*="language-"], .prose pre > code:not([class*="language-"])')
+  
+  codeElements.forEach((codeElement) => {
+    const pre = codeElement.closest('pre')
+    if (!pre) return
+    
+    // 避免重复处理
+    if (pre.closest('.code-block-container')) {
+      return
+    }
+
+    // 获取语言类型
+    const classNames = codeElement.className.split(' ')
+    const langClass = classNames.find(cls => cls.startsWith('language-'))
+    const lang = langClass ? langClass.replace('language-', '') : 'plaintext'
+
+    // 如果没有指定语言，为code元素添加language-plaintext类
+    if (!langClass) {
+      codeElement.classList.add('language-plaintext')
+    }
+
+
+    // 创建容器
+    const container = document.createElement('div')
+    container.className = 'code-block-container'
+
+    // 创建头部
+    const header = document.createElement('div')
+    header.className = 'code-block-header'
+
+    // 语言标识
+    const langLabel = document.createElement('span')
+    langLabel.className = 'code-language'
+    langLabel.textContent = lang
+
+
+
+    // 为pre元素添加行号支持
+    pre.classList.add('line-numbers')
+
+    // 将pre元素包装到容器中
+    const parent = pre.parentNode
+    if (parent) {
+      parent.insertBefore(container, pre)
+      container.appendChild(header)
+      container.appendChild(pre)
+    }
+  })
+}
 
 // HTML 转义函数
 function escapeHtml(text: string): string {
@@ -1838,6 +1884,11 @@ onMounted(async () => {
   // 应用代码高亮主题
   setHighlightTheme(currentHighlightTheme.value)
 
+    // 初始化Prism行号插件
+    if (typeof Prism !== 'undefined' && Prism.plugins && Prism.plugins.lineNumbers) {
+    console.log('Prism 行号插件已加载')
+  }
+
   // 监听系统主题变化
   if (window.matchMedia) {
     const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
@@ -1879,32 +1930,16 @@ function setHighlightTheme(theme: string) {
 
     codeBlocks.forEach(codeBlock => {
       // 移除所有主题类
-      codeBlock.classList.remove('prism-default', 'prism-dark', 'prism-tomorrow', 'prism-twilight', 'prism-okaidia', 'prism-solarizedlight', 'prism-funky')
+      codeBlock.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia')
       // 添加当前主题类
       codeBlock.classList.add(`prism-${theme}`)
 
       // 更新父级pre元素的主题类
       const preElement = codeBlock.closest('pre')
       if (preElement) {
-        preElement.classList.remove('prism-default', 'prism-dark', 'prism-tomorrow', 'prism-twilight', 'prism-okaidia', 'prism-solarizedlight', 'prism-funky')
+        preElement.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia')
         preElement.classList.add(`prism-${theme}`)
 
-        // 确保复制按钮背景色与当前主题匹配
-        const codeBlockContainer = preElement.closest('.code-block-container')
-        if (codeBlockContainer) {
-          const copyButton = codeBlockContainer.querySelector('.copy-code-btn')
-          if (copyButton) {
-            // 调整复制按钮颜色以适应当前主题
-            const isDarkTheme = ['dark', 'tomorrow', 'twilight', 'okaidia', 'funky'].includes(theme)
-            if (isDarkTheme) {
-              copyButton.classList.add('bg-base-100')
-              copyButton.classList.remove('bg-base-300')
-            } else {
-              copyButton.classList.add('bg-base-300')
-              copyButton.classList.remove('bg-base-100')
-            }
-          }
-        }
       }
     })
 
@@ -1922,29 +1957,17 @@ function loadPrismTheme(theme: string) {
   existingThemeLinks.forEach(link => link.remove())
 
   // 根据主题名称选择对应的 Prism 主题文件
-  let themeFile = 'prism-dark.css' // 默认主题
+  let themeFile = 'prism-tomorrow.css' // 默认主题
   switch (theme) {
-    case 'dark':
-      themeFile = 'prism-dark.css'
-      break
     case 'tomorrow':
       themeFile = 'prism-tomorrow.css'
-      break
-    case 'twilight':
-      themeFile = 'prism-twilight.css'
       break
     case 'okaidia':
       themeFile = 'prism-okaidia.css'
       break
-    case 'solarizedlight':
-      themeFile = 'prism-solarizedlight.css'
-      break
-    case 'funky':
-      themeFile = 'prism-funky.css'
-      break
     case 'default':
     default:
-      themeFile = 'prism-dark.css'
+      themeFile = 'prism.css'
   }
 
   // 创建新的样式链接
@@ -2322,204 +2345,40 @@ function onEditorBlur(event: FocusEvent) {
   }
 }
 
-// 增强代码块UI的函数
-function enhanceCodeBlocks() {
-  // 查找所有包含language-类的code元素，以及没有language-类的pre>code元素
-  const codeElements = document.querySelectorAll('.prose code[class*="language-"], .prose pre > code:not([class*="language-"])')
-  
-  codeElements.forEach((codeElement) => {
-    const pre = codeElement.closest('pre')
-    if (!pre) return
-    
-    // 避免重复处理
-    if (pre.closest('.code-block-container')) {
-      return
-    }
-
-    // 获取语言类型
-    const classNames = codeElement.className.split(' ')
-    const langClass = classNames.find(cls => cls.startsWith('language-'))
-    const lang = langClass ? langClass.replace('language-', '') : 'plaintext'
-
-    // 如果没有指定语言，为code元素添加language-plaintext类
-    if (!langClass) {
-      codeElement.classList.add('language-plaintext')
-    }
-
-    // 获取原始代码内容
-    const codeText = codeElement.textContent || ''
-
-    // 创建容器
-    const container = document.createElement('div')
-    container.className = 'code-block-container'
-
-    // 创建头部
-    const header = document.createElement('div')
-    header.className = 'code-block-header'
-    header.innerHTML = `
-      <span class="code-language">${lang}</span>
-      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="复制代码">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-        </svg>
-      </button>
-    `
-
-    // 将pre元素包装到容器中
-    const parent = pre.parentNode
-    if (parent) {
-      parent.insertBefore(container, pre)
-      container.appendChild(header)
-      container.appendChild(pre)
-    }
-  })
-}
 
 </script>
 
 <style scoped>
-/* 编辑器基础样式 */
-/* 移除冗余的 markdown-body 样式 */
 
-/* 使 prose 样式生效于深层元素 */
-:deep(.prose) {
-  max-width: none;
-  color: inherit;
-  width: 100%;
-}
-
-/* 代码块相关样式 */
-:deep(.code-block-container) {
-  position: relative;
-  margin: 1rem 0;
-  border-radius: 0.375rem;
-  overflow: hidden;
-  background: var(--prism-background, #272727);
-  border: 1px solid var(--prism-border, #333333);
-}
-
-:deep(.code-block-header) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  background: var(--prism-header-background, #333333);
-  font-size: 0.875rem;
-}
-
-:deep(.code-language) {
-  font-weight: 600;
-  color: var(--prism-header-text, #ffffff);
-  text-transform: uppercase;
-  font-size: 0.75rem;
-}
-
-:deep(.copy-code-btn) {
-  padding: 0.25rem;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: 0.25rem;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-:deep(.copy-code-btn:hover) {
-  background: var(--prism-button-hover, rgba(255, 255, 255, 0.1));
-}
-
-:deep(.copy-code-btn svg) {
-  width: 1rem;
-  height: 1rem;
-  color: var(--prism-header-text, #ffffff);
-}
-
-/* Prism 行号样式 */
-:deep(.line-numbers) {
-  position: relative;
-  padding-left: 3.8em;
-  counter-reset: linenumber;
-}
 
 :deep(.line-numbers .line-numbers-rows) {
   position: absolute;
   pointer-events: none;
   top: 0;
-  font-size: 100%;
+
   left: -3.8em;
   width: 3em;
   letter-spacing: -1px;
-  border-right: 1px solid var(--prism-line-border, #999);
+  border-right: 1px solid #a2a2a2;
   user-select: none;
 }
 
-:deep(.line-numbers-rows > span) {
-  display: block;
-  counter-increment: linenumber;
-}
-
-:deep(.line-numbers-rows > span:before) {
-  content: counter(linenumber);
-  color: var(--prism-line-number, #999);
-  display: block;
-  padding-right: 0.8em;
-  text-align: right;
-}
-
-/* 代码块基础样式 */
-:deep(.prose pre) {
-  margin: 0;
-  padding: 1rem;
-  overflow-x: auto;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  white-space: pre-wrap; /* 支持自动换行 */
-  word-wrap: break-word; /* 长单词换行 */
-  overflow-wrap: break-word; /* 现代浏览器的换行属性 */
-  word-break: break-all; /* 强制在任意字符间换行 */
-}
 
 :deep(.prose pre code) {
   background: transparent;
   padding: 0;
   border-radius: 0;
-  font-size: 0.9em;
-  color: inherit;
+  font-size: var(--base-font-size-1);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   display: block;
   width: 100%;
   line-height: 1.5;
-  white-space: pre-wrap; /* 支持自动换行 */
-  word-wrap: break-word; /* 长单词换行 */
-  overflow-wrap: break-word; /* 现代浏览器的换行属性 */
-  word-break: break-all; /* 强制在任意字符间换行 */
+  white-space: pre-wrap; 
+  word-wrap: break-word; 
+  overflow-wrap: break-word; 
+  word-break: break-all;
 }
 
-:deep(.prose code) {
-  border-radius: 0.25rem;
-  padding: 0.2em 0.4em;
-  font-size: 0.9em;
-  background-color: hsl(var(--b2, 215 28% 17%));
-  color: hsl(var(--p, 217 91% 60%));
-  font-weight: 500;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-/* 确保编辑器文本区域在暗色主题下清晰可见 */
-[data-theme="dark"] textarea,
-[data-theme="night"] textarea,
-[data-theme="black"] textarea,
-[data-theme="dracula"] textarea,
-[data-theme="halloween"] textarea,
-[data-theme="business"] textarea,
-[data-theme="luxury"] textarea,
-[data-theme="coffee"] textarea {
-  color: rgb(226, 232, 240) !important;
-}
 
 /* NoteEditor特有的样式 */
 
@@ -2586,47 +2445,6 @@ function enhanceCodeBlocks() {
   color: var(--primary-content);
 }
 
-/* 编辑器内容区域的暗色主题特殊优化 - 这些是编辑器特有的 */
-[data-theme="dark"] :deep(.prose code),
-[data-theme="night"] :deep(.prose code),
-[data-theme="black"] :deep(.prose code) {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: rgb(251, 191, 36) !important;
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-
-[data-theme="dark"] :deep(.prose pre),
-[data-theme="night"] :deep(.prose pre),
-[data-theme="black"] :deep(.prose pre) {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: rgb(229, 231, 235) !important;
-}
-
-[data-theme="dark"] :deep(.prose blockquote),
-[data-theme="night"] :deep(.prose blockquote),
-[data-theme="black"] :deep(.prose blockquote) {
-  border-left: 4px solid rgba(255, 255, 255, 0.3) !important;
-  background: rgba(255, 255, 255, 0.03) !important;
-  color: rgb(209, 213, 219) !important;
-}
-
-/* 编辑器textarea的特殊暗色主题优化 */
-[data-theme="dark"] textarea.editor-textarea,
-[data-theme="night"] textarea.editor-textarea,
-[data-theme="black"] textarea.editor-textarea {
-  background: rgba(255, 255, 255, 0.03) !important;
-  color: rgb(243, 244, 246) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-[data-theme="dark"] textarea.editor-textarea:focus,
-[data-theme="night"] textarea.editor-textarea:focus,
-[data-theme="black"] textarea.editor-textarea:focus {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  background: rgba(255, 255, 255, 0.05) !important;
-}
 
 /* 确保所有图片都是响应式的 */
 :deep(.prose img) {
@@ -2756,82 +2574,8 @@ function enhanceCodeBlocks() {
 }
 
 /* Prism 主题变量 */
-:root {
-  --prism-background: #f5f5f5;
-  --prism-border: #e0e0e0;
-  --prism-header-background: #f0f0f0;
-  --prism-header-text: #666;
-  --prism-button-hover: rgba(0, 0, 0, 0.1);
-  --prism-line-border: #999;
-  --prism-line-number: #999;
-}
 
-/* 暗色主题的 Prism 变量 */
-[data-theme="dark"] {
-  --prism-background: #2d3748;
-  --prism-border: #4a5568;
-  --prism-header-background: #1a202c;
-  --prism-header-text: #a0aec0;
-  --prism-button-hover: rgba(255, 255, 255, 0.1);
-  --prism-line-border: #4a5568;
-  --prism-line-number: #718096;
-}
 
-/* Prism 语法高亮颜色 */
-:deep(.token.comment),
-:deep(.token.prolog),
-:deep(.token.doctype),
-:deep(.token.cdata) {
-  color: #708090;
-}
-
-:deep(.token.punctuation) {
-  color: #999;
-}
-
-:deep(.token.property),
-:deep(.token.tag),
-:deep(.token.boolean),
-:deep(.token.number),
-:deep(.token.constant),
-:deep(.token.symbol),
-:deep(.token.deleted) {
-  color: #905;
-}
-
-:deep(.token.selector),
-:deep(.token.attr-name),
-:deep(.token.string),
-:deep(.token.char),
-:deep(.token.builtin),
-:deep(.token.inserted) {
-  color: #690;
-}
-
-:deep(.token.operator),
-:deep(.token.entity),
-:deep(.token.url),
-:deep(.language-css .token.string),
-:deep(.style .token.string) {
-  color: #9a6e3a;
-}
-
-:deep(.token.atrule),
-:deep(.token.attr-value),
-:deep(.token.keyword) {
-  color: #07a;
-}
-
-:deep(.token.function),
-:deep(.token.class-name) {
-  color: #dd4a68;
-}
-
-:deep(.token.regex),
-:deep(.token.important),
-:deep(.token.variable) {
-  color: #e90;
-}
 
 /* 嵌入图片样式 */
 :deep(.embedded-image) {
@@ -2859,12 +2603,5 @@ function enhanceCodeBlocks() {
   word-break: break-all !important; /* 强制在任意字符间换行 */
 }
 
-/* 行号模式下的换行支持 */
-:deep(.line-numbers > code) {
-  position: relative;
-  white-space: pre-wrap !important; /* 强制支持换行 */
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  word-break: break-all !important; /* 强制在任意字符间换行 */
-}
+
 </style>

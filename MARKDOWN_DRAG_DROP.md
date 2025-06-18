@@ -25,15 +25,15 @@ MyTips 现在支持将外部 Markdown 文件直接拖拽到应用窗口中进行
 ## 支持的文件格式
 
 支持以下 Markdown 文件扩展名：
-- `.md`
-- `.markdown`
-- `.mdown`
-- `.mkdn`
-- `.mkd`
-- `.mdwn`
-- `.mdtxt`
-- `.mdtext`
-- `.text`
+- .md
+- .markdown
+- .mdown
+- .mkdn
+- .mkd
+- .mdwn
+- .mdtxt
+- .mdtext
+- .text
 
 ## 功能特点
 
@@ -55,7 +55,7 @@ MyTips 现在支持将外部 Markdown 文件直接拖拽到应用窗口中进行
 ## 技术实现
 
 ### 组件结构
-- `MarkdownDropPreview.vue` - 主要组件
+`MarkdownDropPreview.vue` - 主要组件
 - 集成到 `MainLayout.vue` 中
 - 使用全局拖拽事件监听
 

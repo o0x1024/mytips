@@ -2,7 +2,7 @@
   <div class="h-full flex flex-col bg-base-200 border-r border-base-300 transition-all duration-300"
        :class="[isCollapsed ? 'w-18' : 'sidebar-width']">
     <!-- 顶部标题和折叠按钮 -->
-    <div class="p-4 flex items-center justify-between">
+    <div class="p-3 flex items-center justify-between">
       <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary', isCollapsed ? 'opacity-0 w-0 absolute' : 'opacity-100']">MyTips</div>
       <button 
         :class="['btn btn-sm btn-ghost relative z-10', isCollapsed ? 'btn btn-ghost btn-sm btn-square w-10 flex justify-center tooltip tooltip-righ' : 'ml-auto']" 
@@ -30,7 +30,7 @@
     </div>
 
     <!-- 导航区域 -->
-    <div class="overflow-y-auto flex-grow px-2">
+    <div class="overflow-hidden flex-grow px-2">
       <!-- 笔记本区域 -->
       <div class="mb-1">
         <div v-if="!isCollapsed" class="flex justify-between items-center mt-2 px-2">

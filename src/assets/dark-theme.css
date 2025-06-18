@@ -617,6 +617,10 @@
   [data-theme="synthwave"] code {
     color: rgb(251, 191, 36) !important;
     background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    padding: 0.125rem 0.25rem !important;
+    border-radius: 0.25rem !important;
+    font-weight: 500 !important;
   }
 
   [data-theme="dark"] pre,

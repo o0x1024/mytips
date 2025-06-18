@@ -3,17 +3,30 @@
   <div 
     v-if="isDragOver" 
     class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-    @drop="handleDrop"
-    @dragover.prevent
-    @dragleave="handleDragLeave"
+    @click="closeDragOverlay"
   >
-    <div class="bg-base-100 rounded-lg p-8 shadow-2xl border-2 border-dashed border-primary border-opacity-50">
+    <div class="bg-base-100 rounded-lg p-8 shadow-2xl border-2 border-dashed border-primary border-opacity-50 relative" @click.stop>
+      <!-- 关闭按钮 -->
+      <button 
+        class="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost"
+        @click="closeDragOverlay"
+        title="关闭"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      
       <div class="text-center">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
         <h3 class="text-xl font-bold mb-2">拖拽Markdown文件到此处</h3>
         <p class="text-base-content/70">支持 .md 和 .markdown 文件</p>
+        <p class="text-xs text-base-content/50 mt-2">按 ESC 键或点击关闭按钮可关闭此覆盖层</p>
+        <!-- <div class="text-xs text-base-content/50 mt-2">
+          位置: {{ dragPosition.x }}, {{ dragPosition.y }}
+        </div> -->
       </div>
     </div>
   </div>
@@ -45,7 +58,7 @@
       <div class="h-full overflow-y-auto">
         <div 
           v-if="previewContent" 
-          class="prose prose-sm max-w-none"
+          class="prose max-w-none"
           v-html="renderedContent"
         ></div>
         <div v-else-if="isLoading" class="flex items-center justify-center h-full">
@@ -118,6 +131,8 @@ import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-css'
 import 'prismjs/components/prism-sql'
 import DOMPurify from 'dompurify'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { readTextFile, exists } from '@tauri-apps/plugin-fs'
 
 // Props
 interface Props {
@@ -141,10 +156,14 @@ const isDragOver = ref(false)
 const showPreview = ref(false)
 const showImportOptions = ref(false)
 const isLoading = ref(false)
-const previewFile = ref<File | null>(null)
+const previewFile = ref<{name: string, path: string} | null>(null)
 const previewContent = ref('')
 const importTitle = ref('')
 const selectedNotebookId = ref('')
+const dragPosition = ref({ x: 0, y: 0 })
+
+// Tauri拖拽事件监听器
+let unlistenDragDrop: (() => void) | null = null
 
 // 安全检查 Prism 语言是否可用
 function isPrismLanguageAvailable(lang: string): boolean {
@@ -224,103 +243,108 @@ const renderedContent = computed(() => {
   }
 })
 
-// 拖拽处理
-function handleDragEnter(e: DragEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  console.log('拖拽进入检测', e.type, e.dataTransfer?.types)
+// Tauri拖拽事件处理
+async function handleTauriDragDrop(event: any) {
+  console.log('Tauri拖拽事件:', event.payload)
   
-  // 简单检查 - 只要有拖拽事件就显示覆盖层
-  isDragOver.value = true
-  console.log('显示拖拽覆盖层')
-}
-
-function handleDragLeave(e: DragEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  console.log('拖拽离开检测', e.type)
-  
-  // 延迟隐藏，避免在拖拽区域内部移动时误触发
-  setTimeout(() => {
-    // 检查鼠标位置
-    const rect = document.documentElement.getBoundingClientRect()
-    if (e.clientX < rect.left || e.clientX > rect.right || 
-        e.clientY < rect.top || e.clientY > rect.bottom) {
+  try {
+    if (event.payload.type === 'over') {
+      // 文件悬停
+      isDragOver.value = true
+      dragPosition.value = { x: event.payload.position.x, y: event.payload.position.y }
+      console.log('文件悬停在位置:', dragPosition.value)
+    } else if (event.payload.type === 'drop') {
+      // 文件放置
       isDragOver.value = false
-      console.log('隐藏拖拽覆盖层')
+      const paths = event.payload.paths
+      console.log('文件放置，路径:', paths)
+      
+      if (paths && paths.length > 0) {
+        // 查找markdown文件
+        const markdownFiles = await filterMarkdownFiles(paths)
+        console.log('找到的markdown文件:', markdownFiles)
+        
+        if (markdownFiles.length > 0) {
+          const markdownFile = markdownFiles[0]
+          console.log('选择markdown文件进行预览:', markdownFile)
+          await previewMarkdownFileFromPath(markdownFile)
+        } else {
+          console.log('没有找到markdown文件')
+          const fileNames = paths.map((path: string) => path.split('/').pop() || path).join(', ')
+          alert(`检测到文件: ${fileNames}\n\n请拖拽 Markdown 文件（支持 .md, .markdown, .mdown, .mkd 等格式）`)
+        }
+      }
+    } else if (event.payload.type === 'cancelled') {
+      // 拖拽取消
+      isDragOver.value = false
+      console.log('文件拖拽取消')
     }
-  }, 50)
-}
-
-function handleDragOver(e: DragEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'copy'
+  } catch (error) {
+    console.error('处理Tauri拖拽事件时出错:', error)
+    isDragOver.value = false
   }
 }
 
-async function handleDrop(e: DragEvent) {
-  e.preventDefault()
-  e.stopPropagation()
-  isDragOver.value = false
-  console.log('文件放置事件触发', e.dataTransfer?.files?.length)
+// 过滤markdown文件
+async function filterMarkdownFiles(paths: string[]): Promise<string[]> {
+  const markdownFiles: string[] = []
   
-  if (!e.dataTransfer?.files) {
-    console.log('没有检测到文件')
-    return
+  for (const path of paths) {
+    if (await isMarkdownFile(path)) {
+      markdownFiles.push(path)
+    }
   }
   
-  const files = Array.from(e.dataTransfer.files)
-  console.log('检测到文件:', files.map(f => `${f.name} (${f.type})`))
-  
-  const markdownFile = files.find(file => isMarkdownFile(file))
-  
-  if (markdownFile) {
-    console.log('找到markdown文件:', markdownFile.name)
-    await previewMarkdownFile(markdownFile)
-  } else {
-    console.log('没有找到markdown文件，支持的格式:', ['.md', '.markdown', '.mdown', '.mkdn', '.mkd', '.mdwn', '.mdtxt', '.mdtext', '.text'])
-    // 显示提示信息
-    alert('请拖拽 Markdown 文件（.md, .markdown 等格式）')
+  return markdownFiles
+}
+
+// 文件类型检查 - Tauri版本（基于文件路径）
+async function isMarkdownFile(path: string): Promise<boolean> {
+  try {
+    const fileName = path.split('/').pop()?.toLowerCase() || ''
+    console.log('检查文件类型:', fileName)
+    
+    // 支持更多的markdown文件扩展名
+    const markdownExtensions = [
+      '.md', '.markdown', '.mdown', '.mkdn', '.mkd', 
+      '.mdwn', '.mdtxt', '.mdtext', '.text','.txt'
+    ]
+    
+    const isMarkdown = markdownExtensions.some(ext => fileName.endsWith(ext))
+    console.log(`文件 ${fileName} 是否为markdown:`, isMarkdown)
+    
+    // 检查文件是否存在
+    if (isMarkdown) {
+      const fileExists = await exists(path)
+      console.log(`文件 ${path} 是否存在:`, fileExists)
+      return fileExists
+    }
+    
+    return false
+  } catch (error) {
+    console.error('检查文件类型时出错:', error)
+    return false
   }
 }
 
-// 文件类型检查
-function isMarkdownFile(file: File): boolean {
-  const name = file.name.toLowerCase()
-  return name.endsWith('.md') || name.endsWith('.markdown') || name.endsWith('.mdown') || name.endsWith('.mkd')
-}
-
-// 预览文件
-async function previewMarkdownFile(file: File) {
-  previewFile.value = file
+// 预览文件（从文件路径）
+async function previewMarkdownFileFromPath(filePath: string) {
+  const fileName = filePath.split('/').pop() || filePath
+  previewFile.value = { name: fileName, path: filePath }
   isLoading.value = true
   showPreview.value = true
   
   try {
-    const content = await readFileContent(file)
+    const content = await readTextFile(filePath)
     previewContent.value = content
+    console.log(`成功读取文件 ${fileName}，内容长度: ${content.length}`)
   } catch (error) {
     console.error('读取文件失败:', error)
     previewContent.value = ''
+    alert(`读取文件失败: ${error}`)
   } finally {
     isLoading.value = false
   }
-}
-
-// 读取文件内容
-function readFileContent(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      resolve(e.target?.result as string || '')
-    }
-    reader.onerror = () => {
-      reject(new Error('文件读取失败'))
-    }
-    reader.readAsText(file, 'utf-8')
-  })
 }
 
 // 关闭预览
@@ -370,39 +394,108 @@ function cancelImport() {
 }
 
 // 生命周期
-onMounted(() => {
-  console.log('MarkdownDropPreview 组件已挂载，正在添加拖拽事件监听器')
+onMounted(async () => {
+  console.log('MarkdownDropPreview 组件已挂载，正在设置Tauri拖拽事件监听器')
   
-  // 添加简单的测试函数到全局
-  ;(window as any).testDragFunction = () => {
-    console.log('手动测试拖拽功能')
-    isDragOver.value = !isDragOver.value
-    console.log('拖拽覆盖层状态:', isDragOver.value)
+  try {
+    // 使用Tauri的原生拖拽事件API
+    const webview = getCurrentWebview()
+    unlistenDragDrop = await webview.onDragDropEvent(handleTauriDragDrop)
+    
+    console.log('✅ Tauri拖拽事件监听器已设置')
+    
+    // 添加测试函数到全局
+    ;(window as any).testDragFunction = () => {
+      console.log('手动测试拖拽功能')
+      isDragOver.value = !isDragOver.value
+      console.log('拖拽覆盖层状态:', isDragOver.value)
+    }
+    
+    // 检查Tauri API支持
+    console.log('Tauri WebView API支持检查:', {
+      getCurrentWebview: typeof getCurrentWebview === 'function',
+      readTextFile: typeof readTextFile === 'function',
+      exists: typeof exists === 'function'
+    })
+    
+    console.log('可以在控制台运行 testDragFunction() 来测试覆盖层')
+    
+    // 添加ESC键监听
+    document.addEventListener('keydown', handleKeyDown)
+    
+  } catch (error) {
+    console.error('设置Tauri拖拽事件监听器失败:', error)
+    // 如果Tauri API不可用，可以考虑回退到HTML5拖拽API
+    console.warn('将尝试使用HTML5拖拽API作为备用方案')
   }
-  
-  // 使用window事件监听，确保能捕获到所有拖拽事件
-  window.addEventListener('dragenter', handleDragEnter, true)
-  window.addEventListener('dragover', handleDragOver, true)
-  window.addEventListener('dragleave', handleDragLeave, true)
-  window.addEventListener('drop', handleDrop, true)
-  
-  console.log('拖拽事件监听器已添加到window')
-  console.log('可以在控制台运行 testDragFunction() 来测试覆盖层')
 })
 
 onUnmounted(() => {
   console.log('MarkdownDropPreview 组件卸载，移除拖拽事件监听器')
-  // 移除事件监听
-  window.removeEventListener('dragenter', handleDragEnter, true)
-  window.removeEventListener('dragover', handleDragOver, true)
-  window.removeEventListener('dragleave', handleDragLeave, true)
-  window.removeEventListener('drop', handleDrop, true)
+  
+  // 移除Tauri拖拽事件监听器
+  if (unlistenDragDrop) {
+    unlistenDragDrop()
+    unlistenDragDrop = null
+    console.log('✅ Tauri拖拽事件监听器已移除')
+  }
+  
+  // 移除ESC键监听
+  document.removeEventListener('keydown', handleKeyDown)
+  
+  // 清理全局测试函数
+  if ((window as any).testDragFunction) {
+    delete (window as any).testDragFunction
+  }
 })
+
+// ESC键处理函数
+function handleKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isDragOver.value) {
+    closeDragOverlay()
+  }
+}
+
+// 关闭拖拽覆盖层
+function closeDragOverlay() {
+  isDragOver.value = false
+}
 </script>
 
 <style scoped>
 .prose {
   color: inherit;
+  font-size: var(--base-font-size); /* 继承全局字体大小 */
+}
+
+/* 确保prose内的所有元素都能正确继承字体大小 */
+.prose * {
+  font-size: inherit;
+}
+
+/* 为不同标题级别设置相对大小 */
+.prose h1 {
+  font-size: calc(var(--base-font-size) * 2.25); /* 相当于 text-4xl */
+}
+
+.prose h2 {
+  font-size: calc(var(--base-font-size) * 1.875); /* 相当于 text-3xl */
+}
+
+.prose h3 {
+  font-size: calc(var(--base-font-size) * 1.5); /* 相当于 text-2xl */
+}
+
+.prose h4 {
+  font-size: calc(var(--base-font-size) * 1.25); /* 相当于 text-xl */
+}
+
+.prose h5 {
+  font-size: calc(var(--base-font-size) * 1.125); /* 相当于 text-lg */
+}
+
+.prose h6 {
+  font-size: var(--base-font-size); /* 相当于 text-base */
 }
 
 .prose h1,
@@ -415,10 +508,65 @@ onUnmounted(() => {
 }
 
 .prose code {
-  background-color: hsl(var(--b2));
-  padding: 0.125rem 0.25rem;
   border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
   font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* 使用CSS变量确保在所有主题下都有合适的颜色 */
+  background-color: hsl(var(--b3));
+  color: hsl(var(--bc));
+  border: 1px solid hsl(var(--b3));
+}
+
+/* 暗色主题下的行内代码特殊优化 */
+:deep(.prose code) {
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background-color: hsl(var(--b3));
+  color: hsl(var(--bc));
+  border: 1px solid hsl(var(--b3));
+}
+
+[data-theme="dark"] :deep(.prose code),
+[data-theme="night"] :deep(.prose code),
+[data-theme="black"] :deep(.prose code),
+[data-theme="dracula"] :deep(.prose code),
+[data-theme="halloween"] :deep(.prose code),
+[data-theme="business"] :deep(.prose code),
+[data-theme="luxury"] :deep(.prose code),
+[data-theme="coffee"] :deep(.prose code),
+[data-theme="forest"] :deep(.prose code),
+[data-theme="synthwave"] :deep(.prose code) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgb(251, 191, 36) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* 亮色主题下的行内代码优化 */
+[data-theme="light"] :deep(.prose code),
+[data-theme="cupcake"] :deep(.prose code),
+[data-theme="bumblebee"] :deep(.prose code),
+[data-theme="emerald"] :deep(.prose code),
+[data-theme="corporate"] :deep(.prose code),
+[data-theme="retro"] :deep(.prose code),
+[data-theme="cyberpunk"] :deep(.prose code),
+[data-theme="valentine"] :deep(.prose code),
+[data-theme="garden"] :deep(.prose code),
+[data-theme="aqua"] :deep(.prose code),
+[data-theme="lofi"] :deep(.prose code),
+[data-theme="pastel"] :deep(.prose code),
+[data-theme="fantasy"] :deep(.prose code),
+[data-theme="wireframe"] :deep(.prose code),
+[data-theme="cmyk"] :deep(.prose code),
+[data-theme="autumn"] :deep(.prose code),
+[data-theme="acid"] :deep(.prose code),
+[data-theme="lemonade"] :deep(.prose code),
+[data-theme="winter"] :deep(.prose code) {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  color: rgb(124, 58, 237) !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
 }
 
 .prose pre {

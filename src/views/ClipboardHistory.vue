@@ -820,4 +820,90 @@ img {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* 行内代码样式修复 */
+:deep(.prose) {
+  font-size: var(--base-font-size); /* 继承全局字体大小 */
+}
+
+/* 确保prose内的所有元素都能正确继承字体大小 */
+:deep(.prose *) {
+  font-size: inherit;
+}
+
+/* 为不同标题级别设置相对大小 */
+:deep(.prose h1) {
+  font-size: calc(var(--base-font-size) * 2.25); /* 相当于 text-4xl */
+}
+
+:deep(.prose h2) {
+  font-size: calc(var(--base-font-size) * 1.875); /* 相当于 text-3xl */
+}
+
+:deep(.prose h3) {
+  font-size: calc(var(--base-font-size) * 1.5); /* 相当于 text-2xl */
+}
+
+:deep(.prose h4) {
+  font-size: calc(var(--base-font-size) * 1.25); /* 相当于 text-xl */
+}
+
+:deep(.prose h5) {
+  font-size: calc(var(--base-font-size) * 1.125); /* 相当于 text-lg */
+}
+
+:deep(.prose h6) {
+  font-size: var(--base-font-size); /* 相当于 text-base */
+}
+
+:deep(.prose code) {
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  background-color: hsl(var(--b3));
+  color: hsl(var(--bc));
+  border: 1px solid hsl(var(--b3));
+}
+
+/* 暗色主题下的行内代码特殊优化 */
+[data-theme="dark"] :deep(.prose code),
+[data-theme="night"] :deep(.prose code),
+[data-theme="black"] :deep(.prose code),
+[data-theme="dracula"] :deep(.prose code),
+[data-theme="halloween"] :deep(.prose code),
+[data-theme="business"] :deep(.prose code),
+[data-theme="luxury"] :deep(.prose code),
+[data-theme="coffee"] :deep(.prose code),
+[data-theme="forest"] :deep(.prose code),
+[data-theme="synthwave"] :deep(.prose code) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgb(251, 191, 36) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+/* 亮色主题下的行内代码优化 */
+[data-theme="light"] :deep(.prose code),
+[data-theme="cupcake"] :deep(.prose code),
+[data-theme="bumblebee"] :deep(.prose code),
+[data-theme="emerald"] :deep(.prose code),
+[data-theme="corporate"] :deep(.prose code),
+[data-theme="retro"] :deep(.prose code),
+[data-theme="cyberpunk"] :deep(.prose code),
+[data-theme="valentine"] :deep(.prose code),
+[data-theme="garden"] :deep(.prose code),
+[data-theme="aqua"] :deep(.prose code),
+[data-theme="lofi"] :deep(.prose code),
+[data-theme="pastel"] :deep(.prose code),
+[data-theme="fantasy"] :deep(.prose code),
+[data-theme="wireframe"] :deep(.prose code),
+[data-theme="cmyk"] :deep(.prose code),
+[data-theme="autumn"] :deep(.prose code),
+[data-theme="acid"] :deep(.prose code),
+[data-theme="lemonade"] :deep(.prose code),
+[data-theme="winter"] :deep(.prose code) {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+  color: rgb(124, 58, 237) !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+}
 </style>
