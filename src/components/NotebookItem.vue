@@ -4,8 +4,8 @@
     <div class="flex items-center w-full">
       <a 
         :class="[
-          'flex items-center w-full py-1 rounded-md min-w-0', 
-          {'active bg-primary/10': selectedId === notebook.id}
+          'flex items-center w-full py-1 rounded-md min-w-0 cursor-pointer hover:bg-base-200 transition-colors', 
+          {'active bg-primary/10 text-primary font-medium': selectedId === notebook.id}
         ]"
         @click="selectThis"
         @contextmenu.prevent="onContextMenu"
@@ -48,6 +48,13 @@
           </slot>
         </span>
         
+        <!-- 加密状态指示器 -->
+        <span v-if="!isCollapsed && isNotebookEncrypted(notebook.id)" title="已加密" class="text-warning ml-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+        </span>
+        
         <!-- 笔记数量指示器 -->
         <span v-if="!isCollapsed" class="badge badge-sm ml-auto">{{ getTotalCount(notebook) }}</span>
       </a>
@@ -60,8 +67,21 @@
                   d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
           </svg>
         </button>
-        <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-36">
-          <li><a @click="editNotebook">编辑</a></li>
+        <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-48">
+          <li><a @click="encryptNotebook" class="text-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            加密笔记本
+          </a></li>
+          <li><a @click="decryptNotebook" class="text-info">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+            解密笔记本
+          </a></li>
+          <li class="divider"></li>
+          <li><a @click="editNotebook">编辑</a></li>.
           <li><a @click="addChildNotebook">添加子笔记本</a></li>
           <li><a @click="deleteNotebook" class="text-error">删除</a></li>
         </ul>
@@ -81,11 +101,28 @@
         @edit="id => $emit('edit', id)"
         @add-child="id => $emit('add-child', id)"
         @delete="id => $emit('delete', id)"
+        @encrypt="id => $emit('encrypt', id)"
+        @decrypt="id => $emit('decrypt', id)"
       />
     </div>
     
     <!-- 右键菜单 -->
     <ul v-if="showContextMenu" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-36" :style="{ position: 'fixed', left: menuX + 'px', top: menuY + 'px' }">
+      <!-- 加密/解密选项 -->
+      <li><a @click="handleEncrypt" class="text-warning">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+        </svg>
+        加密笔记本
+      </a></li>
+      <li><a @click="handleDecrypt" class="text-info">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+        </svg>
+        解密笔记本
+      </a></li>
+      <li class="divider"></li>
+      <!-- 原有选项 -->
       <li><a @click="handleEdit">编辑</a></li>
       <li><a @click="handleAddChild">添加子笔记本</a></li>
       <li><a @click="handleDelete" class="text-error">删除</a></li>
@@ -95,6 +132,7 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { useEncryptionStore } from '../stores/encryptionStore'
 
 // 定义类型
 interface NotebookType {
@@ -128,14 +166,29 @@ const emit = defineEmits([
   'add-child',
   'edit-child',
   'add-grandchild',
-  'delete-child'
+  'delete-child',
+  'encrypt',
+  'decrypt'
 ])
+
+// 加密存储
+const encryptionStore = useEncryptionStore()
 
 // 状态
 const isExpanded = ref(false)
 const showContextMenu = ref(false)
 const menuX = ref(0)
 const menuY = ref(0)
+
+// 检查笔记本是否加密
+function isNotebookEncrypted(notebookId: string): boolean {
+  const result = encryptionStore.isItemEncrypted(notebookId)
+  // 添加调试信息，帮助排查问题
+  if (result) {
+    console.log(`笔记本 ${notebookId} 被检测为加密状态`)
+  }
+  return result
+}
 
 // 方法
 function toggleExpanded(event: Event) {
@@ -160,6 +213,16 @@ function addChildNotebook(event: Event) {
 function deleteNotebook(event: Event) {
   event.stopPropagation()
   emit('delete', props.notebook.id)
+}
+
+function encryptNotebook(event: Event) {
+  event.stopPropagation()
+  emit('encrypt', props.notebook.id)
+}
+
+function decryptNotebook(event: Event) {
+  event.stopPropagation()
+  emit('decrypt', props.notebook.id)
 }
 
 function onContextMenu(e: MouseEvent) {
@@ -188,6 +251,14 @@ function handleAddChild() {
 function handleDelete() {
   closeContextMenu()
   emit('delete', props.notebook.id)
+}
+function handleEncrypt() {
+  closeContextMenu()
+  emit('encrypt', props.notebook.id)
+}
+function handleDecrypt() {
+  closeContextMenu()
+  emit('decrypt', props.notebook.id)
 }
 
 // 检查是否应该展开（当前节点被选中或子节点被选中）

@@ -74,10 +74,21 @@ pub async fn get_all_tips() -> Result<Vec<TipWithTags>, String> {
         // 获取笔记的图片
         let images = get_images_for_tip(&db, &tip.id)?;
 
+        // 检查加密状态
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        
+        // 如果笔记已加密但未解锁，返回占位符内容
+        let content = if is_encrypted && !is_unlocked {
+            "[此笔记已加密，请解锁后查看]".to_string()
+        } else {
+            tip.content
+        };
+
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content: tip.content,
+            content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -103,10 +114,21 @@ pub async fn get_tip(id: String) -> Result<TipWithTags, String> {
 
     let tip_type_str: String = tip.tip_type.into();
 
+    // 检查加密状态
+    let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+    let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+    
+    // 如果笔记已加密但未解锁，返回占位符内容
+    let content = if is_encrypted && !is_unlocked {
+        "[此笔记已加密，请解锁后查看]".to_string()
+    } else {
+        tip.content
+    };
+
     let result = TipWithTags {
         id: tip.id,
         title: tip.title,
-        content: tip.content,
+        content,
         tip_type: tip_type_str,
         language: tip.language,
         category_id: tip.category_id,
@@ -175,10 +197,21 @@ pub async fn search_tips(query: String) -> Result<Vec<TipWithTags>, String> {
         let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
 
+        // 检查加密状态
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        
+        // 如果笔记已加密但未解锁，返回占位符内容
+        let content = if is_encrypted && !is_unlocked {
+            "[此笔记已加密，请解锁后查看]".to_string()
+        } else {
+            tip.content
+        };
+
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content: tip.content,
+            content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -205,10 +238,21 @@ pub async fn get_tips_by_category(category_id: String) -> Result<Vec<TipWithTags
         let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
 
+        // 检查加密状态
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        
+        // 如果笔记已加密但未解锁，返回占位符内容
+        let content = if is_encrypted && !is_unlocked {
+            "[此笔记已加密，请解锁后查看]".to_string()
+        } else {
+            tip.content
+        };
+
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content: tip.content,
+            content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -233,10 +277,21 @@ pub async fn get_tips_by_tag(tag_id: String) -> Result<Vec<TipWithTags>, String>
         let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
 
+        // 检查加密状态
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        
+        // 如果笔记已加密但未解锁，返回占位符内容
+        let content = if is_encrypted && !is_unlocked {
+            "[此笔记已加密，请解锁后查看]".to_string()
+        } else {
+            tip.content
+        };
+
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content: tip.content,
+            content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -274,13 +329,13 @@ pub async fn get_tip_images(
     offset: Option<i32>,
 ) -> Result<HashMap<String, String>, String> {
     let db = DbManager::init().map_err(|e| e.to_string())?;
-    
+
     // 设置默认限制，防止一次性加载过多数据
     let limit = limit.unwrap_or(10).min(50); // 最多50张图片
     let offset = offset.unwrap_or(0).max(0);
-    
+
     let images_map = get_images_for_tip_paginated(&db, &tip_id, limit, offset)?;
-    
+
     Ok(images_map.unwrap_or_default())
 }
 
@@ -288,9 +343,11 @@ pub async fn get_tip_images(
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_tip_images_count(tip_id: String) -> Result<i64, String> {
     let db = DbManager::init().map_err(|e| e.to_string())?;
-    
-    let count = db.get_tip_images_count(&tip_id).map_err(|e| e.to_string())?;
-    
+
+    let count = db
+        .get_tip_images_count(&tip_id)
+        .map_err(|e| e.to_string())?;
+
     Ok(count)
 }
 
@@ -329,7 +386,9 @@ fn get_images_for_tip_paginated(
     limit: i32,
     offset: i32,
 ) -> Result<Option<HashMap<String, String>>, String> {
-    let images = db.get_tip_images_paginated(tip_id, limit, offset).map_err(|e| e.to_string())?;
+    let images = db
+        .get_tip_images_paginated(tip_id, limit, offset)
+        .map_err(|e| e.to_string())?;
 
     if images.is_empty() {
         return Ok(None);
@@ -341,4 +400,45 @@ fn get_images_for_tip_paginated(
     }
 
     Ok(Some(images_map))
+}
+
+#[tauri::command]
+pub async fn get_tips_by_category_recursive(category_id: String) -> Result<Vec<TipWithTags>, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let tips = db.get_tips_by_category_recursive(&category_id).map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for tip in tips {
+        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tip_type_str: String = tip.tip_type.into();
+
+        // 获取笔记的图片
+        let images = get_images_for_tip(&db, &tip.id)?;
+
+        // 检查加密状态
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        
+        // 如果笔记已加密但未解锁，返回占位符内容
+        let content = if is_encrypted && !is_unlocked {
+            "[此笔记已加密，请解锁后查看]".to_string()
+        } else {
+            tip.content
+        };
+
+        result.push(TipWithTags {
+            id: tip.id,
+            title: tip.title,
+            content,
+            tip_type: tip_type_str,
+            language: tip.language,
+            category_id: tip.category_id,
+            created_at: tip.created_at,
+            updated_at: tip.updated_at,
+            tags,
+            images,
+        });
+    }
+
+    Ok(result)
 }

@@ -1,8 +1,8 @@
 use crate::api::settings::get_client_with_proxy;
+use futures::Stream;
 use futures_util::stream::StreamExt;
 use serde_json::{json, Value};
 use std::pin::Pin;
-use futures::Stream;
 use tokio::sync::mpsc;
 
 // Grok API的基础URL
@@ -18,10 +18,10 @@ pub async fn send_to_grok(
     custom_model_name: Option<&str>,
 ) -> Result<String, String> {
     let client = get_client_with_proxy().await?;
-    
+
     // 获取模型名称，默认使用grok-beta
     let model = custom_model_name.unwrap_or("grok-beta");
-    
+
     // 构建请求体
     let request_body = json!({
         "model": model,
@@ -82,10 +82,10 @@ pub async fn stream_from_grok(
     println!("启动Grok流式请求");
 
     let client = get_client_with_proxy().await?;
-    
+
     // 获取模型名称，默认使用grok-beta
     let model = custom_model_name.unwrap_or("grok-beta");
-    
+
     // 构建请求体
     let request_body = json!({
         "model": model,
@@ -128,7 +128,9 @@ pub async fn stream_from_grok(
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            let _ = tx.send(Ok(format!("Grok API错误 {}: {}", status, error_text))).await;
+            let _ = tx
+                .send(Ok(format!("Grok API错误 {}: {}", status, error_text)))
+                .await;
             return;
         }
 
@@ -148,7 +150,7 @@ pub async fn stream_from_grok(
                     for line in &lines[..lines.len().saturating_sub(1)] {
                         if line.starts_with("data: ") {
                             let data_part = &line[6..]; // 移除 "data: " 前缀
-                            
+
                             if data_part == "[DONE]" {
                                 return; // 流结束
                             }
@@ -197,10 +199,10 @@ pub async fn grok_chat_with_history(
     custom_model_name: Option<&str>,
 ) -> Result<String, String> {
     let client = get_client_with_proxy().await?;
-    
+
     // 获取模型名称，默认使用grok-beta
     let model = custom_model_name.unwrap_or("grok-beta");
-    
+
     // 转换消息格式
     let formatted_messages: Vec<Value> = messages
         .into_iter()
@@ -269,10 +271,10 @@ pub async fn grok_stream_chat_with_history(
     println!("启动Grok历史记录流式请求");
 
     let client = get_client_with_proxy().await?;
-    
+
     // 获取模型名称，默认使用grok-beta
     let model = custom_model_name.unwrap_or("grok-beta");
-    
+
     // 转换消息格式
     let formatted_messages: Vec<Value> = messages
         .into_iter()
@@ -323,7 +325,9 @@ pub async fn grok_stream_chat_with_history(
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            let _ = tx.send(Ok(format!("Grok API错误 {}: {}", status, error_text))).await;
+            let _ = tx
+                .send(Ok(format!("Grok API错误 {}: {}", status, error_text)))
+                .await;
             return;
         }
 
@@ -343,7 +347,7 @@ pub async fn grok_stream_chat_with_history(
                     for line in &lines[..lines.len().saturating_sub(1)] {
                         if line.starts_with("data: ") {
                             let data_part = &line[6..]; // 移除 "data: " 前缀
-                            
+
                             if data_part == "[DONE]" {
                                 return; // 流结束
                             }
@@ -406,4 +410,4 @@ pub async fn grok_stream_chat_with_images(
 ) -> Result<TextStream, String> {
     // 目前Grok-beta不支持图片，返回错误信息
     Err("Grok当前不支持图片处理，请使用其他支持图片的AI模型".to_string())
-} 
+}

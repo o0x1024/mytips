@@ -1,7 +1,7 @@
 <template>
   <div class="ai-assistant-page flex flex-col h-screen">
     <!-- 顶部标题栏 -->
-    <div class="page-header p-4 bg-base-200 flex items-center justify-between">
+    <div class="page-header p-2 bg-base-200 flex items-center justify-between">
       <div class="flex items-center">
         <button class="btn btn-ghost mr-2" @click="goBack">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -9,7 +9,7 @@
           </svg>
         </button>
         <div>
-          <h1 class="text-2xl font-bold">临时笔记区</h1>
+          <h1 class="text-xl font-bold">临时笔记区</h1>
           <p class="text-base-content/70">在这里管理您的临时笔记，可以合并为正式笔记或进行其他操作</p>
         </div>
       </div>

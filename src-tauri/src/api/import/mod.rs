@@ -1,26 +1,26 @@
 use crate::db::{DbManager, Tip, TipType};
 use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
-use base64::{engine::general_purpose, Engine as _};
 
 // 导入选项
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImportOptions {
     pub conflict_resolution: ConflictResolution, // 冲突解决策略
-    pub include_subdirs: bool, // 是否包含子目录
-    pub process_images: bool, // 是否处理图片
+    pub include_subdirs: bool,                   // 是否包含子目录
+    pub process_images: bool,                    // 是否处理图片
 }
 
 // 冲突解决策略
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ConflictResolution {
-    Skip,     // 跳过
-    Rename,   // 重命名
-    Merge,    // 合并（仅用于笔记本）
+    Skip,   // 跳过
+    Rename, // 重命名
+    Merge,  // 合并（仅用于笔记本）
 }
 
 // 导入结果
@@ -79,9 +79,11 @@ pub fn import_from_directory(
     options: ImportOptions,
     db_state: tauri::State<'_, std::sync::Mutex<DbManager>>,
 ) -> Result<ImportResult, String> {
-    let db = db_state.lock().map_err(|e| format!("数据库锁定失败: {}", e))?;
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("数据库锁定失败: {}", e))?;
     let mut result = ImportResult::default();
-    
+
     let path = Path::new(&directory_path);
     if !path.exists() {
         return Err("指定的目录不存在".to_string());
@@ -91,7 +93,7 @@ pub fn import_from_directory(
         Ok(_) => {
             result.success = true;
             Ok(result)
-        },
+        }
         Err(e) => {
             result.errors.push(e.to_string());
             Ok(result)
@@ -107,9 +109,11 @@ pub fn import_markdown_file(
     target_notebook_id: String,
     db_state: tauri::State<'_, std::sync::Mutex<DbManager>>,
 ) -> Result<ImportResult, String> {
-    let db = db_state.lock().map_err(|e| format!("数据库锁定失败: {}", e))?;
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("数据库锁定失败: {}", e))?;
     let mut result = ImportResult::default();
-    
+
     let path = Path::new(&file_path);
     if !path.exists() {
         return Err("指定的文件不存在".to_string());
@@ -119,7 +123,7 @@ pub fn import_markdown_file(
         Ok(_) => {
             result.success = true;
             Ok(result)
-        },
+        }
         Err(e) => {
             result.errors.push(e.to_string());
             Ok(result)
@@ -129,9 +133,7 @@ pub fn import_markdown_file(
 
 // 获取导入预览（修改为同步API）
 #[tauri::command]
-pub fn get_import_preview(
-    directory_path: String,
-) -> Result<ImportPreview, String> {
+pub fn get_import_preview(directory_path: String) -> Result<ImportPreview, String> {
     let path = Path::new(&directory_path);
     if !path.exists() {
         return Err("指定的目录不存在".to_string());
@@ -143,8 +145,7 @@ pub fn get_import_preview(
         total_images: 0,
     };
 
-    scan_directory_preview_sync(&path, &mut preview)
-        .map_err(|e| e.to_string())?;
+    scan_directory_preview_sync(&path, &mut preview).map_err(|e| e.to_string())?;
 
     Ok(preview)
 }
@@ -158,20 +159,23 @@ fn process_directory_sync(
     result: &mut ImportResult,
 ) -> Result<String> {
     // 创建或获取笔记本
-    let dir_name = dir_path.file_name()
+    let dir_name = dir_path
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("未命名文件夹")
         .to_string();
 
     let notebook_id = if let Some(parent_id) = parent_notebook_id {
         // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
-        let category = db.create_category(&dir_name, Some(&parent_id))
+        let category = db
+            .create_category(&dir_name, Some(&parent_id))
             .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
         result.notebooks_created += 1;
         category.id
     } else {
         // 创建顶级笔记本
-        let category = db.create_category(&dir_name, None)
+        let category = db
+            .create_category(&dir_name, None)
             .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
         result.notebooks_created += 1;
         category.id
@@ -181,15 +185,21 @@ fn process_directory_sync(
     if let Ok(entries) = fs::read_dir(dir_path) {
         for entry in entries.flatten() {
             let path = entry.path();
-            
+
             if path.is_file() && is_markdown_file(&path) {
                 if let Err(e) = import_single_file_sync(db, &path, &notebook_id, result) {
-                    result.errors.push(format!("导入文件 {} 失败: {}", path.display(), e));
+                    result
+                        .errors
+                        .push(format!("导入文件 {} 失败: {}", path.display(), e));
                 }
             } else if path.is_dir() && options.include_subdirs {
                 // 递归处理子目录，将当前笔记本ID作为父ID传递
-                if let Err(e) = process_directory_sync(db, &path, Some(notebook_id.clone()), options, result) {
-                    result.errors.push(format!("处理目录 {} 失败: {}", path.display(), e));
+                if let Err(e) =
+                    process_directory_sync(db, &path, Some(notebook_id.clone()), options, result)
+                {
+                    result
+                        .errors
+                        .push(format!("处理目录 {} 失败: {}", path.display(), e));
                 }
             }
         }
@@ -206,8 +216,7 @@ fn import_single_file_sync(
     result: &mut ImportResult,
 ) -> Result<()> {
     // 读取文件内容
-    let content = fs::read_to_string(file_path)
-        .map_err(|e| anyhow!("读取文件失败: {}", e))?;
+    let content = fs::read_to_string(file_path).map_err(|e| anyhow!("读取文件失败: {}", e))?;
 
     // 获取文件名作为标题
     let title = file_path
@@ -240,7 +249,9 @@ fn import_single_file_sync(
     // 保存图片
     for (image_id, base64_data) in image_data {
         if let Err(e) = db.save_image(&tip_id, &image_id, &base64_data) {
-            result.warnings.push(format!("保存图片 {} 失败: {}", image_id, e));
+            result
+                .warnings
+                .push(format!("保存图片 {} 失败: {}", image_id, e));
         } else {
             result.images_processed += 1;
         }
@@ -251,7 +262,10 @@ fn import_single_file_sync(
 }
 
 // 处理Markdown中的图片引用
-fn process_markdown_images(content: &str, file_path: &Path) -> Result<(String, Vec<(String, String)>)> {
+fn process_markdown_images(
+    content: &str,
+    file_path: &Path,
+) -> Result<(String, Vec<(String, String)>)> {
     let mut processed_content = content.to_string();
     let mut image_data = Vec::new();
 
@@ -274,30 +288,33 @@ fn process_markdown_images(content: &str, file_path: &Path) -> Result<(String, V
         let image_file_path = if image_path.starts_with('/') {
             PathBuf::from(image_path)
         } else {
-            file_path.parent().unwrap_or(Path::new(".")).join(image_path)
+            file_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(image_path)
         };
 
         // 读取图片文件
         if let Ok(image_bytes) = fs::read(&image_file_path) {
             let image_id = Uuid::new_v4().to_string();
-            
+
             // 检测图片格式
             let image_format = detect_image_format(&image_file_path, &image_bytes)?;
-            
+
             // 生成完整的Data URL格式，与前端粘贴功能保持一致
             let base64_data = general_purpose::STANDARD.encode(&image_bytes);
             let data_url = format!("data:image/{};base64,{}", image_format, base64_data);
 
             // 替换Markdown中的图片引用，使用local://前缀以匹配前端处理逻辑
             let new_image_ref = format!("![{}](local://{})", alt_text, image_id);
-            
+
             let start = mat.start() as i32 + offset;
             let end = mat.end() as i32 + offset;
-            
+
             // 计算绝对位置
             let abs_start = start as usize;
             let abs_end = end as usize;
-            
+
             if abs_end <= processed_content.len() {
                 processed_content.replace_range(abs_start..abs_end, &new_image_ref);
                 offset += new_image_ref.len() as i32 - (abs_end - abs_start) as i32;
@@ -323,11 +340,9 @@ fn is_markdown_file(path: &Path) -> bool {
 }
 
 // 扫描目录预览（同步版本）
-fn scan_directory_preview_sync(
-    dir_path: &Path,
-    preview: &mut ImportPreview,
-) -> Result<()> {
-    let dir_name = dir_path.file_name()
+fn scan_directory_preview_sync(dir_path: &Path, preview: &mut ImportPreview) -> Result<()> {
+    let dir_name = dir_path
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("未命名文件夹")
         .to_string();
@@ -342,9 +357,10 @@ fn scan_directory_preview_sync(
     if let Ok(entries) = fs::read_dir(dir_path) {
         for entry in entries.flatten() {
             let path = entry.path();
-            
+
             if path.is_file() && is_markdown_file(&path) {
-                let title = path.file_stem()
+                let title = path
+                    .file_stem()
                     .and_then(|n| n.to_str())
                     .unwrap_or("未命名")
                     .to_string();
@@ -355,7 +371,8 @@ fn scan_directory_preview_sync(
                     let re = regex::Regex::new(r"!\[([^\]]*)\]\(([^)]+)\)").unwrap();
                     for caps in re.captures_iter(&content) {
                         let image_path = &caps[2];
-                        if !image_path.starts_with("http://") && !image_path.starts_with("https://") {
+                        if !image_path.starts_with("http://") && !image_path.starts_with("https://")
+                        {
                             images.push(image_path.to_string());
                         }
                     }
@@ -418,11 +435,13 @@ fn detect_image_format(file_path: &Path, file_data: &[u8]) -> Result<&'static st
             return Ok("bmp");
         }
         // TIFF: II*\0 或 MM\0*
-        if file_data.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || file_data.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
+        if file_data.starts_with(&[0x49, 0x49, 0x2A, 0x00])
+            || file_data.starts_with(&[0x4D, 0x4D, 0x00, 0x2A])
+        {
             return Ok("tiff");
         }
     }
-    
+
     // 如果魔数检测失败，回退到文件扩展名检测
     if let Some(ext) = file_path.extension() {
         if let Some(ext_str) = ext.to_str() {
@@ -444,4 +463,4 @@ fn detect_image_format(file_path: &Path, file_data: &[u8]) -> Result<&'static st
     } else {
         Err(anyhow!("文件没有扩展名，无法确定图片格式"))
     }
-} 
+}

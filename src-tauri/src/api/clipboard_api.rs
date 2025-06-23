@@ -1,10 +1,10 @@
+use crate::clipboard::ClipboardSettings;
+use crate::db::{ClipboardHistory, DbManager, Tip, TipType};
 use arboard::Clipboard;
+use chrono::Utc;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
-use crate::db::{DbManager, ClipboardHistory, Tip, TipType};
-use crate::clipboard::ClipboardSettings;
 use uuid::Uuid;
-use chrono::Utc;
 
 #[tauri::command]
 pub fn get_clipboard_history(
@@ -25,11 +25,15 @@ pub fn delete_clipboard_entries(ids: Vec<i64>, db: State<Mutex<DbManager>>) -> R
 }
 
 #[tauri::command]
-pub fn add_clipboard_entry(content: String, source: Option<String>, db: State<Mutex<DbManager>>) -> Result<(), String> {
+pub fn add_clipboard_entry(
+    content: String,
+    source: Option<String>,
+    db: State<Mutex<DbManager>>,
+) -> Result<(), String> {
     if content.is_empty() {
         return Err("Content cannot be empty".to_string());
     }
-    
+
     let db_guard = db.lock().unwrap();
     db_guard
         .add_clipboard_entry(&content, source.as_deref())
@@ -45,19 +49,21 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
                 return Err("没有选中文本".to_string());
             }
             text
-        },
+        }
         None => return Err("无法获取选中文本".to_string()),
     };
-    
+
     // 获取当前窗口标题作为来源
     let source = crate::clipboard::get_active_window_title();
     println!("获取到的选中文本: {}", selected_text);
     println!("来源: {:?}", source);
-    
+
     // 获取数据库连接
     let db_state: State<Mutex<DbManager>> = app.state();
-    let db_guard = db_state.lock().map_err(|e| format!("无法锁定数据库: {}", e))?;
-    
+    let db_guard = db_state
+        .lock()
+        .map_err(|e| format!("无法锁定数据库: {}", e))?;
+
     // 检查是否已经存在相同内容
     let content_exists = match db_guard.check_clipboard_entry_exists(&selected_text) {
         Ok(exists) => exists,
@@ -66,29 +72,32 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
             false // 如果检查失败，继续尝试添加
         }
     };
-    
+
     if content_exists {
         println!("相同内容已存在，跳过添加");
         return Ok(());
     }
-    
+
     // 添加到数据库
     if let Err(e) = db_guard.add_clipboard_entry(&selected_text, source.as_deref()) {
         return Err(format!("添加到临时笔记区失败: {}", e));
     }
-    
+
     // 通知前端更新
     let app_handle = app.clone();
     if let Err(e) = app_handle.emit("new-clipboard-entry", ()) {
         eprintln!("发送new-clipboard-entry事件失败: {}", e);
         return Err(format!("发送更新事件失败: {}", e));
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
-pub fn create_note_from_history(ids: Vec<i64>, db: State<Mutex<DbManager>>) -> Result<serde_json::Value, String> {
+pub fn create_note_from_history(
+    ids: Vec<i64>,
+    db: State<Mutex<DbManager>>,
+) -> Result<serde_json::Value, String> {
     if ids.is_empty() {
         return Err("No clipboard entries selected".to_string());
     }
@@ -98,7 +107,10 @@ pub fn create_note_from_history(ids: Vec<i64>, db: State<Mutex<DbManager>>) -> R
         .get_all_clipboard_entries()
         .map_err(|e| e.to_string())?;
 
-    let selected_entries: Vec<_> = entries.into_iter().filter(|e| ids.contains(&e.id)).collect();
+    let selected_entries: Vec<_> = entries
+        .into_iter()
+        .filter(|e| ids.contains(&e.id))
+        .collect();
     if selected_entries.is_empty() {
         return Err("No valid clipboard entries found".to_string());
     }
@@ -138,37 +150,37 @@ pub fn create_note_from_history(ids: Vec<i64>, db: State<Mutex<DbManager>>) -> R
 pub fn copy_to_clipboard(text: String) -> Result<(), String> {
     match Clipboard::new() {
         Ok(mut clipboard) => clipboard.set_text(text).map_err(|e| e.to_string()),
-        Err(e) => Err(format!("无法访问剪贴板: {}", e))
+        Err(e) => Err(format!("无法访问剪贴板: {}", e)),
     }
 }
 
 #[tauri::command]
 pub fn get_clipboard_settings(db: State<Mutex<DbManager>>) -> Result<ClipboardSettings, String> {
     let db_guard = db.lock().unwrap();
-    
+
     match db_guard.get_setting("clipboard_settings") {
-        Ok(Some(settings_json)) => {
-            ClipboardSettings::from_json(&settings_json)
-        },
+        Ok(Some(settings_json)) => ClipboardSettings::from_json(&settings_json),
         Ok(None) => {
             // 返回默认设置
             Ok(ClipboardSettings::default())
-        },
-        Err(e) => {
-            Err(format!("获取剪贴板设置失败: {}", e))
         }
+        Err(e) => Err(format!("获取剪贴板设置失败: {}", e)),
     }
 }
 
 #[tauri::command]
-pub fn save_clipboard_settings(settings: ClipboardSettings, db: State<Mutex<DbManager>>) -> Result<(), String> {
+pub fn save_clipboard_settings(
+    settings: ClipboardSettings,
+    db: State<Mutex<DbManager>>,
+) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
-    
+
     // 序列化设置
     let settings_json = settings.to_json()?;
-    
+
     // 保存到数据库
-    db_guard.save_setting("clipboard_settings", &settings_json)
+    db_guard
+        .save_setting("clipboard_settings", &settings_json)
         .map_err(|e| format!("保存剪贴板设置失败: {}", e))
 }
 

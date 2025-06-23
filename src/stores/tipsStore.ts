@@ -69,10 +69,11 @@ export const useTipsStore = defineStore('tips', () => {
     try {
       isLoading.value = true
       error.value = null
-      tips.value = await invoke<Tip[]>('get_all_tips')
+      const result = await invoke<Tip[]>('get_all_tips')
+      tips.value = result || []
     } catch (err) {
       error.value = (err as Error).message
-      console.error('Failed to fetch tips:', err)
+      console.error('[TipsStore] 获取笔记失败:', err)
     } finally {
       isLoading.value = false
     }
@@ -156,9 +157,7 @@ export const useTipsStore = defineStore('tips', () => {
       isLoading.value = true
       error.value = null
       
-      console.log('正在获取所有分类...')
       const result = await invoke<Category[]>('get_all_categories')
-      console.log('获取到的分类原始数据:', result)
       
       if (!result || !Array.isArray(result)) {
         console.error('获取到的分类数据无效:', result)
@@ -166,7 +165,6 @@ export const useTipsStore = defineStore('tips', () => {
       }
       
       categories.value = result
-      console.log('分类数据已更新:', categories.value)
     } catch (err) {
       error.value = (err as Error).message
       console.error('Failed to fetch categories:', err)
@@ -335,22 +333,14 @@ export const useTipsStore = defineStore('tips', () => {
       isLoading.value = true
       error.value = null
       
-      console.log('开始加载数据...')
-      
       // 分步加载，确保每一步都成功
       await fetchAllCategories()
-      console.log('加载的分类:', categories.value)
-      
       await fetchAllTags()
-      console.log('加载的标签:', tags.value)
-      
       await fetchAllTips()
-      console.log('加载的笔记:', tips.value)
       
-      console.log('数据加载完成')
     } catch (err) {
       error.value = (err as Error).message
-      console.error('Failed to initialize data:', err)
+      console.error('[TipsStore] 初始化数据失败:', err)
     } finally {
       isLoading.value = false
     }

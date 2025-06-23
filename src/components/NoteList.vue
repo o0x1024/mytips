@@ -86,6 +86,12 @@
               <h3 class="font-medium">{{ note.title || '无标题' }}</h3>
               <div class="flex items-center gap-2">
                 <span class="text-xs text-base-content/80">{{ formatDate(note.updated_at) }}</span>
+                <!-- 加密状态指示器 -->
+                <span v-if="isNoteEncrypted(note.id)" title="已加密" class="text-warning">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </span>
                 <span v-if="note.isPinned" title="已固定" class="text-warning">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -123,8 +129,43 @@
     <div v-if="showContextMenu" 
       class="context-menu fixed z-50 bg-base-100 shadow-lg rounded-lg p-2 border border-base-300"
       :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }">
+      <!-- 当前操作笔记信息头部 -->
+      <div v-if="contextNote" class="px-3 py-2 bg-base-200 rounded-lg mb-2 border-b border-base-300">
+        <div class="flex items-center gap-2 text-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-base-content truncate">
+              {{ contextNote.title || '无标题' }}
+            </div>
+            <div class="text-xs text-base-content/60">
+              {{ formatDate(contextNote.updated_at) }}
+            </div>
+          </div>
+          <!-- <div v-if="contextNote.id === selectedNoteId" class="badge badge-primary badge-xs">当前选中</div> -->
+        </div>
+      </div>
+      
       <ul class="menu w-56 p-0">
-        <li><a @click="deleteContextNote" class="flex items-center gap-1">
+        <!-- 加密/解密选项 -->
+        <li v-if="contextNote">
+          <a v-if="!isNoteEncrypted(contextNote.id)" @click="encryptContextNote" class="flex items-center gap-1 text-warning hover:bg-warning hover:text-warning-content">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            加密笔记
+          </a>
+          <a v-else @click="decryptContextNote" class="flex items-center gap-1 text-info hover:bg-info hover:text-info-content">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+            解密笔记
+          </a>
+        </li>
+        
+        <li class="menu-title pt-2 pb-1 text-xs">笔记操作</li>
+        <li><a @click="deleteContextNote" class="flex items-center gap-1 text-error hover:bg-error hover:text-error-content">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
@@ -236,6 +277,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, defineProps, defineEmits, nextTick, onBeforeUnmount, onActivated } from 'vue'
+import { useEncryptionStore } from '../stores/encryptionStore'
 
 // 类型定义
 interface Tag {
@@ -287,7 +329,10 @@ const props = defineProps({
 })
 
 // 组件事件
-const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'export-note', 'move-to-category', 'refresh'])
+const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'export-note', 'move-to-category', 'refresh', 'encrypt-note', 'decrypt-note'])
+
+// 加密store
+const encryptionStore = useEncryptionStore()
 
 // 状态
 const searchQuery = ref('')
@@ -321,6 +366,12 @@ function handleDropdownLeave(id: string) {
 
 onBeforeUnmount(() => {
   if (closeTimeout) clearTimeout(closeTimeout)
+  // 清理右键菜单相关的事件监听器
+  if (showContextMenu.value) {
+    closeContextMenu()
+  }
+  document.removeEventListener('keydown', handleKeyDown)
+  document.removeEventListener('mousedown', () => {}, true) // 清理可能残留的监听器
 })
 
 // 节流函数，用于防止频繁更新视图
@@ -419,6 +470,9 @@ function openContextMenu(event: MouseEvent, note: Note) {
   event.preventDefault()
   event.stopPropagation() // 阻止事件冒泡
   
+  // 先选中被右键点击的笔记
+  emit('select-note', note.id)
+  
   // 使用页面坐标而不是客户端坐标
   let posX = event.pageX
   let posY = event.pageY
@@ -428,9 +482,13 @@ function openContextMenu(event: MouseEvent, note: Note) {
   contextMenuY.value = posY
   contextNote.value = note
   
+  
   // 使用nextTick确保在DOM更新后再显示菜单
   nextTick(() => {
     showContextMenu.value = true
+    
+    // 添加键盘事件监听
+    document.addEventListener('keydown', handleKeyDown)
     
     // 确保菜单不会超出窗口边界
     setTimeout(() => {
@@ -472,47 +530,78 @@ function openContextMenu(event: MouseEvent, note: Note) {
     }, 0)
 
     // 点击其他区域关闭菜单
-    const closeContextMenu = (e: MouseEvent) => {
+    const closeOnClickOutside = (e: MouseEvent) => {
       // 阻止点击事件导致的列表刷新
       e.stopPropagation()
       
       // 如果点击的不是菜单内部的元素，则关闭菜单
       const menu = document.querySelector('.context-menu')
       if (menu && !menu.contains(e.target as Node)) {
-        showContextMenu.value = false
-        document.removeEventListener('mousedown', closeContextMenu, true)
+        closeContextMenu()
+        document.removeEventListener('mousedown', closeOnClickOutside, true)
       }
     }
     
     // 使用捕获阶段监听点击事件，并添加阻止冒泡的逻辑
-    document.addEventListener('mousedown', closeContextMenu, true)
+    document.addEventListener('mousedown', closeOnClickOutside, true)
   })
 }
 
 // 删除笔记
 function deleteContextNote() {
-  if (contextNote.value) {
-    // 先本地删除，触发动画
-    const idx = internalFilteredNotes.value.findIndex(n => n.id === contextNote.value!.id)
-    if (idx !== -1) {
-      internalFilteredNotes.value.splice(idx, 1)
-    }
-    // 再通知父组件同步数据，传递右键笔记的 id
-    emit('delete-note', contextNote.value.id)
+  if (!contextNote.value) {
+    console.error('错误：没有找到要删除的笔记上下文')
+    closeContextMenu()
+    return
   }
-  showContextMenu.value = false
+
+  const noteToDelete = contextNote.value
+
+
+  // 直接删除，不需要确认
+  // 先本地删除，触发动画
+  const idx = internalFilteredNotes.value.findIndex(n => n.id === noteToDelete.id)
+  if (idx !== -1) {
+    internalFilteredNotes.value.splice(idx, 1)
+  } else {
+    console.warn('警告：在本地列表中未找到要删除的笔记')
+  }
+  
+  // 再通知父组件同步数据，传递右键笔记的 id
+  emit('delete-note', noteToDelete.id)
+  
+  closeContextMenu()
 }
 
 // 导出笔记
 function exportContextNote(format: string) {
-  if (contextNote.value) {
-    emit('export-note', contextNote.value.id, format)
+  if (!contextNote.value) {
+    console.error('错误：没有找到要导出的笔记上下文')
+    closeContextMenu()
+    return
   }
-  showContextMenu.value = false
+
+  const noteToExport = contextNote.value
+  console.log('准备导出笔记:', {
+    noteId: noteToExport.id,
+    noteTitle: noteToExport.title,
+    format: format,
+    selectedNoteId: props.selectedNoteId,
+    isSelectedNote: noteToExport.id === props.selectedNoteId
+  })
+
+  emit('export-note', noteToExport.id, format)
+  console.log('已发送导出事件到父组件:', noteToExport.id, format)
+  closeContextMenu()
 }
 
 function getPreviewContent(note: Note): string {
   if (!note.content) return '空笔记'
+  
+  // 如果是加密占位符内容，显示加密提示
+  if (note.content === "[此笔记已加密，请解锁后查看]") {
+    return '此笔记已加密，需要密码解锁'
+  }
   
   // 移除Markdown标记，限制长度
   const plainText = note.content
@@ -552,20 +641,70 @@ function formatDate(dateString: number): string {
 
 // 移动笔记到分类
 function moveNoteToCategory(categoryId: string) {
-  if (contextNote.value) {
-    emit('move-to-category', contextNote.value.id, categoryId)
+  if (!contextNote.value) {
+    console.error('错误：没有找到要移动的笔记上下文')
+    closeContextMenu()
+    return
   }
-  showContextMenu.value = false
+
+  const noteToMove = contextNote.value
+  console.log('准备移动笔记到分类:', {
+    noteId: noteToMove.id,
+    noteTitle: noteToMove.title,
+    targetCategoryId: categoryId,
+    selectedNoteId: props.selectedNoteId,
+    isSelectedNote: noteToMove.id === props.selectedNoteId
+  })
+
+  emit('move-to-category', noteToMove.id, categoryId)
+  console.log('已发送移动事件到父组件:', noteToMove.id, categoryId)
+  closeContextMenu()
 }
 
+// 加密笔记
+function encryptContextNote() {
+  if (!contextNote.value) {
+    console.error('错误：没有找到要加密的笔记上下文')
+    closeContextMenu()
+    return
+  }
 
+  const noteToEncrypt = contextNote.value
+  emit('encrypt-note', noteToEncrypt.id)
+  closeContextMenu()
+}
 
+// 解密笔记
+function decryptContextNote() {
+  if (!contextNote.value) {
+    console.error('错误：没有找到要解密的笔记上下文')
+    closeContextMenu()
+    return
+  }
 
+  const noteToDecrypt = contextNote.value
+  emit('decrypt-note', noteToDecrypt.id)
+  closeContextMenu()
+}
 
+// 统一的菜单关闭函数
+function closeContextMenu() {
+  showContextMenu.value = false
+  contextNote.value = null // 清除上下文笔记
+  // 移除键盘事件监听
+  document.removeEventListener('keydown', handleKeyDown)
+}
+
+// 键盘事件处理
+function handleKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && showContextMenu.value) {
+    e.preventDefault()
+    closeContextMenu()
+  }
+}
 
 // 添加onActivated钩子
 onActivated(() => {
-  console.log('NoteList组件被激活')
   // 仅确保选中的笔记项可见，不重新加载数据
   if (props.selectedNoteId) {
     nextTick(() => {
@@ -576,6 +715,16 @@ onActivated(() => {
     })
   }
 })
+
+// 检查笔记是否加密
+function isNoteEncrypted(noteId: string): boolean {
+  const result = encryptionStore.isItemEncrypted(noteId)
+  // 添加调试信息，帮助排查问题
+  if (result) {
+    console.log(`笔记 ${noteId} 被检测为加密状态`)
+  }
+  return result
+}
 
 </script>
 

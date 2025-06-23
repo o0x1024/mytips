@@ -6,6 +6,9 @@ use std::fs;
 use std::path::PathBuf;
 use uuid::Uuid;
 
+// 导入加密状态结构
+use crate::api::encryption::EncryptionStatus;
+
 // 笔记类型枚举
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum TipType {
@@ -221,6 +224,21 @@ impl DbManager {
                 image_data TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (tip_id) REFERENCES tips (id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // 创建加密状态表
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS encryption_status (
+                id TEXT PRIMARY KEY,
+                item_type TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                is_encrypted BOOLEAN DEFAULT FALSE,
+                is_unlocked BOOLEAN DEFAULT FALSE,
+                created_at INTEGER DEFAULT (strftime('%s', 'now')),
+                updated_at INTEGER DEFAULT (strftime('%s', 'now')),
+                UNIQUE(item_type, item_id)
             )",
             [],
         )?;
@@ -483,6 +501,44 @@ impl DbManager {
         Ok(())
     }
 
+    // 递归获取所有子分类ID（包括自身）
+    pub fn get_all_subcategory_ids(&self, category_id: &str) -> Result<Vec<String>> {
+        let mut all_ids = vec![category_id.to_string()];
+        
+        // 1. 找到所有直接子分类
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM categories WHERE parent_id = ?")?;
+        let child_ids: Vec<String> = stmt
+            .query_map(params![category_id], |row| row.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        // 2. 递归获取每个子分类的所有子分类
+        for child_id in child_ids {
+            let mut child_all_ids = self.get_all_subcategory_ids(&child_id)?;
+            all_ids.append(&mut child_all_ids);
+        }
+
+        Ok(all_ids)
+    }
+
+    // 递归获取分类及其所有子分类下的所有笔记
+    pub fn get_tips_by_category_recursive(&self, category_id: &str) -> Result<Vec<Tip>> {
+        // 获取所有子分类ID（包括自身）
+        let all_category_ids = self.get_all_subcategory_ids(category_id)?;
+        
+        let mut all_tips = Vec::new();
+        
+        // 获取每个分类下的所有笔记
+        for cat_id in all_category_ids {
+            let mut tips = self.get_tips_by_category(&cat_id)?;
+            all_tips.append(&mut tips);
+        }
+        
+        Ok(all_tips)
+    }
+
     // 获取所有标签
     pub fn get_all_tags(&self) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare("SELECT id, name FROM tags")?;
@@ -740,7 +796,12 @@ impl DbManager {
     }
 
     // 分页获取笔记的图片
-    pub fn get_tip_images_paginated(&self, tip_id: &str, limit: i32, offset: i32) -> Result<Vec<(String, String)>> {
+    pub fn get_tip_images_paginated(
+        &self,
+        tip_id: &str,
+        limit: i32,
+        offset: i32,
+    ) -> Result<Vec<(String, String)>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, image_data FROM images
              WHERE tip_id = ?
@@ -826,11 +887,7 @@ impl DbManager {
             return Ok(());
         }
 
-        let placeholders = ids
-            .iter()
-            .map(|_| "?")
-            .collect::<Vec<_>>()
-            .join(",");
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
 
         let query = format!(
             "DELETE FROM clipboard_history WHERE id IN ({})",
@@ -845,13 +902,13 @@ impl DbManager {
         self.conn.execute(&query, &params[..])?;
         Ok(())
     }
-    
+
     // 清除所有剪贴板条目
     pub fn clear_all_clipboard_entries(&self) -> Result<()> {
         self.conn.execute("DELETE FROM clipboard_history", [])?;
         Ok(())
     }
-    
+
     // 删除过期的剪贴板条目
     pub fn delete_expired_clipboard_entries(&self, expire_timestamp: i64) -> Result<()> {
         self.conn.execute(
@@ -866,16 +923,16 @@ impl DbManager {
         // 查询最近30秒内是否有相同内容的条目
         let now = Utc::now().timestamp();
         let thirty_seconds_ago = now - 30; // 30秒内的条目视为重复
-        
+
         let count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM clipboard_history WHERE content = ? AND created_at > ?",
             params![content, thirty_seconds_ago],
             |row| row.get(0),
         )?;
-        
+
         Ok(count > 0)
     }
-    
+
     // 保存设置
     pub fn save_setting(&self, key: &str, value: &str) -> Result<()> {
         self.conn.execute(
@@ -885,7 +942,7 @@ impl DbManager {
         )?;
         Ok(())
     }
-    
+
     // 获取设置
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
         let result = self.conn.query_row(
@@ -893,7 +950,7 @@ impl DbManager {
             params![key],
             |row| row.get(0),
         );
-        
+
         match result {
             Ok(value) => Ok(Some(value)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -965,13 +1022,16 @@ impl DbManager {
 
     // 删除角色
     pub fn delete_role(&self, id: &str) -> Result<()> {
-        self.conn.execute("DELETE FROM ai_roles WHERE id = ?", params![id])?;
+        self.conn
+            .execute("DELETE FROM ai_roles WHERE id = ?", params![id])?;
         Ok(())
     }
 
     // 根据ID获取角色
     pub fn get_role_by_id(&self, id: &str) -> Result<AIRole> {
-        let mut stmt = self.conn.prepare("SELECT id, name, description, created_at, updated_at FROM ai_roles WHERE id = ?")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, description, created_at, updated_at FROM ai_roles WHERE id = ?",
+        )?;
         let role = stmt.query_row(params![id], |row| {
             Ok(AIRole {
                 id: row.get(0)?,
@@ -1025,6 +1085,172 @@ impl DbManager {
 
         Ok(())
     }
+
+    // --- 加密相关方法开始 ---
+
+    /// 获取所有加密状态
+    pub fn get_encryption_statuses(&self) -> Result<Vec<EncryptionStatus>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT item_type, item_id, is_encrypted, is_unlocked FROM encryption_status"
+        )?;
+        
+        let status_iter = stmt.query_map([], |row| {
+            let item_type: String = row.get(0)?;
+            let item_id: String = row.get(1)?;
+            let is_encrypted: bool = row.get(2)?;
+            let is_unlocked: bool = row.get(3)?;
+            
+            Ok(EncryptionStatus {
+                note_id: if item_type == "note" { Some(item_id.clone()) } else { None },
+                notebook_id: if item_type == "notebook" { Some(item_id) } else { None },
+                is_encrypted,
+                is_unlocked,
+            })
+        })?;
+        
+        let mut statuses = Vec::new();
+        for status in status_iter {
+            statuses.push(status?);
+        }
+        
+        Ok(statuses)
+    }
+
+    /// 检查项目是否已加密
+    pub fn is_item_encrypted(&self, item_id: &str, item_type: &str) -> Result<bool> {
+        let result = self.conn.query_row(
+            "SELECT is_encrypted FROM encryption_status WHERE item_id = ? AND item_type = ?",
+            params![item_id, item_type],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(is_encrypted) => Ok(is_encrypted),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// 检查项目是否已解锁
+    pub fn is_item_unlocked(&self, item_id: &str, item_type: &str) -> Result<bool> {
+        let result = self.conn.query_row(
+            "SELECT is_unlocked FROM encryption_status WHERE item_id = ? AND item_type = ?",
+            params![item_id, item_type],
+            |row| row.get(0),
+        );
+        
+        match result {
+            Ok(is_unlocked) => Ok(is_unlocked),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// 加密笔记
+    pub fn encrypt_note(&self, note_id: &str, encrypted_content: &str) -> Result<()> {
+        // 更新笔记内容为加密内容
+        let now = Utc::now().timestamp_millis();
+        self.conn.execute(
+            "UPDATE tips SET content = ?, updated_at = ? WHERE id = ?",
+            params![encrypted_content, now, note_id],
+        )?;
+        
+        // 更新或插入加密状态
+        let status_id = Uuid::new_v4().to_string();
+        let now_seconds = Utc::now().timestamp();
+        self.conn.execute(
+            "INSERT INTO encryption_status (id, item_type, item_id, is_encrypted, is_unlocked, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(item_type, item_id) DO UPDATE SET
+             is_encrypted = excluded.is_encrypted,
+             is_unlocked = excluded.is_unlocked,
+             updated_at = excluded.updated_at",
+            params![status_id, "note", note_id, true, false, now_seconds, now_seconds],
+        )?;
+        
+        Ok(())
+    }
+
+    /// 解密笔记
+    pub fn decrypt_note(&self, note_id: &str, decrypted_content: &str) -> Result<()> {
+        // 更新笔记内容为解密内容
+        let now = Utc::now().timestamp_millis();
+        self.conn.execute(
+            "UPDATE tips SET content = ?, updated_at = ? WHERE id = ?",
+            params![decrypted_content, now, note_id],
+        )?;
+        
+        // 更新加密状态
+        let now_seconds = Utc::now().timestamp();
+        self.conn.execute(
+            "UPDATE encryption_status SET is_encrypted = ?, is_unlocked = ?, updated_at = ?
+             WHERE item_id = ? AND item_type = ?",
+            params![false, false, now_seconds, note_id, "note"],
+        )?;
+        
+        Ok(())
+    }
+
+    /// 标记项目为已解锁（会话级别）
+    pub fn mark_item_unlocked(&self, item_id: &str, item_type: &str) -> Result<()> {
+        let now_seconds = Utc::now().timestamp();
+        
+        // 如果记录不存在，创建一个新记录
+        let status_id = Uuid::new_v4().to_string();
+        self.conn.execute(
+            "INSERT INTO encryption_status (id, item_type, item_id, is_encrypted, is_unlocked, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(item_type, item_id) DO UPDATE SET
+             is_unlocked = excluded.is_unlocked,
+             updated_at = excluded.updated_at",
+            params![status_id, item_type, item_id, true, true, now_seconds, now_seconds],
+        )?;
+        
+        Ok(())
+    }
+
+    /// 加密笔记本
+    pub fn encrypt_notebook(&self, notebook_id: &str) -> Result<()> {
+        let status_id = Uuid::new_v4().to_string();
+        let now_seconds = Utc::now().timestamp();
+        
+        self.conn.execute(
+            "INSERT INTO encryption_status (id, item_type, item_id, is_encrypted, is_unlocked, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(item_type, item_id) DO UPDATE SET
+             is_encrypted = excluded.is_encrypted,
+             is_unlocked = excluded.is_unlocked,
+             updated_at = excluded.updated_at",
+            params![status_id, "notebook", notebook_id, true, false, now_seconds, now_seconds],
+        )?;
+        
+        Ok(())
+    }
+
+    /// 解密笔记本
+    pub fn decrypt_notebook(&self, notebook_id: &str) -> Result<()> {
+        let now_seconds = Utc::now().timestamp();
+        
+        self.conn.execute(
+            "UPDATE encryption_status SET is_encrypted = ?, is_unlocked = ?, updated_at = ?
+             WHERE item_id = ? AND item_type = ?",
+            params![false, false, now_seconds, notebook_id, "notebook"],
+        )?;
+        
+        Ok(())
+    }
+
+    /// 清除所有会话级别的解锁状态（应用重启时调用）
+    pub fn clear_session_unlocks(&self) -> Result<()> {
+        self.conn.execute(
+            "UPDATE encryption_status SET is_unlocked = ? WHERE is_unlocked = ?",
+            params![false, true],
+        )?;
+        
+        Ok(())
+    }
+
+    // --- 加密相关方法结束 ---
 }
 
 // 获取数据库文件路径

@@ -5,7 +5,7 @@ pub mod db;
 use tauri::menu::Menu;
 use tauri::menu::MenuItem;
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, Emitter};
+use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 // 直接导入api模块提供的所有公共API
@@ -18,6 +18,8 @@ pub fn run() {
     let db_manager = DbManager::init().expect("Failed to initialize database");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(std::sync::Mutex::new(db_manager))
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -41,6 +43,7 @@ pub fn run() {
             delete_tip,
             search_tips,
             get_tips_by_category,
+            get_tips_by_category_recursive,
             get_tips_by_tag,
             // 图片相关API
             save_tip_image,
@@ -118,11 +121,39 @@ pub fn run() {
             // 快捷键相关API
             get_global_shortcut_config,
             update_global_shortcut,
+            // 更新相关API
+            check_for_updates,
+            check_for_updates_with_config,
+            start_auto_update,
+            get_current_version,
+            set_update_endpoints,
+            test_windows_update_with_proxy,
+            get_platform_info,
+            // 加密相关API
+            api::encryption::get_encryption_statuses,
+            api::encryption::encrypt_note,
+            api::encryption::decrypt_note,
+            api::encryption::unlock_note,
+            api::encryption::encrypt_notebook,
+            api::encryption::decrypt_notebook,
+            api::encryption::unlock_notebook,
+            api::encryption::get_unlocked_note_content,
+            api::encryption::encrypt_data_cmd,
+            api::encryption::clear_session_unlocks,
         ])
         .setup(|app| {
             // 初始化数据库
             // let db_manager = DbManager::init().expect("Database initialization failed");
             // app.manage(db_manager);
+
+            // 清除会话级别的解锁状态
+            {
+                let db_state = app.state::<std::sync::Mutex<DbManager>>();
+                let db = db_state.lock().unwrap();
+                if let Err(e) = db.clear_session_unlocks() {
+                    eprintln!("清除会话解锁状态失败: {}", e);
+                }
+            }
 
             // 启动剪贴板监听
             clipboard::start_clipboard_listener(app.handle().clone());

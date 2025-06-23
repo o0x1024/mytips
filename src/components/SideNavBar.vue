@@ -3,7 +3,13 @@
        :class="[isCollapsed ? 'w-18' : 'sidebar-width']">
     <!-- 顶部标题和折叠按钮 -->
     <div class="p-3 flex items-center justify-between">
-      <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary', isCollapsed ? 'opacity-0 w-0 absolute' : 'opacity-100']">MyTips</div>
+      <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', isCollapsed ? 'opacity-0 w-0 absolute' : 'opacity-100']">
+        MyTips
+        <!-- 更新Badge -->
+        <div v-if="updateStore.hasUpdate" class="badge badge-error badge-xs ml-2 animate-pulse">
+          新版本
+        </div>
+      </div>
       <button 
         :class="['btn btn-sm btn-ghost relative z-10', isCollapsed ? 'btn btn-ghost btn-sm btn-square w-10 flex justify-center tooltip tooltip-righ' : 'ml-auto']" 
         @click.stop="toggleCollapse" 
@@ -13,6 +19,10 @@
           <path v-if="isCollapsed" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
+        <!-- 折叠状态下的更新指示器 -->
+        <div v-if="isCollapsed && updateStore.hasUpdate" class="badge badge-error badge-xs absolute -top-1 -right-1">
+          !
+        </div>
       </button>
     </div>
 
@@ -30,7 +40,7 @@
     </div>
 
     <!-- 导航区域 -->
-    <div class="overflow-hidden flex-grow px-2">
+    <div class="overflow-y-auto overflow-x-hidden flex-grow px-2">
       <!-- 笔记本区域 -->
       <div class="mb-1">
         <div v-if="!isCollapsed" class="flex justify-between items-center mt-2 px-2">
@@ -62,6 +72,8 @@
                   @edit="id => $emit('edit-notebook', id)"
                   @add-child="addChildNotebook"
                   @delete="deleteNotebook"
+                  @encrypt="(id: string) => $emit('encrypt-notebook', id)"
+                  @decrypt="(id: string) => $emit('decrypt-notebook', id)"
                 >
                   <template #name="{ name }">
                     <span v-html="highlightKeyword(name, searchQuery)"></span>
@@ -306,9 +318,14 @@
 import { ref, defineEmits, defineProps, watch, onMounted, onBeforeUnmount, computed, nextTick, onActivated } from 'vue'
 import NotebookItem from './NotebookItem.vue'
 import { useUIStore } from '../stores/uiStore'
+import { useUpdateStore } from '../stores/updateStore'
+// const encryptionStore = useEncryptionStore()
 
 // 获取UI存储
 const uiStore = useUIStore()
+
+// 获取更新状态存储
+const updateStore = useUpdateStore()
 
 // 定义类型
 interface Notebook {
@@ -359,7 +376,9 @@ const emit = defineEmits([
   'add-child-notebook',
   'delete-tag',
   'clipboard',
-  'import'
+  'import',
+  'encrypt-notebook',
+  'decrypt-notebook'
 ])
 
 // 状态
@@ -442,7 +461,6 @@ const handleDocumentClick = (event: MouseEvent) => {
 onMounted(() => {
   // 从UI存储中获取初始折叠状态
   isCollapsed.value = uiStore.settings.isSidebarCollapsed;
-  console.log('SideNavBar初始化折叠状态:', isCollapsed.value);
   
   // 确保HTML属性同步
   document.documentElement.setAttribute('data-sidebar-collapsed', isCollapsed.value ? 'true' : 'false');
@@ -453,7 +471,6 @@ onMounted(() => {
 
 // 组件被keep-alive缓存后重新激活时触发
 onActivated(() => {
-  console.log('SideNavBar被重新激活')
   // 只同步UI状态，不重新加载数据
   if (isCollapsed.value !== uiStore.settings.isSidebarCollapsed) {
     isCollapsed.value = uiStore.settings.isSidebarCollapsed
@@ -501,6 +518,7 @@ function toggleCollapse(event?: Event) {
 }
 
 function selectNotebook(id: string) {
+  console.log('SideNavBar: 选择笔记本:', id)
   emit('select-notebook', id)
   closeNotebooksPopup()
 }

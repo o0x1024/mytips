@@ -250,7 +250,7 @@ async function handleTauriDragDrop(event: any) {
   try {
     if (event.payload.type === 'over') {
       // 文件悬停
-      isDragOver.value = true
+  isDragOver.value = true
       dragPosition.value = { x: event.payload.position.x, y: event.payload.position.y }
       console.log('文件悬停在位置:', dragPosition.value)
     } else if (event.payload.type === 'drop') {
@@ -281,7 +281,7 @@ async function handleTauriDragDrop(event: any) {
     }
   } catch (error) {
     console.error('处理Tauri拖拽事件时出错:', error)
-    isDragOver.value = false
+  isDragOver.value = false
   }
 }
 
@@ -395,30 +395,20 @@ function cancelImport() {
 
 // 生命周期
 onMounted(async () => {
-  console.log('MarkdownDropPreview 组件已挂载，正在设置Tauri拖拽事件监听器')
   
   try {
     // 使用Tauri的原生拖拽事件API
     const webview = getCurrentWebview()
     unlistenDragDrop = await webview.onDragDropEvent(handleTauriDragDrop)
     
-    console.log('✅ Tauri拖拽事件监听器已设置')
-    
+  
     // 添加测试函数到全局
-    ;(window as any).testDragFunction = () => {
-      console.log('手动测试拖拽功能')
-      isDragOver.value = !isDragOver.value
-      console.log('拖拽覆盖层状态:', isDragOver.value)
-    }
-    
-    // 检查Tauri API支持
-    console.log('Tauri WebView API支持检查:', {
-      getCurrentWebview: typeof getCurrentWebview === 'function',
-      readTextFile: typeof readTextFile === 'function',
-      exists: typeof exists === 'function'
-    })
-    
-    console.log('可以在控制台运行 testDragFunction() 来测试覆盖层')
+  ;(window as any).testDragFunction = () => {
+    console.log('手动测试拖拽功能')
+    isDragOver.value = !isDragOver.value
+    console.log('拖拽覆盖层状态:', isDragOver.value)
+  }
+
     
     // 添加ESC键监听
     document.addEventListener('keydown', handleKeyDown)

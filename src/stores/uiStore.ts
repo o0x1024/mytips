@@ -183,7 +183,6 @@ export const useUIStore = defineStore('ui', () => {
   
   // 应用字体大小到文档
   function applyFontSize(size: number) {
-    console.log('直接应用字体大小:', size + 'px');
     
     // 设置CSS变量
     document.documentElement.style.setProperty('--base-font-size', `${size}px`);

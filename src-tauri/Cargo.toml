@@ -1,6 +1,6 @@
 [package]
 name = "mytips"
-version = "0.1.0"
+version = "0.2.2"
 description = "一款本地优先的笔记和代码片段管理工具"
 authors = ["you"]
 edition = "2021"
@@ -52,6 +52,13 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-updater = "2"
 zip = "0.6"
+tauri-plugin-process = "2"
+# 加密相关依赖
+aes-gcm = "0.10"
+pbkdf2 = "0.12"
+rand = "0.8"
+zeroize = "1.7"
+sha2 = "0.10"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
@@ -60,6 +67,7 @@ custom-protocol = ["tauri/custom-protocol"]
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]

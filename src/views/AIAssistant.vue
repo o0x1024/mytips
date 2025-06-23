@@ -1,20 +1,20 @@
 <template>
   <div class="ai-assistant-page flex flex-col h-screen" @click="hideContextMenu">
     <!-- 顶部区域 -->
-    <div class="page-header p-4 bg-base-200 flex items-center justify-between">
+    <div class="page-header p-2 bg-base-200 flex items-center justify-between">
       <div class="flex items-center">
-        <button class="btn btn-ghost mr-2" @click="goBack">
+        <button class="btn btn-ghost  mr-2" @click="goBack">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
         <div>
-          <h1 class="text-2xl font-bold">AI 助手</h1>
+          <h1 class="text-xl font-bold">AI 助手</h1>
           <p class="text-base-content/70">在MyTips内与您喜爱的AI模型对话</p>
         </div>
       </div>
       <div class="flex gap-2">
-        <button class="btn" @click="openRoleManager">
+        <button class="btn btn-sm" @click="openRoleManager">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -22,7 +22,7 @@
           </svg>
           角色管理{{ roles.length > 0 ? ` (${roles.length})` : '' }}
         </button>
-        <button class="btn" @click="openConversationsList">
+        <button class="btn btn-sm" @click="openConversationsList">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -30,7 +30,7 @@
           </svg>
           对话列表 ({{ orderedConversations.length }})
         </button>
-        <button class="btn btn-primary" @click="createNewConversation">
+        <button class="btn btn-primary btn-sm" @click="createNewConversation">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -231,6 +231,9 @@
                   <button class="btn btn-xs btn-ghost" @click="copyToClipboard(message.content)">复制</button>
                   <button class="btn btn-xs btn-ghost" @click="addToNote(message.content)">添加到笔记</button>
                 </div>
+                <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'user'">
+                  <button class="btn btn-xs btn-ghost" @click="copyToClipboard(message.content)">复制</button>
+                </div>
                 <div class="chat-footer opacity-80 flex gap-1" v-if="message.failed && message.role === 'user'">
                   <span class="text-red-500">发送失败</span>
                   <button class="btn btn-xs btn-error" @click="sendMessage(message)">重新发送</button>
@@ -239,7 +242,7 @@
             </template>
 
             <!-- 流式输出响应 -->
-            <div v-if="isStreaming" class="chat chat-start">
+            <div v-if="isStreaming && streamingContent" class="chat chat-start">
               <div class="chat-image avatar">
                 <div class="w-10 rounded-full bg-base-300 overflow-hidden">
                   <img :src="`/img/${selectedModel}-avatar.svg`" :alt="getSelectedModelName()" />
@@ -252,15 +255,22 @@
               <div class="chat-bubble" v-html="formatMessage(streamingContent)"></div>
             </div>
 
-            <!-- 加载中指示器 -->
-            <div v-if="isLoading && !isStreaming" class="chat chat-start">
+            <!-- 加载中指示器 - 优化显示条件 -->
+            <div v-if="isLoading || (isStreaming && !streamingContent)" class="chat chat-start">
               <div class="chat-image avatar">
                 <div class="w-10 rounded-full bg-base-300 overflow-hidden">
                   <img :src="`/img/${selectedModel}-avatar.svg`" :alt="getSelectedModelName()" />
                 </div>
               </div>
-              <div class="chat-bubble">
-                <span class="loading loading-dots loading-md"></span>
+              <div class="chat-header">
+                {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
+                <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
+              </div>
+              <div class="chat-bubble bg-base-200 ai-thinking">
+                <div class="flex items-center gap-2">
+                  <span class="loading loading-dots loading-sm"></span>
+                  <span class="text-sm opacity-70">正在思考中...</span>
+                </div>
               </div>
             </div>
           </div>
@@ -330,14 +340,8 @@
                     </option>
                   </select>
 
-                  <button @click="openApiSettings" class="btn btn-sm btn-ghost tooltip tooltip-top" data-tip="API设置">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                      stroke="currentColor" class="w-4 h-4">
-                      <path stroke-linecap="round" stroke-linejoin="round"
-                        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </button>
+                  <!-- 设置按钮 - 跳转到设置页面 -->
+
 
                   <!-- 角色选择显示 -->
                   <div class="flex items-center gap-2">
@@ -409,8 +413,6 @@
                     </svg>
                     导出对话
                   </button>
-                  
-
                 </div>
               </div>
 
@@ -421,7 +423,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <span>您尚未配置{{ getSelectedModelName() }}的API密钥。请点击设置图标进行配置。</span>
+                <span>您尚未配置{{ getSelectedModelName() }}的API密钥。<button @click="goToAISettings" class="link link-primary">前往设置</button></span>
               </div>
 
               <!-- 文本输入区域 -->
@@ -545,141 +547,63 @@
           </div>
 
           <div class="flex-1 overflow-hidden flex flex-col">
-            <label class="label">
-              <span class="label-text">笔记内容 (支持Markdown格式)</span>
-            </label>
-            <textarea v-model="noteContent" placeholder="可以从左侧AI对话添加内容到这里..."
-              class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+            <div class="flex justify-between items-center mb-2">
+              <label class="label">
+                <span class="label-text">笔记内容 (支持Markdown格式)</span>
+              </label>
+              <div class="btn-group btn-group-sm">
+                <button 
+                  class="btn btn-sm " 
+                  :class="{ 'btn-active': !isNotePreviewMode }" 
+                  @click="() => { console.log('切换到编辑模式'); isNotePreviewMode = false }"
+                  title="编辑模式"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button 
+                  class="btn btn-sm " 
+                  :class="{ 'btn-active': isNotePreviewMode } " 
+                  @click="() => { console.log('切换到预览模式', 'noteContent:', noteContent); isNotePreviewMode = true }"
+                  title="预览模式"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            
+            <!-- 编辑模式 -->
+            <textarea 
+              v-if="!isNotePreviewMode"
+              v-model="noteContent" 
+              placeholder="可以从左侧AI对话添加内容到这里..."
+              class="textarea textarea-bordered w-full flex-1 font-mono resize-none"
+            ></textarea>
+            
+            <!-- 预览模式 -->
+            <div 
+              v-else
+              class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
+              v-html="renderedNoteContent"
+            ></div>
           </div>
         </div>
       </transition>
     </div>
 
     <!-- 笔记保存成功提示 -->
-    <div class="toast toast-end" v-if="showSaveSuccess">
+    <div class="toast" v-if="showSaveSuccess">
       <div class="alert alert-success">
         <span>笔记保存成功!</span>
       </div>
     </div>
 
-    <!-- 设置对话框 -->
-    <dialog ref="apiSettingsModal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">API 设置</h3>
-
-        <div class="form-control w-full">
-          <label class="label">
-            <span class="label-text">选择AI模型</span>
-          </label>
-          <select v-model="editingModel" class="select select-bordered w-full">
-            <option disabled value="">选择要配置的AI模型</option>
-            <option v-for="model in availableModels" :key="model.id" :value="model.id">
-              {{ model.name }}
-            </option>
-          </select>
-        </div>
-
-        <div class="form-control w-full mt-4">
-          <label class="label">
-            <span class="label-text">API 密钥</span>
-          </label>
-          <div class="relative">
-            <input :type="showApiKey ? 'text' : 'password'" v-model="apiKey" placeholder="输入您的API密钥"
-              class="input input-bordered w-full pr-10" />
-            <button @click="showApiKey = !showApiKey" type="button"
-              class="absolute inset-y-0 right-0 flex items-center px-3">
-              <svg v-if="showApiKey" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-              </svg>
-            </button>
-          </div>
-          <label class="label">
-            <span class="label-text-alt">API密钥仅存储在本地，不会上传到任何服务器</span>
-          </label>
-        </div>
-
-        <div class="form-control w-full mt-4">
-          <label class="label">
-            <span class="label-text">自定义模型名称 <span class="text-sm opacity-70">(可选)</span></span>
-            <button class="btn btn-xs btn-outline" @click="openModelConfigModal(editingModel)"
-              :disabled="!editingModel">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-              </svg>
-              配置模型
-            </button>
-          </label>
-
-          <!-- 可搜索的模型名称选择器 -->
-          <div class="relative">
-            <input type="text" v-model="customModelName" :placeholder="getDefaultModelName(editingModel)"
-              class="input input-bordered w-full" @focus="showModelSuggestions = true" @input="filterModelSuggestions"
-              @blur="hideModelSuggestions" autocomplete="off" />
-
-            <!-- 模型建议下拉框 -->
-            <div v-if="showModelSuggestions && filteredModelSuggestions.length > 0"
-              class="absolute z-10 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1 model-suggestions-dropdown">
-              <div v-for="suggestion in filteredModelSuggestions" :key="suggestion.name"
-                class="px-3 py-2 hover:bg-base-200 cursor-pointer border-b border-base-200 last:border-b-0 model-suggestion-item"
-                @mousedown.prevent="selectModelSuggestion(suggestion.name)">
-                <div class="font-medium">{{ suggestion.name }}</div>
-                <div class="text-sm text-base-content/70">{{ suggestion.description }}</div>
-              </div>
-            </div>
-          </div>
-
-          <label class="label">
-            <span class="label-text-alt">不同的API提供商可能使用不同的模型名称，您可以在此自定义或从建议中选择</span>
-          </label>
-        </div>
-
-        <!-- Max Tokens 配置 -->
-        <div class="form-control w-full mt-4">
-          <label class="label">
-            <span class="label-text">最大输出长度 (Max Tokens)</span>
-            <span class="label-text-alt">{{ maxTokens || getDefaultMaxTokens(editingModel) }}</span>
-          </label>
-          <div class="flex gap-3 items-center">
-            <input type="range" v-model="maxTokens" :min="getMinMaxTokens(editingModel)"
-              :max="getMaxMaxTokens(editingModel)" :step="100" class="range range-primary flex-1" />
-            <input type="number" v-model="maxTokens" :min="getMinMaxTokens(editingModel)"
-              :max="getMaxMaxTokens(editingModel)" :step="100" class="input input-bordered w-20 text-center" />
-          </div>
-          <div class="flex justify-between text-xs text-base-content/70 mt-1">
-            <span>{{ getMinMaxTokens(editingModel) }}</span>
-            <span>默认: {{ getDefaultMaxTokens(editingModel) }}</span>
-            <span>{{ getMaxMaxTokens(editingModel) }}</span>
-          </div>
-          <label class="label">
-            <span class="label-text-alt">控制AI响应的最大长度，越高生成内容越长，但响应时间和成本也会增加</span>
-          </label>
-        </div>
-
-        <div class="form-control w-full mt-4" v-if="editingModel === 'custom'">
-          <label class="label">
-            <span class="label-text">API 端点</span>
-          </label>
-          <input type="text" v-model="apiEndpoint" placeholder="例如: https://api.example.com/v1/chat/completions"
-            class="input input-bordered w-full" />
-        </div>
-
-        <div class="modal-action">
-          <button class="btn" @click="closeApiSettings">取消</button>
-          <button class="btn btn-primary" @click="saveApiSettings">保存</button>
-        </div>
-      </div>
-    </dialog>
+    
+    
 
     <!-- 编辑对话标题对话框 -->
     <dialog ref="editTitleModal" class="modal">
@@ -709,74 +633,7 @@
       </div>
     </dialog>
 
-    <!-- 模型配置管理对话框 -->
-    <dialog ref="modelConfigModal" class="modal">
-      <div class="modal-box w-11/12 max-w-3xl">
-        <h3 class="font-bold text-lg mb-4">
-          配置 {{ getModelNameById(editingModelType) }} 的模型名称建议
-        </h3>
-
-        <!-- 添加新模型 -->
-        <div class="bg-base-200 rounded-lg p-4 mb-4">
-          <h4 class="font-medium mb-3">添加新模型</h4>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div class="form-control">
-              <input type="text" v-model="newModelName" placeholder="模型名称" class="input input-bordered input-sm"
-                @keydown.enter="addNewModel" />
-            </div>
-            <div class="form-control">
-              <input type="text" v-model="newModelDescription" placeholder="模型描述" class="input input-bordered input-sm"
-                @keydown.enter="addNewModel" />
-            </div>
-          </div>
-          <div class="mt-3">
-            <button class="btn btn-sm btn-primary" @click="addNewModel"
-              :disabled="!newModelName.trim() || !newModelDescription.trim()">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              添加模型
-            </button>
-          </div>
-        </div>
-
-        <!-- 现有模型列表 -->
-        <div class="max-h-96 overflow-y-auto">
-          <div class="space-y-2">
-            <div v-for="(model, index) in editingModelList" :key="index"
-              class="flex items-center justify-between p-3 bg-base-100 rounded-lg border border-base-300">
-              <div class="flex-1">
-                <div class="font-medium">{{ model.name }}</div>
-                <div class="text-sm text-base-content/70">{{ model.description }}</div>
-              </div>
-              <button class="btn btn-xs btn-error ml-3" @click="removeModel(index)">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
-                  stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div v-if="editingModelList.length === 0" class="text-center py-8 text-base-content/70">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2 opacity-50" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-4V6a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M9 9V6a1 1 0 011-1h4a1 1 0 011 1v3" />
-            </svg>
-            <p>暂无模型配置</p>
-          </div>
-        </div>
-
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="resetToDefault">重置为默认</button>
-          <button class="btn" @click="closeModelConfigModal">取消</button>
-          <button class="btn btn-primary" @click="saveModelConfig">保存配置</button>
-        </div>
-      </div>
-    </dialog>
+  
 
     <!-- 自定义右键菜单 -->
     <div v-if="showContextMenu"
@@ -983,76 +840,51 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, computed, watch, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import DOMPurify from 'dompurify'
-import { useTipsStore } from '../stores/tipsStore'
+import { ref, onMounted, nextTick, computed, watch, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import Prism from 'prismjs'
-import 'prismjs/themes/prism-tomorrow.css'
-import 'prismjs/components/prism-javascript'
-import 'prismjs/components/prism-typescript'
-import 'prismjs/components/prism-python'
-import 'prismjs/components/prism-java'
-import 'prismjs/components/prism-json'
-import 'prismjs/components/prism-bash'
-import 'prismjs/components/prism-css'
-import 'prismjs/components/prism-sql'
-import 'prismjs/components/prism-go'
-import 'prismjs/components/prism-rust'
-import 'prismjs/components/prism-php'
-import 'prismjs/components/prism-csharp'
 
-// 引入tips存储
+import 'highlight.js/styles/github.css'
+import { useTipsStore } from '../stores/tipsStore'
+import {
+  listAIConversations,
+  deleteAIConversation,
+  createAIConversation,
+  addAIMessage,
+  updateAIConversationTitle,
+  listAIRoles,
+  createAIRole,
+  updateAIRole,
+  deleteAIRole,
+  listAIMessages
+} from '../services/ai'
+import { invoke } from '@tauri-apps/api/core'
+import DOMPurify from 'dompurify'
+import Prism from 'prismjs'
+import { Marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
+import { listen } from '@tauri-apps/api/event'
+
+
+const router = useRouter()
 const tipsStore = useTipsStore()
 
-// 后端API调用封装
-async function listAIConversations() {
-  return await invoke('list_ai_conversations')
-}
-async function listAIMessages(conversationId: string) {
-  return await invoke('list_ai_messages', { conversation_id: conversationId })
-}
-async function createAIConversation(model: string, title?: string) {
-  return await invoke('create_ai_conversation', { model, title })
-}
-async function deleteAIConversation(conversationId: string) {
-  return await invoke('delete_ai_conversation', { conversation_id: conversationId })
-}
-async function updateAIConversationTitle(conversationId: string, newTitle: string) {
-  return await invoke('update_ai_conversation_title', { conversation_id: conversationId, new_title: newTitle })
-}
-async function addAIMessage(conversationId: string, role: string, content: string) {
-  return await invoke('add_ai_message', { conversation_id: conversationId, role, content })
-}
-
-// 角色相关API调用
-async function listAIRoles() {
-  return await invoke('list_ai_roles')
-}
-async function createAIRole(name: string, description: string) {
-  return await invoke('create_ai_role', { name, description })
-}
-async function updateAIRole(roleId: string, name: string, description: string) {
-  return await invoke('update_ai_role', { role_id: roleId, name, description })
-}
-async function deleteAIRole(roleId: string) {
-  return await invoke('delete_ai_role', { role_id: roleId })
-}
-// @ts-ignore - 保留此函数供未来使用
-async function getAIRole(roleId: string) {
-  return await invoke('get_ai_role', { role_id: roleId })
-}
-
-// 引入路由
-const router = useRouter()
 
 // 返回主页
 const goBack = () => {
-  router.push('/')
+  console.log('AI助手 - 开始返回主界面')
+  
+  // 使用两种方式：localStorage 和路由参数
+  localStorage.setItem('need-refresh-tips', 'true')
+  console.log('AI助手 - 已设置刷新标记:', localStorage.getItem('need-refresh-tips'))
+  
+  // 验证设置是否成功
+  const verifyMark = localStorage.getItem('need-refresh-tips')
+  console.log('AI助手 - 验证刷新标记:', verifyMark)
+  console.log('AI助手 - 验证刷新标记类型:', typeof verifyMark)
+  
+  // 使用路由参数传递刷新信号
+  console.log('AI助手 - 开始路由跳转（带参数）')
+  router.push({ path: '/', query: { refresh: 'tips', timestamp: Date.now().toString() } })
 }
 
 // 安全检查 Prism 语言是否可用
@@ -1118,204 +950,8 @@ const visibleMessages = computed(() => {
 const showConversationsDrawer = ref(false)
 
 // API 设置相关
-const apiSettingsModal = ref<HTMLDialogElement | null>(null)
-const editingModel = ref('')
-const apiKey = ref('')
-const apiEndpoint = ref('')
-const customModelName = ref('')
-const showApiKey = ref(false)
 const maxTokens = ref<number>(3000) // 默认值3000
 
-// 模型建议相关
-const showModelSuggestions = ref(false)
-const filteredModelSuggestions = ref<Array<{ name: string, description: string }>>([])
-
-// 默认的各AI模型的常用模型名称数据
-const defaultModelSuggestions = {
-  chatgpt: [
-    { name: 'gpt-4o', description: 'GPT-4o - 最新版本，支持文本和图像' },
-    { name: 'gpt-4o-mini', description: 'GPT-4o Mini - 轻量级版本，成本更低' },
-    { name: 'gpt-4-turbo', description: 'GPT-4 Turbo - 高性能版本' },
-    { name: 'gpt-4', description: 'GPT-4 - 标准版本' },
-    { name: 'gpt-3.5-turbo', description: 'GPT-3.5 Turbo - 经典版本，性价比高' },
-    { name: 'gpt-3.5-turbo-16k', description: 'GPT-3.5 Turbo - 16K上下文版本' }
-  ],
-  gemini: [
-    { name: 'gemini-2.0-flash', description: 'Gemini 2.0 Flash - 最新版本' },
-    { name: 'gemini-1.5-flash', description: 'Gemini 1.5 Flash - 快速响应版本' },
-    { name: 'gemini-1.5-pro', description: 'Gemini 1.5 Pro - 专业版本' },
-    { name: 'gemini-pro', description: 'Gemini Pro - 标准专业版' },
-    { name: 'gemini-pro-vision', description: 'Gemini Pro Vision - 支持图像理解' }
-  ],
-  deepseek: [
-    { name: 'deepseek-chat', description: 'DeepSeek Chat - 对话模型' },
-    { name: 'deepseek-coder', description: 'DeepSeek Coder - 代码生成专用' },
-    { name: 'deepseek-v2', description: 'DeepSeek V2 - 第二代模型' },
-    { name: 'deepseek-v2.5', description: 'DeepSeek V2.5 - 增强版本' }
-  ],
-  claude: [
-    { name: 'claude-3.5-sonnet', description: 'Claude 3.5 Sonnet - 最新版本' },
-    { name: 'claude-3-sonnet-20240229', description: 'Claude 3 Sonnet - 平衡版本' },
-    { name: 'claude-3-opus-20240229', description: 'Claude 3 Opus - 最强版本' },
-    { name: 'claude-3-haiku-20240307', description: 'Claude 3 Haiku - 快速版本' }
-  ],
-  qwen: [
-    { name: 'qwen-max', description: '通义千问Max - 最强版本' },
-    { name: 'qwen-plus', description: '通义千问Plus - 增强版本' },
-    { name: 'qwen-turbo', description: '通义千问Turbo - 快速版本' },
-    { name: 'qwen-long', description: '通义千问Long - 长文本版本' },
-    { name: 'qwen2-72b-instruct', description: '通义千问2.0 72B指令版' }
-  ],
-  doubao: [
-    { name: 'doubao-1.5-pro-32k', description: '豆包 1.5 Pro 32K - 长上下文版本' },
-    { name: 'doubao-1.5-pro-4k', description: '豆包 1.5 Pro 4K - 标准版本' },
-    { name: 'doubao-lite-32k', description: '豆包 Lite 32K - 轻量级长上下文' },
-    { name: 'doubao-lite-4k', description: '豆包 Lite 4K - 轻量级标准版' }
-  ],
-  grok: [
-    { name: 'grok-3', description: 'Grok 3 - 最新版本' },
-    { name: 'grok-3-mini', description: 'Grok 3 Mini - 轻量级版本' },
-    { name: 'grok-3-fast', description: 'Grok 3 Fast - 快速响应版本' },
-    { name: 'grok-1.5', description: 'Grok 1.5 - 增强版本' }
-  ],
-  custom: [
-    { name: 'gpt-3.5-turbo', description: 'OpenAI兼容 - GPT-3.5 Turbo' },
-    { name: 'gpt-4', description: 'OpenAI兼容 - GPT-4' },
-    { name: 'claude-3-sonnet', description: 'Claude兼容 - Sonnet' },
-    { name: 'llama-2-70b-chat', description: 'Llama 2 70B Chat' },
-    { name: 'mixtral-8x7b-instruct', description: 'Mixtral 8x7B Instruct' }
-  ]
-}
-
-// 可配置的模型建议数据
-const modelSuggestions = ref<typeof defaultModelSuggestions>({ ...defaultModelSuggestions })
-
-// 模型配置管理相关
-const showModelConfigModal = ref(false)
-const modelConfigModal = ref<HTMLDialogElement | null>(null)
-const editingModelType = ref('')
-const editingModelList = ref<Array<{ name: string, description: string }>>([])
-const newModelName = ref('')
-const newModelDescription = ref('')
-
-// 加载模型配置
-const loadModelSuggestions = async () => {
-  try {
-    const config = localStorage.getItem('ai-model-suggestions-config')
-    if (config) {
-      const savedConfig = JSON.parse(config)
-      modelSuggestions.value = { ...defaultModelSuggestions, ...savedConfig }
-    }
-  } catch (error) {
-    console.warn('加载模型配置失败，使用默认配置:', error)
-    modelSuggestions.value = { ...defaultModelSuggestions }
-  }
-}
-
-// 保存模型配置
-const saveModelSuggestions = async () => {
-  try {
-    localStorage.setItem('ai-model-suggestions-config', JSON.stringify(modelSuggestions.value))
-  } catch (error) {
-    console.error('保存模型配置失败:', error)
-  }
-}
-
-// 打开模型配置管理对话框
-const openModelConfigModal = (modelType: string) => {
-  editingModelType.value = modelType
-  editingModelList.value = [...(modelSuggestions.value[modelType as keyof typeof modelSuggestions.value] || [])]
-  showModelConfigModal.value = true
-  modelConfigModal.value?.showModal()
-}
-
-// 关闭模型配置管理对话框
-const closeModelConfigModal = () => {
-  showModelConfigModal.value = false
-  editingModelType.value = ''
-  editingModelList.value = []
-  newModelName.value = ''
-  newModelDescription.value = ''
-  modelConfigModal.value?.close()
-}
-
-// 添加新模型
-const addNewModel = () => {
-  if (!newModelName.value.trim() || !newModelDescription.value.trim()) return
-
-  editingModelList.value.push({
-    name: newModelName.value.trim(),
-    description: newModelDescription.value.trim()
-  })
-
-  newModelName.value = ''
-  newModelDescription.value = ''
-}
-
-// 删除模型
-const removeModel = (index: number) => {
-  editingModelList.value.splice(index, 1)
-}
-
-// 重置为默认配置
-const resetToDefault = () => {
-  if (editingModelType.value && defaultModelSuggestions[editingModelType.value as keyof typeof defaultModelSuggestions]) {
-    editingModelList.value = [...defaultModelSuggestions[editingModelType.value as keyof typeof defaultModelSuggestions]]
-  }
-}
-
-// 保存模型配置更改
-const saveModelConfig = async () => {
-  if (editingModelType.value) {
-    modelSuggestions.value[editingModelType.value as keyof typeof modelSuggestions.value] = [...editingModelList.value]
-    await saveModelSuggestions()
-    closeModelConfigModal()
-  }
-}
-
-// 筛选模型建议
-const filterModelSuggestions = () => {
-  const modelType = editingModel.value as keyof typeof defaultModelSuggestions
-  const allSuggestions = modelSuggestions.value[modelType] || []
-
-  if (!customModelName.value.trim()) {
-    filteredModelSuggestions.value = allSuggestions
-  } else {
-    const searchTerm = customModelName.value.toLowerCase()
-    filteredModelSuggestions.value = allSuggestions.filter(suggestion =>
-      suggestion.name.toLowerCase().includes(searchTerm) ||
-      suggestion.description.toLowerCase().includes(searchTerm)
-    )
-  }
-}
-
-// 选择模型建议
-const selectModelSuggestion = (modelName: string) => {
-  customModelName.value = modelName
-  showModelSuggestions.value = false
-}
-
-// 延迟隐藏建议框（避免点击建议时立即隐藏）
-const hideModelSuggestions = () => {
-  setTimeout(() => {
-    showModelSuggestions.value = false
-  }, 150)
-}
-
-// 监听编辑模型变化，自动更新模型建议
-watch(editingModel, () => {
-  if (editingModel.value) {
-    filterModelSuggestions()
-    // 当模型改变时，如果maxTokens为0或者小于最小值，则设置为默认值
-    if (!maxTokens.value || maxTokens.value < getMinMaxTokens(editingModel.value)) {
-      maxTokens.value = getDefaultMaxTokens(editingModel.value)
-    }
-    // 如果当前值超过最大值，则设置为最大值
-    if (maxTokens.value > getMaxMaxTokens(editingModel.value)) {
-      maxTokens.value = getMaxMaxTokens(editingModel.value)
-    }
-  }
-})
 
 // 笔记面板相关
 const showNotePanel = ref(Boolean(localStorage.getItem('ai-show-note-panel') === 'true'))
@@ -1323,6 +959,7 @@ const noteTitle = ref(localStorage.getItem('ai-note-title') || '')
 const noteContent = ref(localStorage.getItem('ai-note-content') || '')
 const isNoteSaving = ref(false)
 const showSaveSuccess = ref(false)
+const isNotePreviewMode = ref(true) // 笔记预览模式
 
 // 编辑对话标题相关
 const editTitleModal = ref<HTMLDialogElement | null>(null)
@@ -1356,48 +993,7 @@ const availableModels = [
   { id: 'custom', name: '自定义API' }
 ]
 
-// Max Tokens 配置相关的辅助函数
-const getDefaultMaxTokens = (modelId: string): number => {
-  const defaults: Record<string, number> = {
-    chatgpt: 4000,
-    gemini: 4000,
-    deepseek: 3000,
-    qwen: 3000,
-    claude: 4000,
-    doubao: 2500,
-    grok: 3000,
-    custom: 3000
-  }
-  return defaults[modelId] || 3000
-}
 
-const getMinMaxTokens = (modelId: string): number => {
-  const mins: Record<string, number> = {
-    chatgpt: 500,
-    gemini: 500,
-    deepseek: 500,
-    qwen: 500,
-    claude: 500,
-    doubao: 500,
-    grok: 500,
-    custom: 500
-  }
-  return mins[modelId] || 500
-}
-
-const getMaxMaxTokens = (modelId: string): number => {
-  const maxs: Record<string, number> = {
-    chatgpt: 8000,
-    gemini: 8000,
-    deepseek: 6000,
-    qwen: 6000,
-    claude: 8000,
-    doubao: 4000,
-    grok: 130000,
-    custom: 8000
-  }
-  return maxs[modelId] || 8000
-}
 
 // 加载对话列表
 async function loadConversations() {
@@ -1561,13 +1157,13 @@ const setupStreamListeners = async () => {
         // 滚动到底部
         scrollToBottom();
       } else {
-        // 收到第一个chunk时，关闭加载状态
-        if (isLoading.value) {
+        // 收到内容chunk，累加到流式内容中
+        streamingContent.value += payload.chunk;
+
+        // 收到第一个有内容的chunk时，关闭加载状态
+        if (isLoading.value && streamingContent.value.trim()) {
           isLoading.value = false;
         }
-
-        // 累加内容
-        streamingContent.value += payload.chunk;
 
         // 滚动到底部
         scrollToBottom();
@@ -1720,9 +1316,8 @@ async function sendMessage(resendMessage?: any) {
   isLoading.value = true
 
   try {
-    // 开始流式输出
+    // 开始流式输出准备
     isStreaming.value = true
-    isLoading.value = true
     streamingContent.value = ''
     currentStreamingId.value = generateUniqueId()
 
@@ -2048,10 +1643,16 @@ const generateUniqueId = () => {
 // 清空当前对话消息
 const clearMessages = async () => {
   if (!activeConversationId.value) return;
-  const newId = await createAIConversation(selectedModel.value, "新对话") as string
-  await loadConversations()
-  activeConversationId.value = newId
-  await loadMessages(String(newId))
+  
+  try {
+    // 调用后端清空当前对话的消息
+    await invoke('clear_ai_conversation', { conversation_id: activeConversationId.value });
+    
+    // 重新加载消息以更新UI
+    await loadMessages(activeConversationId.value);
+  } catch (error) {
+    console.error('清空对话失败:', error);
+  }
 }
 
 // 格式化时间
@@ -2115,7 +1716,7 @@ onMounted(async () => {
   console.log('组件挂载，开始加载数据...');
 
   // 加载模型配置
-  await loadModelSuggestions();
+  // await loadModelSuggestions();
 
   // 设置流式输出监听
   await setupStreamListeners();
@@ -2169,97 +1770,8 @@ onBeforeUnmount(() => {
   formatMessageDebounced.value.clear()
 })
 
-// 打开API设置对话框
-const openApiSettings = async () => {
-  editingModel.value = selectedModel.value || availableModels[0].id
 
-  try {
-    // 获取当前选择的模型的API密钥
-    const result = await invoke('get_api_key', { modelId: editingModel.value })
-    apiKey.value = result as string
 
-    // 获取自定义模型名称
-    const modelNameResult = await invoke('get_model_name_config', { modelId: editingModel.value })
-    customModelName.value = modelNameResult as string
-
-    // 获取max_tokens配置
-    try {
-      const maxTokensResult = await invoke('get_max_tokens_config', { modelId: editingModel.value })
-      maxTokens.value = maxTokensResult as number || getDefaultMaxTokens(editingModel.value)
-    } catch (error) {
-      console.warn('获取max_tokens配置失败，使用默认值:', error)
-      maxTokens.value = getDefaultMaxTokens(editingModel.value)
-    }
-
-    // 如果是自定义模型，获取端点
-    if (editingModel.value === 'custom') {
-      const endpoint = await invoke('get_api_endpoint')
-      apiEndpoint.value = endpoint as string
-    }
-  } catch (error) {
-    console.error('获取API配置失败:', error)
-    apiKey.value = ''
-    customModelName.value = ''
-    apiEndpoint.value = ''
-    maxTokens.value = getDefaultMaxTokens(editingModel.value)
-  }
-
-  // 初始化模型建议
-  filterModelSuggestions()
-
-  apiSettingsModal.value?.showModal()
-}
-
-// 关闭API设置对话框
-const closeApiSettings = () => {
-  showApiKey.value = false
-  apiSettingsModal.value?.close()
-}
-
-// 保存API设置
-const saveApiSettings = async () => {
-  try {
-    await invoke('save_api_key', {
-      modelId: editingModel.value,
-      apiKey: apiKey.value
-    })
-
-    // 保存自定义模型名称
-    await invoke('save_model_name', {
-      modelId: editingModel.value,
-      modelName: customModelName.value
-    })
-
-    // 保存max_tokens配置
-    await invoke('save_max_tokens_config', {
-      modelId: editingModel.value,
-      maxTokens: maxTokens.value
-    })
-
-    if (editingModel.value === 'custom' && apiEndpoint.value) {
-      await invoke('save_api_endpoint', { endpoint: apiEndpoint.value })
-    }
-
-    // 更新当前选择的模型
-    selectedModel.value = editingModel.value
-
-    // 检查API密钥
-    await checkApiKey()
-
-    closeApiSettings()
-  } catch (error) {
-    console.error('保存API配置失败:', error)
-  }
-}
-
-// 将内容复制到剪贴板
-const copyToClipboard = async (content: string) => {
-  try {
-    await navigator.clipboard.writeText(content)
-  } catch (error) {
-    console.error('复制到剪贴板失败:', error)
-  }
-}
 
 // 处理Enter键事件
 const handleEnterKey = (e: KeyboardEvent) => {
@@ -2475,14 +1987,17 @@ const exportMessages = async () => {
 // 保存笔记
 const saveNoteAsTip = async () => {
   if (!noteTitle.value.trim() || isNoteSaving.value) {
+    console.log('保存笔记 - 条件不满足，取消保存')
     return
   }
 
+  console.log('保存笔记 - 开始保存:', { title: noteTitle.value, contentLength: noteContent.value.length })
   isNoteSaving.value = true
 
   try {
     // 获取第一个分类作为默认分类
     const defaultCategoryId = tipsStore.categories.length > 0 ? tipsStore.categories[0].id : undefined
+    console.log('保存笔记 - 使用分类ID:', defaultCategoryId, '分类列表长度:', tipsStore.categories.length)
 
     // 创建新的tip
     const newTip = {
@@ -2495,39 +2010,40 @@ const saveNoteAsTip = async () => {
       tags: []
     }
 
+    console.log('保存笔记 - 准备保存的数据:', newTip)
+
     // 保存到数据库
-    await tipsStore.saveTip(newTip)
+    const savedTip = await tipsStore.saveTip(newTip)
+    console.log('保存笔记 - 保存结果:', savedTip)
+    
+    if (savedTip) {
+      console.log('保存笔记 - 保存成功，笔记ID:', savedTip.id)
+      
+      // 显示成功提示
+      showSaveSuccess.value = true
+      setTimeout(() => {
+        showSaveSuccess.value = false
+      }, 3000)
 
-    // 显示成功提示
-    showSaveSuccess.value = true
-    setTimeout(() => {
-      showSaveSuccess.value = false
-    }, 3000)
-
-    // 清空笔记内容
-    noteTitle.value = ''
-    noteContent.value = ''
+      // 清空笔记内容并隐藏笔记面板
+      noteTitle.value = ''
+      noteContent.value = ''
+      isNotePreviewMode.value = false // 重置预览模式
+      showNotePanel.value = false // 隐藏笔记面板
+      
+      console.log('保存笔记 - 已清空输入内容并隐藏笔记面板')
+    } else {
+      console.error('保存笔记 - 保存失败，返回值为空')
+    }
   } catch (error) {
     console.error('保存笔记失败:', error)
   } finally {
     isNoteSaving.value = false
+    console.log('保存笔记 - 完成保存流程')
   }
 }
 
-// 添加getDefaultModelName函数，避免API设置时的错误
-const getDefaultModelName = (modelId: string): string => {
-  switch (modelId) {
-    case 'chatgpt': return 'gpt-3.5-turbo'
-    case 'gemini': return 'gemini-2.0-flash'
-    case 'deepseek': return 'deepseek-chat'
-    case 'claude': return 'claude-3.5-sonnet'
-    case 'qwen': return 'qwen-max'
-    case 'doubao': return 'doubao-1.5-pro-32k'
-    case 'grok': return 'grok-beta'
-    case 'custom': return 'gpt-3.5-turbo'
-    default: return 'gpt-3.5-turbo'
-  }
-}
+
 
 // 添加缓存相关的生命周期钩子
 onActivated(() => {
@@ -3000,6 +2516,96 @@ const copyNoteContent = async () => {
     console.error('复制笔记内容失败:', error)
   }
 }
+
+function getDefaultMaxTokens(modelId: string): number {
+  const defaults: Record<string, number> = {
+    chatgpt: 4000,
+    gemini: 4000,
+    deepseek: 3000,
+    claude: 4000,
+    qwen: 3000,
+    doubao: 3000,
+    grok: 4000,
+    custom: 3000
+  }
+  return defaults[modelId] || 3000
+}
+
+// 将内容复制到剪贴板
+const copyToClipboard = async (content: string) => {
+  try {
+    await navigator.clipboard.writeText(content)
+  } catch (error) {
+    console.error('复制到剪贴板失败:', error)
+  }
+}
+
+// 笔记内容的markdown渲染
+const renderedNoteContent = computed(() => {
+  if (!noteContent.value) return '<p class="text-base-content/50">暂无内容</p>'
+
+  try {
+    // 创建 marked 实例并配置高亮
+    const marked = new Marked()
+    
+    // 使用 marked-highlight 扩展
+    marked.use(markedHighlight({
+      langPrefix: 'language-',
+      highlight(code: string, lang: string) {
+        const actualLang = lang || 'plaintext'
+        
+        if (actualLang && isPrismLanguageAvailable(actualLang)) {
+          try {
+            return Prism.highlight(code, Prism.languages[actualLang], actualLang)
+          } catch (error) {
+            console.warn(`Prism 高亮失败 (${actualLang}):`, error)
+            return escapeHtml(code)
+          }
+        }
+        
+        return escapeHtml(code)
+      }
+    }))
+
+    // 配置 marked 选项
+    marked.setOptions({
+      breaks: true,
+      gfm: true,
+      pedantic: false,
+      silent: true,
+    })
+
+    // 使用 marked 渲染 Markdown
+    const htmlContent = marked.parse(noteContent.value) as string
+
+    // 使用DOMPurify清理HTML，防止XSS
+    return DOMPurify.sanitize(htmlContent, {
+      ADD_TAGS: ['iframe', 'pre', 'code'],
+      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
+    })
+  } catch (err) {
+    console.error('笔记Markdown渲染错误:', err)
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+            <pre>${DOMPurify.sanitize(noteContent.value)}</pre>`
+  }
+})
+
+// 监听预览模式变化
+watch(isNotePreviewMode, (newValue) => {
+  console.log('预览模式状态变化:', newValue)
+  console.log('当前笔记内容长度:', noteContent.value.length)
+})
+
+// 监听笔记内容变化
+watch(noteContent, (newValue) => {
+  console.log('笔记内容变化，新长度:', newValue.length)
+})
+
+// 前往设置页面
+const goToAISettings = () => {
+  router.push({ path: '/settings', query: { page: 'ai' } })
+}
 </script>
 
 <style scoped>
@@ -3253,8 +2859,23 @@ const copyNoteContent = async () => {
   animation: pulse 2s infinite;
 }
 
-@keyframes pulse {
+/* AI thinking状态的脉冲动画 */
+.ai-thinking {
+  animation: ai-pulse 2s ease-in-out infinite;
+}
 
+@keyframes ai-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes pulse {
   0%,
   100% {
     opacity: 1;
@@ -3772,6 +3393,43 @@ const copyNoteContent = async () => {
 
 :deep(.prose h6) {
   font-size: var(--base-font-size); /* 相当于 text-base */
+}
+
+/* 编辑/预览按钮组样式 */
+.btn-group .btn {
+  transition: all 0.2s ease;
+}
+
+.btn-group .btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-group .btn-active {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-content));
+}
+
+.btn-group .btn svg {
+  transition: transform 0.2s ease;
+}
+
+.btn-group .btn:hover svg {
+  transform: scale(1.1);
+}
+
+/* 确保编辑/预览按钮在所有主题下都有正确的颜色 */
+[data-theme="dark"] .btn-group .btn-active,
+[data-theme="night"] .btn-group .btn-active,
+[data-theme="black"] .btn-group .btn-active,
+[data-theme="dracula"] .btn-group .btn-active,
+[data-theme="halloween"] .btn-group .btn-active,
+[data-theme="business"] .btn-group .btn-active,
+[data-theme="luxury"] .btn-group .btn-active,
+[data-theme="coffee"] .btn-group .btn-active,
+[data-theme="forest"] .btn-group .btn-active,
+[data-theme="synthwave"] .btn-group .btn-active {
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-content)) !important;
 }
 
 </style>

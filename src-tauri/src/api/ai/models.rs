@@ -11,16 +11,10 @@ use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 
 // 导入豆包模块的函数
-use crate::api::ai::doubao::{
-    doubao_chat_with_images, 
-    doubao_stream_chat_with_images
-};
+use crate::api::ai::doubao::{doubao_chat_with_images, doubao_stream_chat_with_images};
 
 // 导入grok模块的函数
-use crate::api::ai::grok::{
-    grok_chat_with_images,
-    grok_stream_chat_with_images
-};
+use crate::api::ai::grok::{grok_chat_with_images, grok_stream_chat_with_images};
 
 // 创建GenAI客户端并添加认证
 pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Client, String> {
@@ -58,7 +52,7 @@ pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Clie
         "deepseek" => AdapterKind::DeepSeek,
         "claude" => AdapterKind::Anthropic,
         "doubao" => AdapterKind::OpenAI, // 豆包使用OpenAI兼容格式
-        "grok" => AdapterKind::OpenAI, // Grok使用OpenAI兼容格式
+        "grok" => AdapterKind::OpenAI,   // Grok使用OpenAI兼容格式
         // 为自定义模型设置OpenAI格式的认证（默认行为）
         "custom" | _ => AdapterKind::OpenAI,
     };
@@ -423,10 +417,10 @@ pub async fn send_to_doubao(
     use serde_json::{json, Value};
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称
     let model_name = custom_model_name.unwrap_or("doubao-1.5-pro-32k");
 
@@ -504,8 +498,11 @@ pub async fn send_message_with_images_to_ai(
         }
         _ => {
             // 其他模型不支持图片
-            Ok(format!("{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}", 
-                get_model_display_name(model_id), text_message))
+            Ok(format!(
+                "{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}",
+                get_model_display_name(model_id),
+                text_message
+            ))
         }
     }
 }
@@ -521,17 +518,21 @@ pub async fn stream_message_with_images_from_ai(
     match model_id {
         "doubao" => {
             // 豆包支持视觉理解的流式输出
-            doubao_stream_chat_with_images(api_key, text_message, image_files, custom_model_name).await
+            doubao_stream_chat_with_images(api_key, text_message, image_files, custom_model_name)
+                .await
         }
         "grok" => {
             // Grok目前不支持图片，但为将来做准备
-            grok_stream_chat_with_images(api_key, text_message, image_files, custom_model_name).await
+            grok_stream_chat_with_images(api_key, text_message, image_files, custom_model_name)
+                .await
         }
         "gemini" => {
             // Gemini支持图片，但需要特殊处理
             // 这里暂时返回提示信息流
             let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let _ = tx.send(Ok("Gemini图片支持功能正在开发中，请稍后再试。".to_string())).await;
+            let _ = tx
+                .send(Ok("Gemini图片支持功能正在开发中，请稍后再试。".to_string()))
+                .await;
             let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
             Ok(Box::pin(stream) as TextStream)
         }
@@ -539,15 +540,20 @@ pub async fn stream_message_with_images_from_ai(
             // ChatGPT-4V支持图片，但需要特殊处理
             // 这里暂时返回提示信息流
             let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let _ = tx.send(Ok("ChatGPT图片支持功能正在开发中，请稍后再试。".to_string())).await;
+            let _ = tx
+                .send(Ok("ChatGPT图片支持功能正在开发中，请稍后再试。".to_string()))
+                .await;
             let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
             Ok(Box::pin(stream) as TextStream)
         }
         _ => {
             // 其他模型不支持图片，返回提示信息流
             let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let message = format!("{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}", 
-                get_model_display_name(model_id), text_message);
+            let message = format!(
+                "{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}",
+                get_model_display_name(model_id),
+                text_message
+            );
             let _ = tx.send(Ok(message)).await;
             let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
             Ok(Box::pin(stream) as TextStream)
@@ -569,4 +575,3 @@ fn get_model_display_name(model_id: &str) -> &str {
         _ => "未知模型",
     }
 }
-

@@ -28,6 +28,8 @@
         @clipboard="() => navigateTo('/clipboard')"
         @ai-assistant="() => navigateTo('/ai-assistant')"
         @settings="() => navigateTo('/settings')"
+        @encrypt-notebook="handleNotebookEncryption"
+        @decrypt-notebook="handleNotebookDecryption"
       />
 
       <!-- 中间笔记列表 -->
@@ -54,6 +56,8 @@
             @export-note="exportNote"
             @move-to-category="moveNoteToCategory"
             @refresh="refreshNotes"
+            @encrypt-note="handleNoteEncryption"
+            @decrypt-note="handleNoteDecryption"
             :key="selectedNotebookId"
           />
       </div>
@@ -72,6 +76,8 @@
             @add-tag="addTagToNote"
             @remove-tag="removeTagFromNote"
             @toggle-pin="toggleNotePin"
+            @unlock-note="handleNoteUnlock"
+            @decrypt-note="handleNoteDecryption"
           />
         </div>
         <div v-else class="h-full flex items-center justify-center flex-col p-6 bg-base-200 text-base-content/80">
@@ -182,6 +188,20 @@
       :notebooks="flatNotebooks"
       @import="handleMarkdownImport"
     />
+    
+    <!-- Update Manager -->
+    <UpdateManager />
+
+    <!-- Password Dialog -->
+    <PasswordDialog 
+      :show="showPasswordDialog"
+      :mode="passwordDialogMode"
+      :title="passwordDialogTitle"
+      :message="passwordDialogMessage"
+      :loading="encryptionStore.isLoading"
+      @confirm="handlePasswordConfirm"
+      @cancel="handlePasswordCancel"
+    />
   </div>
 </template>
 
@@ -193,13 +213,17 @@ import NoteList from './NoteList.vue'
 import NoteEditor from './NoteEditor.vue'
 import ImportDialog from './ImportDialog.vue'
 import MarkdownDropPreview from './MarkdownDropPreview.vue'
+import UpdateManager from './UpdateManager.vue'
+import PasswordDialog from './PasswordDialog.vue'
 import { useTipsStore, Tag, Tip, Category } from '../stores/tipsStore'
 import { useUIStore } from '../stores/uiStore'
+import { useEncryptionStore } from '../stores/encryptionStore'
 import { invoke } from '@tauri-apps/api/core'
 
 // Store
 const tipsStore = useTipsStore()
 const uiStore = useUIStore()
+const encryptionStore = useEncryptionStore()
 
 // Router
 const router = useRouter()
@@ -240,6 +264,7 @@ const sidebarCollapsed = ref(false)
 const showAddNotebookModal = ref(false)
 const showAddTagModal = ref(false)
 const showImportDialog = ref(false)
+const showPasswordDialog = ref(false)
 const newNotebookName = ref('')
 const newNotebookParentId = ref('')
 const newTagName = ref('')
@@ -251,6 +276,11 @@ const showEditNotebookModal = ref(false)
 const editNotebookName = ref('')
 const pendingEditNotebook = ref<Notebook | null>(null)
 
+// 加密相关状态
+const passwordDialogMode = ref<'unlock' | 'encrypt' | 'decrypt'>('unlock')
+const passwordDialogTitle = ref('')
+const passwordDialogMessage = ref('')
+const currentEncryptionTarget = ref<{ type: 'note' | 'notebook', id: string } | null>(null)
 
 const selectedNote = computed(() => {
   if (!selectedNoteId.value) return null
@@ -329,7 +359,23 @@ const navFilteredNotes = computed(() => {
   // 处理笔记本筛选
   if (selectedNotebookId.value) {
     const notebookIds = collectNotebookIds(notebooks.value, selectedNotebookId.value)
-    result = result.filter(note => notebookIds.includes(String(note.category_id)))
+    
+    // 如果没有收集到任何笔记本ID，说明选中的笔记本可能不存在
+    if (notebookIds.length === 0) {
+      selectedNotebookId.value = undefined
+      // 不进行过滤，显示所有笔记
+    } else {
+      // 过滤属于选中笔记本的笔记
+      result = result.filter(note => {
+        // 确保两边都是字符串类型进行比较
+        const noteCategoryId = String(note.category_id || '')
+        const isMatch = notebookIds.some(id => String(id) === noteCategoryId)
+        return isMatch
+      })
+      
+      // 即使过滤后没有笔记，也要保持空数组，不要重置为所有笔记
+      // 这样空笔记本就会正确显示为空列表
+    }
   }
   
   // 处理标签筛选
@@ -380,6 +426,13 @@ function selectNotebook(id: string) {
   selectedTags.value = []
   listSearchQuery.value = ''
   
+  // 切换笔记本时清除所有已解锁的加密项目，确保安全性
+  encryptionStore.lockAllItems().then(() => {
+    console.log('切换笔记本，已清除所有解锁状态')
+  }).catch(error => {
+    console.error('清除解锁状态失败:', error)
+  })
+  
   // 获取当前笔记本下的所有笔记
   const notebookIds = collectNotebookIds(notebooks.value, id)
   const notesInNotebook = notes.value.filter(note => notebookIds.includes(String(note.category_id)))
@@ -404,6 +457,11 @@ function selectNotebook(id: string) {
   if (isFocusMode.value) {
     focusSection.value = 'list'
   }
+  
+  // 重新加载数据以确保显示正确的加密状态
+  nextTick(async () => {
+    await refreshNotes()
+  })
 }
 
 function toggleTag(id: string) {
@@ -415,6 +473,13 @@ function toggleTag(id: string) {
     // 如果标签未选中，则添加它（不重复）
     selectedTags.value.push(id)
   }
+  
+  // 切换标签时清除所有已解锁的加密项目，确保安全性
+  encryptionStore.lockAllItems().then(() => {
+    console.log('切换标签筛选，已清除所有解锁状态')
+  }).catch(error => {
+    console.error('清除解锁状态失败:', error)
+  })
   
   // 如果有标签选择，则清除笔记本选择和搜索条件
   if (selectedTags.value.length > 0) {
@@ -453,6 +518,11 @@ function toggleTag(id: string) {
   
   // 重新加载标签列表以更新状态
   loadTags();
+  
+  // 重新加载数据以确保显示正确的加密状态
+  nextTick(async () => {
+    await refreshNotes()
+  })
 }
 
 function selectNote(id: string) {
@@ -539,6 +609,12 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
     return
   }
 
+  // 如果内容是占位符，不执行保存操作
+  if (updatedNote.content === "[此笔记已加密，请解锁后查看]") {
+    console.log('检测到加密占位符内容，跳过保存操作')
+    return
+  }
+
   isLoading.value = true
   try {
     // 提取标记
@@ -556,10 +632,30 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
     
     // 提取图片数据以单独处理
     const imageData = cleanedNote.images ? {...cleanedNote.images} : undefined
+    
+    // 检查笔记是否为已解锁的加密笔记
+    let contentToSave = cleanedNote.content
+    if (encryptionStore.isItemEncrypted(cleanedNote.id) && encryptionStore.isItemUnlocked(cleanedNote.id)) {
+      // 对于已解锁的加密笔记，需要重新加密内容
+      const password = encryptionStore.unlockedPasswords.get(cleanedNote.id)
+      if (password) {
+        try {
+          const encryptedContent = await invoke<string>('encrypt_data_cmd', { 
+            data: cleanedNote.content, 
+            password: password 
+          })
+          contentToSave = encryptedContent
+        } catch (error) {
+          console.error('重新加密内容失败:', error)
+          // 如果加密失败，使用原始内容
+        }
+      }
+    }
+    
     const tipData = {
       id: cleanedNote.id,
       title: cleanedNote.title,
-      content: cleanedNote.content,
+      content: contentToSave,
       tip_type: cleanedNote.tip_type || 'markdown',
       language: cleanedNote.language,
       category_id: cleanedNote.category_id,
@@ -598,6 +694,11 @@ async function updateNote(updatedNote: Note & { _titleOnly?: boolean, _contentOn
         
         // 更新现有笔记，保留原来的引用
         Object.assign(notes.value[index], savedNote)
+        
+        // 对于加密笔记，保持解密后的内容在本地显示
+        if (encryptionStore.isItemEncrypted(savedNote.id) && encryptionStore.isItemUnlocked(savedNote.id)) {
+          notes.value[index].content = cleanedNote.content // 使用解密后的内容
+        }
         
         // 保留图片数据，因为后端API可能不会返回图片数据
         if (originalImages || imageData) {
@@ -672,32 +773,50 @@ function sortNotes() {
   notes.value = [...pinnedNotes, ...unpinnedNotes]
 }
 
-async function deleteNote() {
-  if (!selectedNoteId.value) return
+async function deleteNote(noteId?: string) {
+  // 如果没有传递noteId参数，则使用selectedNoteId
+  const targetNoteId = noteId || selectedNoteId.value
+  if (!targetNoteId) {
+    console.warn('deleteNote: 没有指定要删除的笔记ID')
+    return
+  }
+
+ 
 
   isLoading.value = true
   try {
-    const noteToDelete = notes.value.find(note => note.id === selectedNoteId.value)
-    const success = await tipsStore.deleteTip(selectedNoteId.value)
+    const noteToDelete = notes.value.find(note => note.id === targetNoteId)
+    if (!noteToDelete) {
+      console.error('deleteNote: 找不到要删除的笔记:', targetNoteId)
+      return
+    }
+
+
+    const success = await tipsStore.deleteTip(targetNoteId)
 
     if (success) {
       // 找到当前被删除的索引
-      const idx = notes.value.findIndex(note => note.id === selectedNoteId.value)
+      const idx = notes.value.findIndex(note => note.id === targetNoteId)
       // 只移除该项
       notes.value.splice(idx, 1)
+      
       // 更新计数
       if (noteToDelete && noteToDelete.category_id) {
         updateNotebookCount(noteToDelete.category_id, -1)
       }
-      // 选中下一个或上一个
-      if (notes.value.length > 0) {
-        if (idx < notes.value.length) {
-          selectedNoteId.value = notes.value[idx].id
+      
+      // 如果删除的是当前选中的笔记，需要选择新的笔记
+      if (targetNoteId === selectedNoteId.value) {
+        // 选中下一个或上一个
+        if (notes.value.length > 0) {
+          if (idx < notes.value.length) {
+            selectedNoteId.value = notes.value[idx].id
+          } else {
+            selectedNoteId.value = notes.value[notes.value.length - 1].id
+          }
         } else {
-          selectedNoteId.value = notes.value[notes.value.length - 1].id
+          selectedNoteId.value = undefined
         }
-      } else {
-        selectedNoteId.value = undefined
       }
     }
   } catch (error) {
@@ -867,21 +986,102 @@ function categoriesToNotebooks(categories: Category[]): Notebook[] {
 
 // 钩子
 onMounted(async () => {
+  
+  // 也检查是否需要刷新数据（防止 onActivated 没有被调用）
+  const needRefreshOnMount = localStorage.getItem('need-refresh-tips')
+  
+  // 首先初始化加密状态，确保在加载数据前就有加密信息
+  try {
+    console.log('正在初始化加密状态...')
+    // 先初始化加密存储，清理会话状态
+    encryptionStore.initialize()
+    // 然后获取最新的加密状态
+    await encryptionStore.fetchEncryptionStatuses()
+    console.log('加密状态初始化完成，已加载', encryptionStore.encryptionStatuses.size, '个加密状态')
+  } catch (error) {
+    console.error('初始化加密状态失败:', error)
+  }
+  
   // 初始化数据
   await loadData()
   
   // 加载上次编辑的笔记
   loadLastEditedNote()
+  
+  // 如果有刷新标记，在数据加载完成后再处理
+  if (needRefreshOnMount === 'true') {
+    localStorage.removeItem('need-refresh-tips')
+    try {
+      await tipsStore.fetchAllTips()
+      notes.value.splice(0, notes.value.length, ...tipsStore.tips)
+      recountAllNotebookCounts()
+      console.log('onMounted - 笔记数据已刷新，共', notes.value.length, '条笔记')
+    } catch (error) {
+      console.error('onMounted - 刷新笔记数据失败:', error)
+    }
+  }
 })
 
 // 组件被keep-alive缓存后重新激活时触发
-onActivated(() => {
-  console.log('MainLayout被重新激活')
+onActivated(async () => {
+
   
-  // 不重新加载数据，保持当前状态
-  // 只有在需要定位到笔记时才执行相关操作
+  // 检查路由参数中的刷新信号
+  const routeRefresh = router.currentRoute.value.query.refresh
+  
+  // 检查是否需要刷新数据（比如从AI助手返回时有新保存的笔记）
+  const needRefresh = localStorage.getItem('need-refresh-tips')
+
+  
+  // 如果有路由参数或 localStorage 标记，都触发刷新
+  if (needRefresh === 'true' || routeRefresh === 'tips') {
+    localStorage.removeItem('need-refresh-tips')
+    
+    // 清除路由参数
+    if (routeRefresh === 'tips') {
+      console.log('清除路由刷新参数')
+      router.replace({ path: '/', query: {} })
+    }
+    
+    // 重新加载笔记数据
+    isLoading.value = true
+    try {
+      console.log('正在从 tipsStore 获取最新笔记数据...')
+      await tipsStore.fetchAllTips()
+      
+      const oldCount = notes.value.length
+      
+      // 使用数组的 splice 方法来触发响应式更新
+      notes.value.splice(0, notes.value.length, ...tipsStore.tips)
+      const newCount = notes.value.length
+      
+      recountAllNotebookCounts()
+      console.log(`笔记数据已刷新，从 ${oldCount} 条更新为 ${newCount} 条笔记`)
+      
+      // 如果有新增笔记，选择最新的一个
+      if (newCount > oldCount && notes.value.length > 0) {
+        // 选择最新更新的笔记
+        const latestNote = notes.value.reduce((latest, current) => {
+          return (current.updated_at || 0) > (latest.updated_at || 0) ? current : latest
+        })
+        selectedNoteId.value = latestNote.id
+        console.log('自动选择最新笔记:', latestNote.title)
+        
+        // 如果新笔记属于某个分类，自动选中该分类
+        if (latestNote.category_id) {
+          selectedNotebookId.value = latestNote.category_id
+          console.log('自动选择笔记分类:', latestNote.category_id)
+        }
+      }
+    } catch (error) {
+      console.error('刷新笔记数据失败:', error)
+    } finally {
+      isLoading.value = false
+    }
+  } 
+  
+  // 确保选中的笔记可见，但不触发数据重载
   if (selectedNoteId.value) {
-    // 确保选中的笔记可见，但不触发数据重载
     nextTick(() => {
       const element = document.querySelector(`[data-note-id="${selectedNoteId.value}"]`)
       if (element) {
@@ -897,6 +1097,35 @@ watch(selectedNoteId, (newId) => {
     localStorage.setItem('lastEditedNoteId', newId)
   }
 })
+
+// 监听 tipsStore 中笔记数据的变化
+watch(() => tipsStore.tips, (newTips, _oldTips) => {
+
+  // 如果 tipsStore 中的笔记数量比本地更多，说明有新笔记
+  if (newTips && newTips.length > notes.value.length) {
+    
+    // 记录旧的数量
+    const oldCount = notes.value.length
+    
+    // 同步数据
+    notes.value.splice(0, notes.value.length, ...newTips)
+    recountAllNotebookCounts()
+    
+    
+    // 如果有新增笔记，选择最新的一个
+    if (newTips.length > oldCount) {
+      const latestNote = newTips.reduce((latest, current) => {
+        return (current.updated_at || 0) > (latest.updated_at || 0) ? current : latest
+      })
+      selectedNoteId.value = latestNote.id
+      
+      // 如果新笔记属于某个分类，自动选中该分类
+      if (latestNote.category_id) {
+        selectedNotebookId.value = latestNote.category_id
+      }
+    }
+  }
+}, { deep: true })
 
 // 加载上次编辑的笔记
 async function loadLastEditedNote() {
@@ -977,6 +1206,23 @@ watch(sidebarCollapsed, (newValue) => {
     
     // 直接设置HTML属性，确保立即生效
     document.documentElement.setAttribute('data-sidebar-collapsed', newValue ? 'true' : 'false')
+  }
+})
+
+// 监听全局搜索查询变化
+watch(() => navSearchQuery.value, (newQuery, oldQuery) => {
+  // 当用户开始搜索或更改搜索内容时，清除解锁状态以确保安全性
+  if (newQuery.trim() !== oldQuery?.trim()) {
+    encryptionStore.lockAllItems().then(() => {
+      console.log('全局搜索内容变化，已清除所有解锁状态')
+    }).catch(error => {
+      console.error('清除解锁状态失败:', error)
+    })
+    
+    // 重新加载数据以确保显示正确的加密状态
+    nextTick(async () => {
+      await refreshNotes()
+    })
   }
 })
 
@@ -1300,12 +1546,39 @@ async function loadData() {
   isLoading.value = true
   try {
     await tipsStore.initializeData()
+    
     tags.value = tipsStore.tags
     notebooks.value = categoriesToNotebooks(tipsStore.categories)
     notes.value = tipsStore.tips
+    
+    // 确保加密状态已经加载，如果没有则重新加载
+    if (encryptionStore.encryptionStatuses.size === 0) {
+      console.log('loadData: 加密状态为空，重新加载...')
+      await encryptionStore.fetchEncryptionStatuses()
+      console.log('loadData: 加密状态加载完成，共', encryptionStore.encryptionStatuses.size, '个状态')
+    }
+    
     recountAllNotebookCounts()
+    
+    // 验证当前选中的笔记本是否还存在
+    if (selectedNotebookId.value) {
+      const notebookExists = findNotebookById(notebooks.value, selectedNotebookId.value)
+      if (!notebookExists) {
+        selectedNotebookId.value = undefined
+        selectedNoteId.value = undefined
+      }
+    }
+    
+    // 验证当前选中的笔记是否还存在
+    if (selectedNoteId.value) {
+      const noteExists = notes.value.find(note => note.id === selectedNoteId.value)
+      if (!noteExists) {
+        selectedNoteId.value = undefined
+      }
+    }
+    
   } catch (error) {
-    console.error('加载数据失败:', error)
+    console.error('[MainLayout] 加载数据失败:', error)
   } finally {
     isLoading.value = false
   }
@@ -1315,13 +1588,17 @@ async function loadData() {
 function collectNotebookIds(notebooks: any[], targetId: string): string[] {
   for (const nb of notebooks) {
     if (nb.id === targetId) {
-      return [nb.id, ...collectAllChildIds(nb)]
+      const result = [nb.id, ...collectAllChildIds(nb)]
+      return result
     }
     if (nb.children && nb.children.length > 0) {
       const found = collectNotebookIds(nb.children, targetId)
-      if (found.length > 0) return found
+      if (found.length > 0) {
+        return found
+      }
     }
   }
+  
   return []
 }
 
@@ -1348,6 +1625,239 @@ async function refreshNotes() {
   } finally {
     isLoading.value = false
   }
+}
+
+// 加密功能相关方法
+function handlePasswordConfirm(password: string) {
+  if (!currentEncryptionTarget.value) return
+  
+  const { type, id } = currentEncryptionTarget.value
+  
+  if (passwordDialogMode.value === 'encrypt') {
+    if (type === 'note') {
+      performNoteEncryption(id, password)
+    } else {
+      performNotebookEncryption(id, password)
+    }
+  } else if (passwordDialogMode.value === 'decrypt') {
+    if (type === 'note') {
+      performNoteDecryption(id, password)
+    } else {
+      performNotebookDecryption(id, password)
+    }
+  } else if (passwordDialogMode.value === 'unlock') {
+    if (type === 'note') {
+      performNoteUnlock(id, password)
+    } else {
+      performNotebookUnlock(id, password)
+    }
+  }
+}
+
+function handlePasswordCancel() {
+  showPasswordDialog.value = false
+  currentEncryptionTarget.value = null
+}
+
+// 笔记加密
+async function performNoteEncryption(noteId: string, password: string) {
+  try {
+    const success = await encryptionStore.encryptNote(noteId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      // 刷新笔记数据
+      await refreshNotes()
+      // alert('笔记加密成功！')
+    } else {
+      alert('笔记加密失败，请重试。')
+    }
+  } catch (error) {
+    console.error('加密笔记失败:', error)
+    alert('加密失败: ' + error)
+  }
+}
+
+// 笔记解密
+async function performNoteDecryption(noteId: string, password: string) {
+  try {
+    const success = await encryptionStore.decryptNote(noteId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      // 刷新笔记数据
+      await refreshNotes()
+      // alert('笔记解密成功！')
+    } else {
+      alert('密码错误或解密失败，请重试。')
+    }
+  } catch (error) {
+    console.error('解密笔记失败:', error)
+    alert('解密失败: ' + error)
+  }
+}
+
+// 笔记解锁
+async function performNoteUnlock(noteId: string, password: string) {
+  try {
+    const success = await encryptionStore.unlockNote(noteId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      
+      console.log('笔记解锁成功，正在获取解密内容...')
+      
+      // 解锁成功后，获取解密后的内容并更新当前笔记
+      const decryptedContent = await encryptionStore.getUnlockedNoteContent(noteId)
+      if (decryptedContent !== null) {
+        console.log('成功获取解密内容，长度:', decryptedContent.length)
+        
+        // 更新笔记列表中的对应项
+        const noteIndex = notes.value.findIndex(n => n.id === noteId)
+        if (noteIndex !== -1) {
+          // 创建一个新的笔记对象来触发响应式更新
+          const updatedNote = { 
+            ...notes.value[noteIndex], 
+            content: decryptedContent 
+          }
+          
+          // 使用Vue的响应式方式更新数组
+          notes.value.splice(noteIndex, 1, updatedNote)
+          
+          console.log('笔记内容已更新，当前内容预览:', decryptedContent.substring(0, 100))
+        } else {
+          console.error('找不到要更新的笔记，noteId:', noteId)
+        }
+      } else {
+        console.error('获取解密内容失败，返回null')
+        alert('获取解密内容失败，请重试。')
+      }
+      
+      // 注意：这里不再调用refreshNotes()，避免重新获取占位符内容
+      console.log('笔记解锁成功，已更新内容显示')
+    } else {
+      alert('密码错误，请重试。')
+    }
+  } catch (error) {
+    console.error('解锁笔记失败:', error)
+    alert('解锁失败: ' + error)
+  }
+}
+
+// 笔记本加密
+async function performNotebookEncryption(notebookId: string, password: string) {
+  try {
+    const success = await encryptionStore.encryptNotebook(notebookId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      // 刷新数据
+      await loadData()
+      alert('笔记本加密成功！')
+    } else {
+      alert('笔记本加密失败，请重试。')
+    }
+  } catch (error) {
+    console.error('加密笔记本失败:', error)
+    alert('加密失败: ' + error)
+  }
+}
+
+// 笔记本解密
+async function performNotebookDecryption(notebookId: string, password: string) {
+  try {
+    const success = await encryptionStore.decryptNotebook(notebookId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      // 刷新数据
+      await loadData()
+      alert('笔记本解密成功！')
+    } else {
+      alert('密码错误或解密失败，请重试。')
+    }
+  } catch (error) {
+    console.error('解密笔记本失败:', error)
+    alert('解密失败: ' + error)
+  }
+}
+
+// 笔记本解锁
+async function performNotebookUnlock(notebookId: string, password: string) {
+  try {
+    const success = await encryptionStore.unlockNotebook(notebookId, password)
+    if (success) {
+      showPasswordDialog.value = false
+      currentEncryptionTarget.value = null
+      // 刷新数据以显示解锁的内容
+      await loadData()
+    } else {
+      alert('密码错误，请重试。')
+    }
+  } catch (error) {
+    console.error('解锁笔记本失败:', error)
+    alert('解锁失败: ' + error)
+  }
+}
+
+// 处理笔记加密请求
+function handleNoteEncryption(noteId: string) {
+  const note = notes.value.find(n => n.id === noteId)
+  if (!note) return
+  
+  currentEncryptionTarget.value = { type: 'note', id: noteId }
+  passwordDialogMode.value = 'encrypt'
+  passwordDialogTitle.value = '加密笔记'
+  passwordDialogMessage.value = `确定要加密笔记 "${note.title}" 吗？加密后需要密码才能查看内容。`
+  showPasswordDialog.value = true
+}
+
+// 处理笔记解密请求
+function handleNoteDecryption(noteId: string) {
+  const note = notes.value.find(n => n.id === noteId)
+  if (!note) return
+  
+  currentEncryptionTarget.value = { type: 'note', id: noteId }
+  passwordDialogMode.value = 'decrypt'
+  passwordDialogTitle.value = '解密笔记'
+  passwordDialogMessage.value = `请输入密码来解密笔记 "${note.title}"`
+  showPasswordDialog.value = true
+}
+
+// 处理笔记本加密请求
+function handleNotebookEncryption(notebookId: string) {
+  const notebook = findNotebookById(notebooks.value, notebookId)
+  if (!notebook) return
+  
+  currentEncryptionTarget.value = { type: 'notebook', id: notebookId }
+  passwordDialogMode.value = 'encrypt'
+  passwordDialogTitle.value = '加密笔记本'
+  passwordDialogMessage.value = `确定要加密笔记本 "${notebook.name}" 吗？加密后该笔记本下的所有内容都需要密码才能查看。`
+  showPasswordDialog.value = true
+}
+
+// 处理笔记本解密请求
+function handleNotebookDecryption(notebookId: string) {
+  const notebook = findNotebookById(notebooks.value, notebookId)
+  if (!notebook) return
+  
+  currentEncryptionTarget.value = { type: 'notebook', id: notebookId }
+  passwordDialogMode.value = 'decrypt'
+  passwordDialogTitle.value = '解密笔记本'
+  passwordDialogMessage.value = `请输入密码来解密笔记本 "${notebook.name}"`
+  showPasswordDialog.value = true
+}
+
+// 处理笔记解锁请求
+function handleNoteUnlock(noteId: string) {
+  const note = notes.value.find(n => n.id === noteId)
+  if (!note) return
+  
+  currentEncryptionTarget.value = { type: 'note', id: noteId }
+  passwordDialogMode.value = 'unlock'
+  passwordDialogTitle.value = '解锁笔记'
+  passwordDialogMessage.value = `请输入密码来解锁笔记 "${note.title}"`
+  showPasswordDialog.value = true
 }
 </script>
 

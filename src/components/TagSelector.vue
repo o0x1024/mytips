@@ -217,7 +217,6 @@ async function fetchAvailableTags() {
   try {
     // 直接从后端获取所有标签
     availableTags.value = await invoke('get_all_tags') as Tag[]
-    console.log('获取到的标签:', availableTags.value)
     
     // 更新过滤的标签
     filterAvailableTags()

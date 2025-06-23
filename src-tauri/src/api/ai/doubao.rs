@@ -1,8 +1,8 @@
-use crate::api::{settings::get_client_with_proxy, TextStream};
 use crate::api::ai::models::format_ai_error;
+use crate::api::{settings::get_client_with_proxy, TextStream};
+use base64::{engine::general_purpose, Engine as _};
 use genai::chat::ChatMessage;
 use tokio::sync::mpsc;
-use base64::{Engine as _, engine::general_purpose};
 
 // 从GenAI库的MessageContent中提取纯文本内容
 fn extract_text_content(content: &genai::chat::MessageContent) -> String {
@@ -13,7 +13,7 @@ fn extract_text_content(content: &genai::chat::MessageContent) -> String {
         if let Some(text) = json_value.as_str() {
             return text.to_string();
         }
-        
+
         // 如果content是对象，尝试提取Text字段
         if let Some(obj) = json_value.as_object() {
             if let Some(text) = obj.get("Text") {
@@ -28,11 +28,11 @@ fn extract_text_content(content: &genai::chat::MessageContent) -> String {
                 }
             }
         }
-        
+
         // 如果都不匹配，返回JSON字符串的表示（作为fallback）
         return json_value.to_string();
     }
-    
+
     // 如果序列化失败，返回空字符串
     String::new()
 }
@@ -43,16 +43,16 @@ pub async fn stream_from_doubao(
     message: String,
     custom_model_name: Option<&str>,
 ) -> Result<TextStream, String> {
-    use serde_json::{json, Value};
     use futures::StreamExt;
+    use serde_json::{json, Value};
 
     println!("启动豆包流式请求");
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称
     let model_name = custom_model_name.unwrap_or("doubao-1.5-pro-32k");
 
@@ -109,7 +109,7 @@ pub async fn stream_from_doubao(
 
                         if line.starts_with("data: ") {
                             let data = &line[6..]; // 移除 "data: " 前缀
-                            
+
                             if data == "[DONE]" {
                                 break;
                             }
@@ -153,10 +153,10 @@ pub async fn doubao_chat_with_history(
     use serde_json::{json, Value};
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称
     let model_name = custom_model_name.unwrap_or("doubao-1.5-pro-32k");
 
@@ -167,14 +167,14 @@ pub async fn doubao_chat_with_history(
             // 确保角色名是小写的，符合豆包API要求
             let role = match msg.role.to_string().to_lowercase().as_str() {
                 "user" => "user",
-                "assistant" => "assistant", 
+                "assistant" => "assistant",
                 "system" => "system",
                 _ => "user", // 默认为user
             };
-            
+
             // 提取消息内容，处理GenAI库的复杂content格式
             let content = extract_text_content(&msg.content);
-            
+
             json!({
                 "role": role,
                 "content": content
@@ -228,16 +228,16 @@ pub async fn doubao_stream_chat_with_history(
     messages: Vec<ChatMessage>,
     custom_model_name: Option<&str>,
 ) -> Result<TextStream, String> {
-    use serde_json::{json, Value};
     use futures::StreamExt;
+    use serde_json::{json, Value};
 
     println!("启动豆包历史对话流式请求");
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称
     let model_name = custom_model_name.unwrap_or("doubao-1.5-pro-32k");
 
@@ -248,14 +248,14 @@ pub async fn doubao_stream_chat_with_history(
             // 确保角色名是小写的，符合豆包API要求
             let role = match msg.role.to_string().to_lowercase().as_str() {
                 "user" => "user",
-                "assistant" => "assistant", 
+                "assistant" => "assistant",
                 "system" => "system",
                 _ => "user", // 默认为user
             };
-            
+
             // 提取消息内容，处理GenAI库的复杂content格式
             let content = extract_text_content(&msg.content);
-            
+
             json!({
                 "role": role,
                 "content": content
@@ -311,7 +311,7 @@ pub async fn doubao_stream_chat_with_history(
 
                         if line.starts_with("data: ") {
                             let data = &line[6..]; // 移除 "data: " 前缀
-                            
+
                             if data == "[DONE]" {
                                 break;
                             }
@@ -349,7 +349,7 @@ pub async fn doubao_stream_chat_with_history(
 // 检测图片格式的辅助函数
 fn detect_image_format(filename: &str, file_data: &[u8]) -> Result<&'static str, String> {
     let filename_lower = filename.to_lowercase();
-    
+
     // 首先通过文件头（魔数）检测真实格式
     if file_data.len() >= 8 {
         // PNG: 89 50 4E 47 0D 0A 1A 0A
@@ -373,11 +373,13 @@ fn detect_image_format(filename: &str, file_data: &[u8]) -> Result<&'static str,
             return Ok("bmp");
         }
         // TIFF: II*\0 或 MM\0*
-        if file_data.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || file_data.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) {
+        if file_data.starts_with(&[0x49, 0x49, 0x2A, 0x00])
+            || file_data.starts_with(&[0x4D, 0x4D, 0x00, 0x2A])
+        {
             return Ok("tiff");
         }
     }
-    
+
     // 如果魔数检测失败，回退到文件扩展名检测
     if filename_lower.ends_with(".png") || filename_lower.ends_with(".apng") {
         Ok("png")
@@ -397,9 +399,13 @@ fn detect_image_format(filename: &str, file_data: &[u8]) -> Result<&'static str,
         Ok("icns")
     } else if filename_lower.ends_with(".sgi") {
         Ok("sgi")
-    } else if filename_lower.ends_with(".j2c") || filename_lower.ends_with(".j2k") || 
-              filename_lower.ends_with(".jp2") || filename_lower.ends_with(".jpc") || 
-              filename_lower.ends_with(".jpf") || filename_lower.ends_with(".jpx") {
+    } else if filename_lower.ends_with(".j2c")
+        || filename_lower.ends_with(".j2k")
+        || filename_lower.ends_with(".jp2")
+        || filename_lower.ends_with(".jpc")
+        || filename_lower.ends_with(".jpf")
+        || filename_lower.ends_with(".jpx")
+    {
         Ok("jp2")
     } else {
         // 如果无法识别格式，返回错误
@@ -417,10 +423,10 @@ pub async fn doubao_chat_with_images(
     use serde_json::{json, Value};
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称，使用支持视觉的模型
     let model_name = custom_model_name.unwrap_or("doubao-1.5-vision-pro-32k");
 
@@ -439,7 +445,7 @@ pub async fn doubao_chat_with_images(
     for (filename, file_data) in image_files {
         // 将图片数据转换为Base64
         let base64_image = general_purpose::STANDARD.encode(&file_data);
-        
+
         // 检测图片格式
         let image_format = match detect_image_format(&filename, &file_data) {
             Ok(format) => format,
@@ -511,16 +517,16 @@ pub async fn doubao_stream_chat_with_images(
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
 ) -> Result<TextStream, String> {
-    use serde_json::{json, Value};
     use futures::StreamExt;
+    use serde_json::{json, Value};
 
     println!("启动豆包视觉流式请求");
 
     let client = get_client_with_proxy().await?;
-    
+
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-    
+
     // 获取模型名称，使用支持视觉的模型
     let model_name = custom_model_name.unwrap_or("doubao-1.5-vision-pro-32k");
 
@@ -539,7 +545,7 @@ pub async fn doubao_stream_chat_with_images(
     for (filename, file_data) in image_files {
         // 将图片数据转换为Base64
         let base64_image = general_purpose::STANDARD.encode(&file_data);
-        
+
         // 检测图片格式
         let image_format = match detect_image_format(&filename, &file_data) {
             Ok(format) => format,
@@ -612,7 +618,7 @@ pub async fn doubao_stream_chat_with_images(
 
                         if line.starts_with("data: ") {
                             let data = &line[6..]; // 移除 "data: " 前缀
-                            
+
                             if data == "[DONE]" {
                                 break;
                             }

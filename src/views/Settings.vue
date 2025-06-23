@@ -8,36 +8,98 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
-        <h1 class="text-lg font-medium ml-2">设置</h1>
+        <h1 class="text-xl font-bold">设置 - {{ getCurrentPageTitle() }}</h1>
       </div>
     </div>
 
-    <!-- 左侧完整侧边导航栏 -->
-    <div class="flex-1 overflow-auto p-0 flex">
-      <nav
-        class="w-56 min-w-[180px] max-w-[220px] h-screen bg-base-100 flex flex-col py-8 px-2 gap-1 shadow-sm sticky top-0 left-0 z-20">
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('appearance')">外观</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('clipboard')">临时笔记</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('network')">网络</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('data')">数据管理</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('app')">应用设置</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3 mb-1"
-          @click="scrollToSection('ai')">AI助手</button>
-        <button class="btn btn-ghost justify-start text-base rounded-none px-4 py-3"
-          @click="scrollToSection('about')">关于</button>
+    <div class="flex flex-1 overflow-hidden">
+      <!-- 左侧导航栏 -->
+      <nav class="w-64 min-w-[240px] max-w-[280px] bg-base-100 flex flex-col py-6 px-3 gap-2 shadow-lg border-r border-base-200">
+        <div>
+          <h2 class="text-lg font-semibold text-base-content px-3 mb-4">设置选项</h2>
+        </div>
+        
+        <button 
+          v-for="page in settingsPages" 
+          :key="page.id"
+          class="nav-button group flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-all duration-200 ease-in-out hover:bg-base-200 hover:shadow-sm"
+          :class="{ 
+            'bg-primary text-primary-content shadow-md border-primary': currentPage === page.id,
+            'text-base-content hover:text-primary border-transparent': currentPage !== page.id 
+          }"
+          @click="setCurrentPage(page.id)"
+        >
+          <!-- 图标 -->
+          <div class="flex-shrink-0 w-5 h-5" :class="{ 'text-primary-content': currentPage === page.id, 'text-base-content/70 group-hover:text-primary': currentPage !== page.id }">
+            <!-- 外观图标 -->
+            <svg v-if="page.id === 'appearance'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+            </svg>
+            
+            <!-- 临时笔记图标 -->
+            <svg v-else-if="page.id === 'clipboard'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+            
+            <!-- 网络图标 -->
+            <svg v-else-if="page.id === 'network'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+            </svg>
+            
+            <!-- 数据管理图标 -->
+            <svg v-else-if="page.id === 'data'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+            
+            <!-- 应用设置图标 -->
+            <svg v-else-if="page.id === 'app'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            
+            <!-- AI助手图标 -->
+            <svg v-else-if="page.id === 'ai'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            
+            <!-- 更新图标 -->
+            <svg v-else-if="page.id === 'update'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            
+            <!-- 关于图标 -->
+            <svg v-else-if="page.id === 'about'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          
+          <!-- 标题 -->
+          <span class="font-medium text-sm flex-1">{{ page.title }}</span>
+          
+          <!-- 活跃状态指示器 -->
+          <div v-if="currentPage === page.id" class="w-2 h-2 bg-primary-content rounded-full opacity-80"></div>
+          
+          <!-- 箭头指示器（非活跃状态） -->
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-0 group-hover:opacity-60 transition-opacity duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+        
+        <!-- 底部装饰 -->
+        <div class="mt-auto pt-4 border-t border-base-200">
+          <div class="text-xs text-base-content/60 px-3 text-center">
+            MyTips 设置中心
+          </div>
+        </div>
       </nav>
-      <div class="flex-1 max-w-2xl mx-auto p-6">
-        <!-- 设置内容 -->
-        <div class="max-w-2xl mx-auto">
+
+      <!-- 右侧内容区域 -->
+      <div class="flex-1 overflow-auto p-6">
+        <div class="max-w-3xl mx-auto">
           <!-- 外观设置 -->
-          <div id="appearance" class="card bg-base-100 shadow-md mb-6">
+          <div v-if="currentPage === 'appearance'" class="card bg-base-100 shadow-md">
             <div class="card-body">
-              <h2 class="card-title text-primary mb-4">外观</h2>
+              <h2 class="card-title text-primary mb-4">外观设置</h2>
 
               <!-- 主题选择 -->
               <div class="form-control mb-6">
@@ -76,10 +138,8 @@
                       <div class="p-3 rounded-lg bg-secondary text-secondary-content text-center">次色</div>
                       <div class="p-3 rounded-lg bg-accent text-accent-content text-center">强调色</div>
                       <div class="p-3 rounded-lg bg-neutral text-neutral-content text-center">中性色</div>
-                      <div class="p-3 rounded-lg bg-base-100 text-base-content border border-base-300 text-center">背景色
-                      </div>
-                      <div class="p-3 rounded-lg bg-base-200 text-base-content border border-base-300 text-center">背景色 2
-                      </div>
+                      <div class="p-3 rounded-lg bg-base-100 text-base-content border border-base-300 text-center">背景色</div>
+                      <div class="p-3 rounded-lg bg-base-200 text-base-content border border-base-300 text-center">背景色 2</div>
                     </div>
                   </div>
                 </div>
@@ -219,7 +279,7 @@
           </div>
 
           <!-- 临时笔记设置 -->
-          <div id="clipboard" class="card bg-base-100 shadow-md mb-6">
+          <div v-else-if="currentPage === 'clipboard'" class="card bg-base-100 shadow-md">
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">临时笔记设置</h2>
 
@@ -234,6 +294,18 @@
                 </label>
                 <p class="text-xs text-base-content/80 mt-1">
                   启用后，系统将自动监听并捕获剪贴板变化。关闭后，只能通过快捷键手动添加内容
+                </p>
+              </div>
+
+              <!-- 应用白名单设置 -->
+              <div class="form-control mb-4">
+                <label class="label cursor-pointer justify-start gap-4">
+                  <span class="label-text">启用应用白名单</span>
+                  <input type="checkbox" class="toggle toggle-primary"
+                    v-model="clipboardSettings.enableAppWhitelist" @change="updateClipboardSettings" />
+                </label>
+                <p class="text-xs text-base-content/80 mt-1">
+                  启用后，来自白名单应用的剪贴板内容将不会被添加到临时笔记区
                 </p>
               </div>
 
@@ -271,6 +343,102 @@
                 <p class="text-xs text-base-content/80 mt-1">
                   启用后，将记录剪贴板内容的来源应用或窗口名称
                 </p>
+              </div>
+
+              <div class="divider">应用白名单管理</div>
+
+              <!-- 白名单应用管理 -->
+              <div v-if="clipboardSettings.enableAppWhitelist" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">白名单应用管理</span>
+                </label>
+                
+                <!-- 添加新应用 -->
+                <div class="flex gap-2 mb-3">
+                  <input 
+                    type="text" 
+                    v-model="newWhitelistApp" 
+                    placeholder="输入应用名称（如：chrome.exe, notepad.exe）" 
+                    class="input input-bordered flex-1"
+                    @keydown.enter="addWhitelistApp"
+                  />
+                  <button 
+                    class="btn btn-primary btn-sm" 
+                    @click="addWhitelistApp"
+                    :disabled="!newWhitelistApp.trim()"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    添加
+                  </button>
+                </div>
+
+                <!-- 预设应用快速添加 -->
+                <div class="mb-3">
+                  <p class="text-sm text-base-content/80 mb-2">常用应用：</p>
+                  <div class="flex flex-wrap gap-2">
+                    <button 
+                      v-for="preset in presetWhitelistApps" 
+                      :key="preset.name"
+                      class="btn btn-xs btn-outline"
+                      @click="addPresetApp(preset.name)"
+                      :disabled="clipboardSettings.whitelistApps.includes(preset.name)"
+                    >
+                      {{ preset.label }}
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 白名单应用列表 -->
+                <div class="bg-base-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <div v-if="clipboardSettings.whitelistApps.length === 0" class="text-center py-4 text-base-content/60">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p class="text-sm">暂无白名单应用</p>
+                  </div>
+                  
+                  <div v-else class="space-y-2">
+                    <div 
+                      v-for="(app, index) in clipboardSettings.whitelistApps" 
+                      :key="index"
+                      class="flex items-center justify-between p-2 bg-base-100 rounded border border-base-300"
+                    >
+                      <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-base-content/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span class="text-sm font-mono">{{ app }}</span>
+                      </div>
+                      <button 
+                        class="btn btn-xs btn-error btn-outline"
+                        @click="removeWhitelistApp(index)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="mt-2 text-xs text-base-content/60">
+                  <p>💡 提示：</p>
+                  <ul class="list-disc list-inside ml-2 space-y-1">
+                    <li>Windows: 使用进程名称（如 chrome.exe, notepad.exe）</li>
+                    <li>macOS: 使用应用名称（如 Google Chrome, TextEdit）</li>
+                    <li>Linux: 使用进程名称（如 chrome, gedit）</li>
+                  </ul>
+                </div>
+              </div>
+
+              <!-- 白名单功能未启用时的提示 -->
+              <div v-else class="alert alert-info">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>请先启用应用白名单功能，然后管理白名单应用列表</span>
               </div>
 
               <div class="divider">数据保留设置</div>
@@ -373,9 +541,9 @@
           </div>
 
           <!-- 网络设置 -->
-          <div id="network" class="card bg-base-100 shadow-md mb-6">
+          <div v-else-if="currentPage === 'network'" class="card bg-base-100 shadow-md">
             <div class="card-body">
-              <h2 class="card-title text-primary mb-4">网络</h2>
+              <h2 class="card-title text-primary mb-4">网络设置</h2>
 
               <!-- 代理设置 -->
               <div class="form-control">
@@ -458,7 +626,7 @@
           </div>
 
           <!-- 数据管理 -->
-          <div id="data" class="card bg-base-100 shadow-md mb-6">
+          <div v-else-if="currentPage === 'data'" class="card bg-base-100 shadow-md">
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">数据管理</h2>
 
@@ -500,7 +668,7 @@
           </div>
 
           <!-- 应用设置 -->
-          <div id="app" class="card bg-base-100 shadow-md mb-6">
+          <div v-else-if="currentPage === 'app'" class="card bg-base-100 shadow-md">
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">应用设置</h2>
 
@@ -517,10 +685,11 @@
             </div>
           </div>
 
-          <!-- 在外观设置下方新增AI默认模型设置 -->
-          <div id="ai" class="card bg-base-100 shadow-md mb-6">
+          <!-- AI助手 -->
+          <div v-else-if="currentPage === 'ai'" class="card bg-base-100 shadow-md">
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">AI助手</h2>
+              
               <div class="form-control mb-4">
                 <label class="label">
                   <span class="label-text">全局AI默认模型</span>
@@ -537,23 +706,350 @@
                 </select>
                 <p class="text-xs text-base-content/80 mt-1">设置后，AI相关功能将默认使用该模型</p>
               </div>
+
+              <div class="divider">API配置</div>
+
+              <!-- 模型选择器 -->
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">配置模型</span>
+                </label>
+                <select v-model="selectedConfigModel" class="select select-bordered w-full" @change="loadApiConfig">
+                  <option disabled value="">选择要配置的AI模型</option>
+                  <option v-for="model in availableModels" :key="model.id" :value="model.id">
+                    {{ model.name }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- API密钥配置 -->
+              <div v-if="selectedConfigModel" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">API密钥</span>
+                </label>
+                <div class="relative">
+                  <input 
+                    :type="showApiKey ? 'text' : 'password'" 
+                    v-model="apiConfig.apiKey" 
+                    placeholder="输入您的API密钥"
+                    class="input input-bordered w-full pr-10" 
+                  />
+                  <button @click="showApiKey = !showApiKey" type="button"
+                    class="absolute inset-y-0 right-0 flex items-center px-3">
+                    <svg v-if="showApiKey" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                </div>
+                <p class="text-xs text-base-content/80 mt-1">API密钥仅存储在本地，不会上传到任何服务器</p>
+              </div>
+
+              <!-- 自定义模型名称 -->
+              <div v-if="selectedConfigModel" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">自定义模型名称 <span class="text-sm opacity-70">(可选)</span></span>
+                  <button class="btn btn-xs btn-outline" @click="openModelConfigModal(selectedConfigModel)"
+                    :disabled="!selectedConfigModel">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                    </svg>
+                    配置模型
+                  </button>
+                </label>
+
+                <!-- 可搜索的模型名称选择器 -->
+                <div class="relative">
+                  <input type="text" v-model="apiConfig.customModelName" :placeholder="getDefaultModelName(selectedConfigModel)"
+                    class="input input-bordered w-full" @focus="showModelSuggestions = true" @input="filterModelSuggestions"
+                    @blur="hideModelSuggestions" autocomplete="off" />
+
+                  <!-- 模型建议下拉框 -->
+                  <div v-if="showModelSuggestions && filteredModelSuggestions.length > 0"
+                    class="absolute z-10 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
+                    <div v-for="suggestion in filteredModelSuggestions" :key="suggestion.name"
+                      class="px-3 py-2 hover:bg-base-200 cursor-pointer border-b border-base-200 last:border-b-0"
+                      @mousedown.prevent="selectModelSuggestion(suggestion.name)">
+                      <div class="font-medium">{{ suggestion.name }}</div>
+                      <div class="text-sm text-base-content/70">{{ suggestion.description }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="text-xs text-base-content/80 mt-1">不同的API提供商可能使用不同的模型名称，您可以在此自定义或从建议中选择</p>
+              </div>
+
+              <!-- Max Tokens 配置 -->
+              <div v-if="selectedConfigModel" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">最大输出长度 (Max Tokens)</span>
+                  <span class="label-text-alt">{{ apiConfig.maxTokens || getDefaultMaxTokens(selectedConfigModel) }}</span>
+                </label>
+                <div class="flex gap-3 items-center">
+                  <input type="range" v-model.number="apiConfig.maxTokens" :min="getMinMaxTokens(selectedConfigModel)"
+                    :max="getMaxMaxTokens(selectedConfigModel)" :step="100" class="range range-primary flex-1" />
+                  <input type="number" v-model.number="apiConfig.maxTokens" :min="getMinMaxTokens(selectedConfigModel)"
+                    :max="getMaxMaxTokens(selectedConfigModel)" :step="100" class="input input-bordered w-20 text-center" />
+                </div>
+                <div class="flex justify-between text-xs text-base-content/70 mt-1">
+                  <span>{{ getMinMaxTokens(selectedConfigModel) }}</span>
+                  <span>默认: {{ getDefaultMaxTokens(selectedConfigModel) }}</span>
+                  <span>{{ getMaxMaxTokens(selectedConfigModel) }}</span>
+                </div>
+                <p class="text-xs text-base-content/80 mt-1">控制AI响应的最大长度，越高生成内容越长，但响应时间和成本也会增加</p>
+              </div>
+
+              <!-- 自定义API端点 -->
+              <div v-if="selectedConfigModel === 'custom'" class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">API端点</span>
+                </label>
+                <input type="text" v-model="apiConfig.apiEndpoint" placeholder="例如: https://api.example.com/v1/chat/completions"
+                  class="input input-bordered w-full" />
+              </div>
+
+              <!-- 保存按钮 -->
+              <div v-if="selectedConfigModel" class="form-control mt-6">
+                <button class="btn btn-primary" @click="saveApiConfig" :disabled="isSavingApiConfig">
+                  <span v-if="isSavingApiConfig">
+                    <span class="loading loading-spinner loading-xs mr-2"></span>
+                    保存中...
+                  </span>
+                  <span v-else>保存API配置</span>
+                </button>
+              </div>
+
+              <!-- API连接测试 -->
+              <div v-if="selectedConfigModel && apiConfig.apiKey" class="form-control mt-4">
+                <button class="btn btn-outline" @click="testApiConnection" :disabled="isTestingApi">
+                  <span v-if="isTestingApi">
+                    <span class="loading loading-spinner loading-xs mr-2"></span>
+                    测试中...
+                  </span>
+                  <span v-else>测试API连接</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 更新设置 -->
+          <div v-else-if="currentPage === 'update'" class="card bg-base-100 shadow-md">
+            <div class="card-body">
+              <h2 class="card-title text-primary mb-4">更新设置</h2>
+              
+              <!-- 当前版本信息 -->
+              <div class="mb-6">
+                <h3 class="text-lg font-medium mb-2">版本信息</h3>
+                <div class="flex items-center justify-between p-4 bg-base-200 rounded-lg">
+                  <div>
+                    <p class="font-medium">当前版本: {{ updateStore.currentVersion || '获取中...' }}</p>
+                    <p class="text-sm text-base-content/80 mt-1">
+                      上次检查: {{ formatLastCheckTime() }}
+                    </p>
+                  </div>
+                  <div v-if="updateStore.hasUpdate" class="badge badge-error">
+                    有新版本
+                  </div>
+                  <div v-else class="badge badge-success">
+                    已是最新
+                  </div>
+                </div>
+              </div>
+
+              <!-- 新版本信息 -->
+              <div v-if="updateStore.hasUpdate && updateStore.updateInfo" class="mb-6">
+                <h3 class="text-lg font-medium mb-2">新版本可用</h3>
+                <div class="p-4 bg-accent/10 border border-accent/20 rounded-lg">
+                  <p class="font-medium text-accent mb-2">
+                    版本 {{ updateStore.updateInfo.version }}
+                  </p>
+                  <p class="text-sm text-base-content/80 mb-2">
+                    发布时间: {{ formatDate(updateStore.updateInfo.pub_date) }}
+                  </p>
+                  <div v-if="updateStore.updateInfo.body" class="text-sm bg-base-200 p-3 rounded max-h-32 overflow-y-auto">
+                    <div v-html="formatReleaseNotes(updateStore.updateInfo.body)"></div>
+                  </div>
+                  <button 
+                    class="btn btn-accent btn-sm mt-3" 
+                    @click="showUpdateDialog = true"
+                  >
+                    立即更新
+                  </button>
+                </div>
+              </div>
+
+              <!-- 更新设置 -->
+              <div class="mb-6">
+                <h3 class="text-lg font-medium mb-4">更新设置</h3>
+                
+                <!-- 自动检查更新 -->
+                <div class="form-control mb-4">
+                  <label class="label cursor-pointer">
+                    <span class="label-text">自动检查更新</span>
+                    <input 
+                      type="checkbox" 
+                      class="checkbox checkbox-primary" 
+                      v-model="updateStore.autoCheck"
+                      @change="updateAutoCheckSetting"
+                    />
+                  </label>
+                  <div class="label">
+                    <span class="label-text-alt">启用后，应用会定期检查新版本</span>
+                  </div>
+                </div>
+
+                <!-- 检查间隔 -->
+                <div v-if="updateStore.autoCheck" class="form-control mb-4">
+                  <label class="label">
+                    <span class="label-text">检查间隔</span>
+                  </label>
+                  <select 
+                    class="select select-bordered w-full max-w-xs" 
+                    v-model="checkIntervalHours"
+                    @change="updateCheckInterval"
+                  >
+                    <option value="1">每小时</option>
+                    <option value="6">每6小时</option>
+                    <option value="12">每12小时</option>
+                    <option value="24">每天</option>
+                    <option value="168">每周</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 检查更新按钮 -->
+              <div class="flex flex-wrap gap-3">
+                <button 
+                  class="btn btn-primary" 
+                  @click="checkForUpdates"
+                  :disabled="updateStore.isChecking"
+                >
+                  <span v-if="updateStore.isChecking" class="loading loading-spinner loading-sm mr-2"></span>
+                  {{ updateStore.isChecking ? '检查中...' : '检查更新' }}
+                </button>
+                
+                <button 
+                  v-if="updateStore.hasUpdate" 
+                  class="btn btn-accent" 
+                  @click="showUpdateDialog = true"
+                >
+                  立即更新
+                </button>
+
+                <button 
+                  class="btn btn-outline btn-info" 
+                  @click="testWindowsUpdate"
+                  :disabled="isTestingWindowsUpdate"
+                >
+                  <span v-if="isTestingWindowsUpdate" class="loading loading-spinner loading-sm mr-2"></span>
+                  {{ isTestingWindowsUpdate ? '测试中...' : 'Windows更新测试' }}
+                </button>
+
+                <button 
+                  class="btn btn-outline btn-secondary" 
+                  @click="showPlatformInfo"
+                >
+                  平台信息
+                </button>
+              </div>
             </div>
           </div>
 
           <!-- 关于 -->
-          <div id="about" class="card bg-base-100 shadow-md mb-6">
+          <div v-else-if="currentPage === 'about'" class="card bg-base-100 shadow-md">
             <div class="card-body">
               <h2 class="card-title text-primary mb-4">关于</h2>
-              <p>MyTips v1.0.0</p>
+              <p>MyTips v{{ updateStore.currentVersion || '0.2.0' }}</p>
               <p class="text-sm text-base-content/80 mt-2">
                 一个简单的笔记管理应用，帮助你收集和整理有用的代码片段、文档和提示。
               </p>
             </div>
           </div>
-
         </div>
       </div>
     </div>
+
+    <!-- 更新对话框 -->
+    <UpdateDialog v-model="showUpdateDialog" />
+
+    <!-- 模型配置管理对话框 -->
+    <dialog ref="modelConfigModal" class="modal">
+      <div class="modal-box w-11/12 max-w-3xl">
+        <h3 class="font-bold text-lg mb-4">
+          配置 {{ getModelNameById(editingModelType) }} 的模型名称建议
+        </h3>
+
+        <!-- 添加新模型 -->
+        <div class="bg-base-200 rounded-lg p-4 mb-4">
+          <h4 class="font-medium mb-3">添加新模型</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="form-control">
+              <input type="text" v-model="newModelName" placeholder="模型名称" class="input input-bordered input-sm"
+                @keydown.enter="addNewModel" />
+            </div>
+            <div class="form-control">
+              <input type="text" v-model="newModelDescription" placeholder="模型描述" class="input input-bordered input-sm"
+                @keydown.enter="addNewModel" />
+            </div>
+          </div>
+          <div class="mt-3">
+            <button class="btn btn-sm btn-primary" @click="addNewModel"
+              :disabled="!newModelName.trim() || !newModelDescription.trim()">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+              </svg>
+              添加模型
+            </button>
+          </div>
+        </div>
+
+        <!-- 现有模型列表 -->
+        <div class="max-h-96 overflow-y-auto">
+          <div class="space-y-2">
+            <div v-for="(model, index) in editingModelList" :key="index"
+              class="flex items-center justify-between p-3 bg-base-100 rounded-lg border border-base-300">
+              <div class="flex-1">
+                <div class="font-medium">{{ model.name }}</div>
+                <div class="text-sm text-base-content/70">{{ model.description }}</div>
+              </div>
+              <button class="btn btn-xs btn-error ml-3" @click="removeModel(index)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="editingModelList.length === 0" class="text-center py-8 text-base-content/70">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2 opacity-50" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2M4 13h2m13-4V6a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M9 9V6a1 1 0 011-1h4a1 1 0 011 1v3" />
+            </svg>
+            <p>暂无模型配置</p>
+          </div>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn btn-ghost" @click="resetToDefault">重置为默认</button>
+          <button class="btn" @click="closeModelConfigModal">取消</button>
+          <button class="btn btn-primary" @click="saveModelConfig">保存配置</button>
+        </div>
+      </div>
+    </dialog>
   </div>
 </template>
 
@@ -562,9 +1058,43 @@ import { ref, onMounted, watch, computed, onActivated } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { message } from '@tauri-apps/plugin-dialog'
 import { useUIStore } from '../stores/uiStore'
+import { useUpdateStore } from '../stores/updateStore'
+import UpdateDialog from '../components/UpdateDialog.vue'
 import { enable, isEnabled, disable } from '@tauri-apps/plugin-autostart';
+import { useRouter } from 'vue-router'
 
 const uiStore = useUIStore()
+const updateStore = useUpdateStore()
+const router = useRouter()
+
+// 页面管理
+const currentPage = ref('appearance')
+const settingsPages = [
+  { id: 'appearance', title: '外观' },
+  { id: 'clipboard', title: '临时笔记' },
+  { id: 'network', title: '网络' },
+  { id: 'data', title: '数据管理' },
+  { id: 'app', title: '应用设置' },
+  { id: 'ai', title: 'AI助手' },
+  { id: 'update', title: '更新' },
+  { id: 'about', title: '关于' }
+]
+
+// 设置当前页面
+function setCurrentPage(pageId: string) {
+  currentPage.value = pageId
+}
+
+// 获取当前页面标题
+function getCurrentPageTitle() {
+  const page = settingsPages.find(p => p.id === currentPage.value)
+  return page ? page.title : '设置'
+}
+
+// 更新相关状态
+const showUpdateDialog = ref(false)
+const checkIntervalHours = ref(1)
+const isTestingWindowsUpdate = ref(false)
 
 // 主题设置
 const selectedTheme = ref(uiStore.settings.theme)
@@ -578,13 +1108,60 @@ const exactListWidth = ref<number>(Number(uiStore.settings.exactListWidth || uiS
 
 // 剪贴板设置
 const clipboardSettings = ref({
-  ...uiStore.settings.clipboard,
   enableMonitoring: true, // 默认启用剪贴板监听
+  enableAppWhitelist: false, // 默认关闭应用白名单
+  whitelistApps: [] as string[], // 白名单应用列表
+  ignoreSensitiveContent: false,
+  captureImages: false,
+  captureSourceInfo: false,
+  retentionDays: 30,
+  encryptStorage: false,
   shortcut: {
     modifiers: ['meta', 'shift'], // 默认组合键：Command/Ctrl + Shift
     key: 'c' // 默认按键：C
   }
 })
+
+// 初始化时合并用户设置
+if (uiStore.settings.clipboard) {
+  Object.assign(clipboardSettings.value, uiStore.settings.clipboard)
+}
+
+// 白名单相关变量
+const newWhitelistApp = ref('')
+
+// 预设的常用应用
+const presetWhitelistApps = [
+  // Windows
+  { name: 'chrome.exe', label: 'Chrome' },
+  { name: 'firefox.exe', label: 'Firefox' },
+  { name: 'edge.exe', label: 'Edge' },
+  { name: 'notepad.exe', label: '记事本' },
+  { name: 'winword.exe', label: 'Word' },
+  { name: 'excel.exe', label: 'Excel' },
+  { name: 'powerpnt.exe', label: 'PowerPoint' },
+  { name: 'code.exe', label: 'VS Code' },
+  { name: 'devenv.exe', label: 'Visual Studio' },
+  { name: 'slack.exe', label: 'Slack' },
+  { name: 'discord.exe', label: 'Discord' },
+  { name: 'teams.exe', label: 'Teams' },
+  // macOS
+  { name: 'Google Chrome', label: 'Chrome (Mac)' },
+  { name: 'Firefox', label: 'Firefox (Mac)' },
+  { name: 'Safari', label: 'Safari' },
+  { name: 'TextEdit', label: 'TextEdit' },
+  { name: 'Microsoft Word', label: 'Word (Mac)' },
+  { name: 'Microsoft Excel', label: 'Excel (Mac)' },
+  { name: 'Visual Studio Code', label: 'VS Code (Mac)' },
+  { name: 'Slack', label: 'Slack (Mac)' },
+  { name: 'Discord', label: 'Discord (Mac)' },
+  // Linux
+  { name: 'chrome', label: 'Chrome (Linux)' },
+  { name: 'firefox', label: 'Firefox (Linux)' },
+  { name: 'gedit', label: 'Gedit' },
+  { name: 'code', label: 'VS Code (Linux)' },
+  { name: 'slack', label: 'Slack (Linux)' }
+]
 
 // 快捷键相关
 const shortcutKeys = [
@@ -689,7 +1266,9 @@ async function syncClipboardSettingsToBackend() {
       capture_source_info: clipboardSettings.value.captureSourceInfo,
       retention_days: clipboardSettings.value.retentionDays,
       encrypt_storage: clipboardSettings.value.encryptStorage,
-      enable_monitoring: clipboardSettings.value.enableMonitoring
+      enable_monitoring: clipboardSettings.value.enableMonitoring,
+      enable_app_whitelist: clipboardSettings.value.enableAppWhitelist,
+      whitelist_apps: clipboardSettings.value.whitelistApps
     }
 
     // 保存到后端
@@ -723,6 +1302,8 @@ async function loadClipboardSettingsFromBackend() {
         enableMonitoring: backendSettings.enable_monitoring !== undefined 
                         ? backendSettings.enable_monitoring 
                         : true,
+        enableAppWhitelist: backendSettings.enable_app_whitelist || false,
+        whitelistApps: backendSettings.whitelist_apps || [],
         shortcut: clipboardSettings.value.shortcut // 保留当前快捷键设置
       }
 
@@ -855,7 +1436,7 @@ const proxySettings = ref<ProxySettings>({
   enabled: false,
   type: 'http',
   host: '127.0.0.1',
-  port: 7890,
+  port: 10809,
   auth: false,
   username: '',
   password: ''
@@ -865,6 +1446,15 @@ const isTestingProxy = ref(false)
 
 // 更新onActivated支持
 onActivated(async () => {
+  // 检查URL参数，自动切换到指定页面
+  const route = router.currentRoute.value
+  if (route.query.page && typeof route.query.page === 'string') {
+    const targetPage = route.query.page
+    if (settingsPages.some(page => page.id === targetPage)) {
+      currentPage.value = targetPage
+    }
+  }
+
   if (!uiStore.settingsLoaded) {
     try {
       // 获取代理设置
@@ -889,6 +1479,15 @@ onActivated(async () => {
 
 // 初始加载
 onMounted(async () => {
+  // 检查URL参数，自动切换到指定页面
+  const route = router.currentRoute.value
+  if (route.query.page && typeof route.query.page === 'string') {
+    const targetPage = route.query.page
+    if (settingsPages.some(page => page.id === targetPage)) {
+      currentPage.value = targetPage
+    }
+  }
+
   // 如果设置尚未加载，则加载设置
   if (!uiStore.settingsLoaded) {
     try {
@@ -909,6 +1508,17 @@ onMounted(async () => {
     } catch (error) {
       console.error('获取设置失败:', error)
     }
+  }
+  
+  // 初始化更新设置
+  checkIntervalHours.value = Math.floor(updateStore.checkInterval / (1000 * 60 * 60))
+  
+  // 获取当前版本
+  try {
+    const version = await invoke('get_current_version') as string
+    updateStore.setCurrentVersion(version)
+  } catch (error) {
+    console.error('获取当前版本失败:', error)
   }
 })
 
@@ -999,14 +1609,6 @@ function saveDefaultAIModel() {
   localStorage.setItem('mytips-default-ai-model', defaultAIModel.value)
 }
 
-// 平滑滚动到指定锚点
-function scrollToSection(id: string) {
-  const el = document.getElementById(id)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-}
-
 // 新增手动清理过期剪贴板条目的方法
 const isCleaningEntries = ref(false)
 
@@ -1033,10 +1635,559 @@ async function migrateConfigToDatabase() {
     message('迁移配置到数据库失败: ' + error, { title: '错误' })
   }
 }
+
+// 新增模型配置管理功能
+const selectedConfigModel = ref('')
+const showApiKey = ref(false)
+const apiConfig = ref({
+  apiKey: '',
+  customModelName: '',
+  maxTokens: 3000,
+  apiEndpoint: ''
+})
+const showModelSuggestions = ref(false)
+const filteredModelSuggestions = ref<Array<{ name: string, description: string }>>([])
+const editingModelList = ref<Array<{ name: string, description: string }>>([])
+const editingModelType = ref('')
+const newModelName = ref('')
+const newModelDescription = ref('')
+const isSavingApiConfig = ref(false)
+const isTestingApi = ref(false)
+const modelConfigModal = ref<HTMLDialogElement | null>(null)
+
+// 可用的AI模型
+const availableModels = [
+  { id: 'chatgpt', name: 'OpenAI ChatGPT' },
+  { id: 'gemini', name: 'Google Gemini' },
+  { id: 'deepseek', name: 'DeepSeek' },
+  { id: 'qwen', name: '阿里通义千问' },
+  { id: 'claude', name: 'Anthropic Claude' },
+  { id: 'doubao', name: '字节豆包' },
+  { id: 'grok', name: 'xAI Grok' },
+  { id: 'custom', name: '自定义API' }
+]
+
+// 默认的各AI模型的常用模型名称数据
+const defaultModelSuggestions = {
+  chatgpt: [
+    { name: 'gpt-4o', description: 'GPT-4o - 最新版本，支持文本和图像' },
+    { name: 'gpt-4o-mini', description: 'GPT-4o Mini - 轻量级版本，成本更低' },
+    { name: 'gpt-4-turbo', description: 'GPT-4 Turbo - 高性能版本' },
+    { name: 'gpt-4', description: 'GPT-4 - 标准版本' },
+    { name: 'gpt-3.5-turbo', description: 'GPT-3.5 Turbo - 经典版本，性价比高' }
+  ],
+  gemini: [
+    { name: 'gemini-2.0-flash', description: 'Gemini 2.0 Flash - 最新版本' },
+    { name: 'gemini-1.5-flash', description: 'Gemini 1.5 Flash - 快速响应版本' },
+    { name: 'gemini-1.5-pro', description: 'Gemini 1.5 Pro - 专业版本' },
+    { name: 'gemini-pro', description: 'Gemini Pro - 标准专业版' }
+  ],
+  deepseek: [
+    { name: 'deepseek-chat', description: 'DeepSeek Chat - 对话模型' },
+    { name: 'deepseek-reasoner', description: 'DeepSeek reasoner - 深度思考模型' },
+  ],
+  claude: [
+  { name: 'claude-sonnet-4-20250514', description: 'claude-sonnet-4-20250514 - 最新版本' },
+  { name: 'claude-opus-4-20250514t', description: 'claude-opus-4-20250514 - 最新版本' },
+  { name: 'claude-3-7-sonnet-20250219', description: 'claude-3-7-sonnet-20250219' },
+  { name: 'claude-3-5-sonnet-20241022', description: 'claude-3-5-sonnet-20241022' },
+  ],
+  qwen: [
+    { name: 'qwen-max', description: '通义千问Max - 最强版本' },
+    { name: 'qwen-plus', description: '通义千问Plus - 增强版本' },
+    { name: 'qwen-turbo', description: '通义千问Turbo - 快速版本' },
+    { name: 'qwen-long', description: '通义千问Long - 长文本版本' }
+  ],
+  doubao: [
+    { name: 'doubao-seed-1.6', description: '全新多模态深度思考模型，同时支持 thinking、non-thinking、auto三种思考模式。其中 non-thinking 模型对比 doubao-1.5-pro-32k-250115 模型大幅提升。' },
+    { name: 'doubao-seed-1.6-flash', description: '有极致推理速度的多模态深度思考模型；同时支持文本和视觉理解。文本理解能力超过上一代 Lite 系列模型，视觉理解比肩友商 Pro 系列模型。' },
+    { name: 'doubao-seed-1.6-thinking', description: '在思考能力上进行了大幅强化， 对比 doubao 1.5 代深度理解模型，在编程、数学、逻辑推理等基础能力上进一步提升， 支持视觉理解。' }
+  ],
+  grok: [
+    { name: 'grok-3', description: 'Grok 3 - 最新版本' },
+    { name: 'grok-3-mini', description: 'Grok 3 Mini - 轻量级版本' },
+    { name: 'grok-1.5', description: 'Grok 1.5 - 增强版本' }
+  ],
+  custom: [
+    { name: 'gpt-3.5-turbo', description: 'OpenAI兼容 - GPT-3.5 Turbo' },
+    { name: 'gpt-4', description: 'OpenAI兼容 - GPT-4' },
+    { name: 'claude-3-sonnet', description: 'Claude兼容 - Sonnet' }
+  ]
+}
+
+// 可配置的模型建议数据
+const modelSuggestions = ref<typeof defaultModelSuggestions>({ ...defaultModelSuggestions })
+
+function getModelNameById(modelId: string): string {
+  const model = availableModels.find(m => m.id === modelId)
+  return model ? model.name : '未知模型'
+}
+
+function getDefaultModelName(modelId: string): string {
+  switch (modelId) {
+    case 'chatgpt': return 'gpt-4o'
+    case 'gemini': return 'gemini-1.5-flash'
+    case 'deepseek': return 'deepseek-chat'
+    case 'claude': return 'claude-3.5-sonnet'
+    case 'qwen': return 'qwen-max'
+    case 'doubao': return 'doubao-1.5-pro-4k'
+    case 'grok': return 'grok-3'
+    case 'custom': return 'gpt-3.5-turbo'
+    default: return ''
+  }
+}
+
+function getDefaultMaxTokens(modelId: string): number {
+  const defaults: Record<string, number> = {
+    chatgpt: 4000,
+    gemini: 4000,
+    deepseek: 3000,
+    claude: 4000,
+    qwen: 3000,
+    doubao: 3000,
+    grok: 4000,
+    custom: 3000
+  }
+  return defaults[modelId] || 3000
+}
+
+function getMinMaxTokens(modelId: string): number {
+  const mins: Record<string, number> = {
+    chatgpt: 100,
+    gemini: 100,
+    deepseek: 100,
+    claude: 100,
+    qwen: 100,
+    doubao: 100,
+    grok: 100,
+    custom: 100
+  }
+  return mins[modelId] || 100
+}
+
+function getMaxMaxTokens(modelId: string): number {
+  const maxs: Record<string, number> = {
+    chatgpt: 8000,
+    gemini: 8000,
+    deepseek: 6000,
+    claude: 8000,
+    qwen: 6000,
+    doubao: 6000,
+    grok: 8000,
+    custom: 8000
+  }
+  return maxs[modelId] || 8000
+}
+
+async function loadApiConfig(): Promise<void> {
+  if (!selectedConfigModel.value) return
+  
+  try {
+    // 获取API密钥
+    const result = await invoke('get_api_key', { modelId: selectedConfigModel.value })
+    apiConfig.value.apiKey = result as string
+
+    // 获取自定义模型名称
+    const modelNameResult = await invoke('get_model_name_config', { modelId: selectedConfigModel.value })
+    apiConfig.value.customModelName = modelNameResult as string
+
+    // 获取max_tokens配置
+    try {
+      const maxTokensResult = await invoke('get_max_tokens_config', { modelId: selectedConfigModel.value })
+      apiConfig.value.maxTokens = maxTokensResult as number || getDefaultMaxTokens(selectedConfigModel.value)
+    } catch (error) {
+      console.warn('获取max_tokens配置失败，使用默认值:', error)
+      apiConfig.value.maxTokens = getDefaultMaxTokens(selectedConfigModel.value)
+    }
+
+    // 如果是自定义模型，获取端点
+    if (selectedConfigModel.value === 'custom') {
+      const endpoint = await invoke('get_api_endpoint')
+      apiConfig.value.apiEndpoint = endpoint as string
+    }
+  } catch (error) {
+    console.error('获取API配置失败:', error)
+    apiConfig.value.apiKey = ''
+    apiConfig.value.customModelName = ''
+    apiConfig.value.apiEndpoint = ''
+    apiConfig.value.maxTokens = getDefaultMaxTokens(selectedConfigModel.value)
+  }
+
+  // 初始化模型建议
+  filterModelSuggestions()
+}
+
+async function saveApiConfig(): Promise<void> {
+  if (!selectedConfigModel.value) return
+  
+  isSavingApiConfig.value = true
+  try {
+    await invoke('save_api_key', {
+      modelId: selectedConfigModel.value,
+      apiKey: apiConfig.value.apiKey
+    })
+
+    // 保存自定义模型名称
+    await invoke('save_model_name', {
+      modelId: selectedConfigModel.value,
+      modelName: apiConfig.value.customModelName
+    })
+
+    // 保存max_tokens配置
+    await invoke('save_max_tokens_config', {
+      modelId: selectedConfigModel.value,
+      maxTokens: parseInt(apiConfig.value.maxTokens.toString(), 10)
+    })
+
+    if (selectedConfigModel.value === 'custom' && apiConfig.value.apiEndpoint) {
+      await invoke('save_api_endpoint', { endpoint: apiConfig.value.apiEndpoint })
+    }
+
+    message('API配置保存成功', { title: '成功' })
+  } catch (error) {
+    console.error('保存API配置失败:', error)
+    message('保存API配置失败: ' + error, { title: '错误' })
+  } finally {
+    isSavingApiConfig.value = false
+  }
+}
+
+async function testApiConnection(): Promise<void> {
+  if (!selectedConfigModel.value || !apiConfig.value.apiKey) return
+  
+  isTestingApi.value = true
+  try {
+    await invoke('test_ai_api_connection', {
+      modelId: selectedConfigModel.value,
+      apiKey: apiConfig.value.apiKey,
+      modelName: apiConfig.value.customModelName || getDefaultModelName(selectedConfigModel.value),
+      endpoint: apiConfig.value.apiEndpoint
+    })
+    message('API连接测试成功', { title: '测试结果' })
+  } catch (error) {
+    console.error('API测试失败:', error)
+    message('API连接测试失败: ' + error, { title: '测试结果' })
+  } finally {
+    isTestingApi.value = false
+  }
+}
+
+function openModelConfigModal(modelId: string): void {
+  editingModelType.value = modelId
+  editingModelList.value = [...(modelSuggestions.value[modelId as keyof typeof modelSuggestions.value] || [])]
+  modelConfigModal.value?.showModal()
+}
+
+function closeModelConfigModal(): void {
+  editingModelType.value = ''
+  editingModelList.value = []
+  newModelName.value = ''
+  newModelDescription.value = ''
+  modelConfigModal.value?.close()
+}
+
+function resetToDefault(): void {
+  if (editingModelType.value && defaultModelSuggestions[editingModelType.value as keyof typeof defaultModelSuggestions]) {
+    editingModelList.value = [...defaultModelSuggestions[editingModelType.value as keyof typeof defaultModelSuggestions]]
+  }
+}
+
+async function saveModelConfig(): Promise<void> {
+  if (editingModelType.value) {
+    modelSuggestions.value[editingModelType.value as keyof typeof modelSuggestions.value] = [...editingModelList.value]
+    try {
+      localStorage.setItem('ai-model-suggestions-config', JSON.stringify(modelSuggestions.value))
+      message('模型配置保存成功', { title: '成功' })
+      closeModelConfigModal()
+    } catch (error) {
+      console.error('保存模型配置失败:', error)
+      message('保存模型配置失败: ' + error, { title: '错误' })
+    }
+  }
+}
+
+function filterModelSuggestions(): void {
+  const modelType = selectedConfigModel.value as keyof typeof defaultModelSuggestions
+  const allSuggestions = modelSuggestions.value[modelType] || []
+
+  if (!apiConfig.value.customModelName.trim()) {
+    filteredModelSuggestions.value = allSuggestions
+  } else {
+    const searchTerm = apiConfig.value.customModelName.toLowerCase()
+    filteredModelSuggestions.value = allSuggestions.filter(suggestion =>
+      suggestion.name.toLowerCase().includes(searchTerm) ||
+      suggestion.description.toLowerCase().includes(searchTerm)
+    )
+  }
+}
+
+function hideModelSuggestions(): void {
+  setTimeout(() => {
+    showModelSuggestions.value = false
+  }, 200)
+}
+
+function selectModelSuggestion(name: string): void {
+  apiConfig.value.customModelName = name
+  showModelSuggestions.value = false
+}
+
+function addNewModel(): void {
+  if (!newModelName.value.trim() || !newModelDescription.value.trim()) return
+
+  editingModelList.value.push({
+    name: newModelName.value.trim(),
+    description: newModelDescription.value.trim()
+  })
+
+  newModelName.value = ''
+  newModelDescription.value = ''
+}
+
+function removeModel(index: number): void {
+  editingModelList.value.splice(index, 1)
+}
+
+// 更新相关函数
+function formatLastCheckTime(): string {
+  if (!updateStore.lastCheckTime) return '从未检查'
+  const now = new Date()
+  const diff = now.getTime() - updateStore.lastCheckTime.getTime()
+  const minutes = Math.floor(diff / (1000 * 60))
+  
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes}分钟前`
+  
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}小时前`
+  
+  const days = Math.floor(hours / 24)
+  return `${days}天前`
+}
+
+function formatDate(dateString?: string): string {
+  if (!dateString) return '未知'
+  
+  try {
+    // 尝试解析日期字符串
+    const date = new Date(dateString)
+    
+    // 检查日期是否有效
+    if (isNaN(date.getTime())) {
+      console.warn('无效的日期格式:', dateString)
+      return dateString // 如果无法解析，返回原始字符串
+    }
+    
+    // 返回本地化的日期格式
+    return date.toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    })
+  } catch (error) {
+    console.error('日期格式化错误:', error, '原始日期:', dateString)
+    return dateString // 出错时返回原始字符串
+  }
+}
+
+function formatReleaseNotes(notes: string): string {
+  // 简单的 Markdown 格式化
+  return notes
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/#{1,6}\s*(.*)/g, '<strong>$1</strong>')
+}
+
+async function checkForUpdates(): Promise<void> {
+  if (updateStore.isChecking) return
+  
+  updateStore.setChecking(true)
+  
+  try {
+    const updateResult = await invoke('check_for_updates_with_config', {
+      timeoutSeconds: 30,
+      proxy: null
+    }) as any
+    
+    if (updateResult.available) {
+      updateStore.setUpdateInfo({
+        version: updateResult.version,
+        pub_date: updateResult.pub_date || '',
+        body: updateResult.body || '',
+        available: true
+      })
+      message(`发现新版本 ${updateResult.version}！`, { title: '更新检查' })
+    } else {
+      updateStore.setUpdateInfo(null)
+      message('当前已是最新版本！', { title: '更新检查' })
+    }
+  } catch (error) {
+    console.error('检查更新失败:', error)
+    updateStore.setUpdateInfo(null)
+    message('检查更新失败: ' + error, { title: '错误' })
+  } finally {
+    updateStore.setChecking(false)
+  }
+}
+
+function updateAutoCheckSetting(): void {
+  // 这里可以添加保存到本地存储的逻辑
+  console.log('自动检查设置更新:', updateStore.autoCheck)
+}
+
+function updateCheckInterval(): void {
+  const hours = parseInt(checkIntervalHours.value.toString())
+  const milliseconds = hours * 60 * 60 * 1000
+  updateStore.setAutoCheck(updateStore.autoCheck, milliseconds)
+  console.log('检查间隔更新:', hours, '小时')
+}
+
+// Windows 更新测试函数
+async function testWindowsUpdate(): Promise<void> {
+  if (isTestingWindowsUpdate.value) return
+  
+  isTestingWindowsUpdate.value = true
+  
+  try {
+    const result = await invoke('test_windows_update_with_proxy') as string
+    message(result, { title: 'Windows 更新测试' })
+  } catch (error) {
+    console.error('Windows 更新测试失败:', error)
+    message('Windows 更新测试失败: ' + error, { title: '错误' })
+  } finally {
+    isTestingWindowsUpdate.value = false
+  }
+}
+
+// 显示平台信息函数
+async function showPlatformInfo(): Promise<void> {
+  try {
+    const platformInfo = await invoke('get_platform_info') as string
+    message(platformInfo, { title: '平台信息' })
+  } catch (error) {
+    console.error('获取平台信息失败:', error)
+    message('获取平台信息失败: ' + error, { title: '错误' })
+  }
+}
+
+// 白名单应用管理方法
+function addWhitelistApp() {
+  const appName = newWhitelistApp.value.trim()
+  if (!appName) return
+  
+  // 检查是否已存在
+  if (clipboardSettings.value.whitelistApps.includes(appName)) {
+    message(`应用 "${appName}" 已在白名单中`, { title: '提示' })
+    return
+  }
+  
+  // 添加到白名单
+  clipboardSettings.value.whitelistApps.push(appName)
+  newWhitelistApp.value = ''
+  updateClipboardSettings()
+  
+  message(`已添加 "${appName}" 到白名单`, { title: '成功' })
+}
+
+function removeWhitelistApp(index: number) {
+  const appName = clipboardSettings.value.whitelistApps[index]
+  clipboardSettings.value.whitelistApps.splice(index, 1)
+  updateClipboardSettings()
+  
+  message(`已从白名单中移除 "${appName}"`, { title: '成功' })
+}
+
+function addPresetApp(appName: string) {
+  if (clipboardSettings.value.whitelistApps.includes(appName)) {
+    return
+  }
+  
+  clipboardSettings.value.whitelistApps.push(appName)
+  updateClipboardSettings()
+  
+  message(`已添加 "${appName}" 到白名单`, { title: '成功' })
+}
 </script>
 
 <style scoped>
 /* Settings页面特有的样式 - 大部分暗色主题样式已移至全局 */
+
+/* 导航按钮优化样式 */
+.nav-button {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  backdrop-filter: blur(10px);
+}
+
+.nav-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.nav-button:hover::before {
+  left: 100%;
+}
+
+/* 活跃状态的按钮样式 - 确保跟随主题色 */
+.nav-button.bg-primary {
+  background: hsl(var(--p)) !important;
+  color: hsl(var(--pc)) !important;
+  border-color: hsl(var(--p)) !important;
+  box-shadow: 0 4px 12px hsl(var(--p) / 0.3), 0 0 0 1px hsl(var(--pc) / 0.1) inset;
+}
+
+/* 确保选中状态的图标和文字颜色正确 */
+.nav-button.bg-primary .flex-shrink-0,
+.nav-button.bg-primary span {
+  color: hsl(var(--pc)) !important;
+}
+
+/* 悬停状态优化 */
+.nav-button:hover {
+  transform: translateX(2px);
+  border-color: hsl(var(--p) / 0.3);
+}
+
+.nav-button:not(.bg-primary):hover {
+  background: hsl(var(--b2));
+  color: hsl(var(--p));
+}
+
+/* 图标动画 */
+.nav-button .flex-shrink-0 {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.nav-button:hover .flex-shrink-0 {
+  transform: scale(1.1);
+}
+
+/* 导航栏整体样式 */
+nav {
+  background: hsl(var(--b1));
+  backdrop-filter: blur(10px);
+}
+
+/* 设置选项标题样式优化 */
+nav h2 {
+  color: hsl(var(--bc)) !important;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+/* 底部装饰文字样式优化 */
+nav .mt-auto .text-xs {
+  color: hsl(var(--bc) / 0.6) !important;
+}
 
 /* 特殊的设置页面布局优化 */
 .settings-nav-button {

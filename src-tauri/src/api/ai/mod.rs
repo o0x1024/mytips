@@ -1,7 +1,7 @@
 pub mod conversations;
-pub mod models;
 pub mod doubao;
 pub mod grok;
+pub mod models;
 pub mod roles;
 
 use base64::engine::general_purpose;
@@ -22,7 +22,7 @@ pub use conversations::*;
 pub use roles::*;
 
 use crate::api::ai::doubao::{doubao_stream_chat_with_history, stream_from_doubao};
-use crate::api::ai::grok::{send_to_grok, stream_from_grok, grok_stream_chat_with_history};
+use crate::api::ai::grok::{grok_stream_chat_with_history, send_to_grok, stream_from_grok};
 
 // 全局存储流式输出任务
 lazy_static::lazy_static! {
@@ -49,17 +49,21 @@ pub async fn save_api_key(
     model_id: String,
     api_key: String,
 ) -> Result<(), String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 简单加密API密钥
     let encoded_key = general_purpose::STANDARD.encode(&api_key);
-    
+
     // 使用模型ID作为键名保存API密钥
     let key = format!("api_key_{}", model_id);
-    db.save_setting(&key, &encoded_key).map_err(|e| e.to_string())?;
+    db.save_setting(&key, &encoded_key)
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -67,11 +71,14 @@ pub async fn save_api_key(
 // 获取API密钥
 #[tauri::command]
 pub async fn get_api_key(app: tauri::AppHandle, model_id: String) -> Result<String, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名获取API密钥
     let key = format!("api_key_{}", model_id);
     match db.get_setting(&key).map_err(|e| e.to_string())? {
@@ -82,7 +89,7 @@ pub async fn get_api_key(app: tauri::AppHandle, model_id: String) -> Result<Stri
                 .map_err(|e| e.to_string())?;
             let api_key = String::from_utf8(api_key).map_err(|e| e.to_string())?;
             Ok(api_key)
-        },
+        }
         None => Ok("".to_string()),
     }
 }
@@ -90,11 +97,14 @@ pub async fn get_api_key(app: tauri::AppHandle, model_id: String) -> Result<Stri
 // 检查是否有特定模型的API密钥
 #[tauri::command]
 pub async fn has_api_key(app: tauri::AppHandle, model_id: String) -> Result<bool, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名检查API密钥是否存在
     let key = format!("api_key_{}", model_id);
     match db.get_setting(&key).map_err(|e| e.to_string())? {
@@ -106,20 +116,22 @@ pub async fn has_api_key(app: tauri::AppHandle, model_id: String) -> Result<bool
 // 获取所有AI API密钥
 #[tauri::command]
 pub async fn get_ai_api_keys(app: tauri::AppHandle) -> Result<Vec<String>, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 由于没有直接的方法获取所有以api_key_开头的设置，
     // 我们检查常用的模型ID列表
     let known_models = vec![
-        "openai", "claude", "gemini", "qwen", "doubao", "grok", 
-        "deepseek", "moonshot", "custom"
+        "openai", "claude", "gemini", "qwen", "doubao", "grok", "deepseek", "moonshot", "custom",
     ];
-    
+
     let mut models_with_keys = Vec::new();
-    
+
     for model_id in known_models {
         let key = format!("api_key_{}", model_id);
         if let Ok(Some(value)) = db.get_setting(&key) {
@@ -135,13 +147,17 @@ pub async fn get_ai_api_keys(app: tauri::AppHandle) -> Result<Vec<String>, Strin
 // 保存自定义API端点
 #[tauri::command]
 pub async fn save_api_endpoint(app: tauri::AppHandle, endpoint: String) -> Result<(), String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 保存自定义API端点配置
-    db.save_setting("custom_api_endpoint", &endpoint).map_err(|e| e.to_string())?;
+    db.save_setting("custom_api_endpoint", &endpoint)
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -149,13 +165,19 @@ pub async fn save_api_endpoint(app: tauri::AppHandle, endpoint: String) -> Resul
 // 获取自定义API端点
 #[tauri::command]
 pub async fn get_api_endpoint(app: tauri::AppHandle) -> Result<String, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 获取自定义API端点配置
-    match db.get_setting("custom_api_endpoint").map_err(|e| e.to_string())? {
+    match db
+        .get_setting("custom_api_endpoint")
+        .map_err(|e| e.to_string())?
+    {
         Some(endpoint) => Ok(endpoint),
         None => Ok("".to_string()),
     }
@@ -302,7 +324,10 @@ pub async fn send_ai_message_stream(
                         .filter_map(|msg| convert_to_chat_message(msg))
                         .collect();
 
-                    println!("转换后有 {} 条有效消息用于豆包对话历史", chat_messages.len());
+                    println!(
+                        "转换后有 {} 条有效消息用于豆包对话历史",
+                        chat_messages.len()
+                    );
 
                     // 使用豆包历史对话流式函数
                     doubao_stream_chat_with_history(
@@ -314,12 +339,8 @@ pub async fn send_ai_message_stream(
                 } else {
                     // 使用豆包单条消息流式函数
                     println!("使用豆包单条消息: {}", message);
-                    stream_from_doubao(
-                        api_key,
-                        message,
-                        custom_model_name_for_stream.as_deref(),
-                    )
-                    .await
+                    stream_from_doubao(api_key, message, custom_model_name_for_stream.as_deref())
+                        .await
                 };
 
                 match stream_result {
@@ -397,7 +418,10 @@ pub async fn send_ai_message_stream(
 
                 // 根据是否提供了消息历史，选择不同的处理方式
                 let stream_result = if !final_messages_for_grok.is_empty() {
-                    println!("转换后有 {} 条有效消息用于Grok对话历史", final_messages_for_grok.len());
+                    println!(
+                        "转换后有 {} 条有效消息用于Grok对话历史",
+                        final_messages_for_grok.len()
+                    );
 
                     // 使用Grok历史对话流式函数
                     grok_stream_chat_with_history(
@@ -409,12 +433,8 @@ pub async fn send_ai_message_stream(
                 } else {
                     // 使用Grok单条消息流式函数
                     println!("使用Grok单条消息: {}", message);
-                    stream_from_grok(
-                        api_key,
-                        message,
-                        custom_model_name_for_stream.as_deref(),
-                    )
-                    .await
+                    stream_from_grok(api_key, message, custom_model_name_for_stream.as_deref())
+                        .await
                 };
 
                 match stream_result {
@@ -623,14 +643,18 @@ pub async fn save_model_name(
     model_id: String,
     model_name: String,
 ) -> Result<(), String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名保存自定义模型名称
     let key = format!("model_name_{}", model_id);
-    db.save_setting(&key, &model_name).map_err(|e| e.to_string())?;
+    db.save_setting(&key, &model_name)
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -641,11 +665,14 @@ pub async fn get_model_name_config(
     app: tauri::AppHandle,
     model_id: String,
 ) -> Result<String, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名获取自定义模型名称
     let key = format!("model_name_{}", model_id);
     match db.get_setting(&key).map_err(|e| e.to_string())? {
@@ -661,35 +688,39 @@ pub async fn save_max_tokens_config(
     model_id: String,
     max_tokens: i32,
 ) -> Result<(), String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名保存max_tokens配置
     let key = format!("max_tokens_{}", model_id);
-    db.save_setting(&key, &max_tokens.to_string()).map_err(|e| e.to_string())?;
+    db.save_setting(&key, &max_tokens.to_string())
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
 // 获取max_tokens配置
 #[tauri::command]
-pub async fn get_max_tokens_config(
-    app: tauri::AppHandle,
-    model_id: String,
-) -> Result<i32, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+pub async fn get_max_tokens_config(app: tauri::AppHandle, model_id: String) -> Result<i32, String> {
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     // 使用模型ID作为键名获取max_tokens配置
     let key = format!("max_tokens_{}", model_id);
     match db.get_setting(&key).map_err(|e| e.to_string())? {
-        Some(value) => {
-            value.parse::<i32>().map_err(|e| format!("解析max_tokens值失败: {}", e))
-        },
+        Some(value) => value
+            .parse::<i32>()
+            .map_err(|e| format!("解析max_tokens值失败: {}", e)),
         None => Ok(0), // 返回0表示未配置，前端会使用默认值
     }
 }
@@ -836,17 +867,20 @@ pub async fn send_ai_message_with_images_stream(
 // 迁移旧的文件配置到数据库
 #[tauri::command]
 pub async fn migrate_config_to_database(app: tauri::AppHandle) -> Result<String, String> {
-    let db_state = app.try_state::<std::sync::Mutex<crate::db::DbManager>>()
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
-    
-    let db = db_state.lock().map_err(|e| format!("锁定数据库失败: {}", e))?;
-    
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
     let app_dir = dirs::data_dir()
         .ok_or("无法获取应用数据目录".to_string())?
         .join("mytips");
-    
+
     let mut migrated_count = 0;
-    
+
     // 迁移API密钥
     let keys_dir = app_dir.join("ai_keys");
     if keys_dir.exists() {
@@ -870,7 +904,7 @@ pub async fn migrate_config_to_database(app: tauri::AppHandle) -> Result<String,
             }
         }
     }
-    
+
     // 迁移自定义API端点
     let endpoint_file = app_dir.join("config").join("custom_endpoint.txt");
     if endpoint_file.exists() {
@@ -882,7 +916,7 @@ pub async fn migrate_config_to_database(app: tauri::AppHandle) -> Result<String,
             }
         }
     }
-    
+
     // 迁移自定义模型名称
     let model_config_dir = app_dir.join("config").join("models");
     if model_config_dir.exists() {
@@ -917,7 +951,7 @@ pub async fn migrate_config_to_database(app: tauri::AppHandle) -> Result<String,
             }
         }
     }
-    
+
     if migrated_count > 0 {
         Ok(format!("成功迁移 {} 个配置项到数据库", migrated_count))
     } else {

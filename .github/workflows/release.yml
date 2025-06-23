@@ -1,0 +1,168 @@
+name: Release and Update
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本 (例如: v0.1.1)'
+        required: true
+        default: 'v0.1.1'
+      release_notes:
+        description: '更新说明'
+        required: false
+        default: '修复了一些已知问题，提升了用户体验。'
+
+jobs:
+  build-and-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x86_64
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+          - os: macos-latest
+            platform: darwin
+            arch: x86_64
+          - os: macos-latest
+            platform: darwin
+            arch: aarch64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'darwin' && matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || '' }}
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.0-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Install frontend dependencies
+        run: yarn install
+
+      - name: Setup Tauri environment
+        run: |
+          # 确保 Tauri CLI 可用
+          yarn tauri --version || yarn add -D @tauri-apps/cli
+
+      - name: Build application
+        run: |
+          yarn build
+          yarn tauri build ${{ matrix.platform == 'darwin' && matrix.arch == 'aarch64' && '--target aarch64-apple-darwin' || '' }}
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+      - name: Generate update manifests
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          yarn update:generate
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes || '修复了一些已知问题，提升了用户体验。' }}
+          npm_package_version: ${{ github.ref_name }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            src-tauri/target/release/bundle/**/*
+            dist/update-manifests/*.json
+          retention-days: 7
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: always() && needs.build-and-release.result == 'success'
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Display structure of downloaded files
+        run: find release-artifacts -type f
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.version }}
+          release_name: ${{ github.ref_name || github.event.inputs.version }}
+          body: |
+            ## 🚀 MyTips ${{ github.ref_name || github.event.inputs.version }}
+            
+            ${{ github.event.inputs.release_notes || '修复了一些已知问题，提升了用户体验。' }}
+            
+            ### 📦 安装包下载
+            
+            - **Windows**: 下载 `.exe` 或 `.msi` 文件
+            - **macOS**: 下载 `.dmg` 文件  
+            - **Linux**: 下载 `.deb` 或 `.AppImage` 文件
+            
+            ### 🔄 自动更新
+            
+            如果你已经安装了 MyTips，应用会自动检测并提示更新。
+            
+            ### 📋 更新内容
+            
+            - 优化用户界面和交互体验
+            - 修复已知 Bug
+            - 性能优化和稳定性提升
+            
+            ---
+            
+            **完整更新日志**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || github.event.inputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.version }}
+          files: |
+            release-artifacts/**/*.exe
+            release-artifacts/**/*.msi
+            release-artifacts/**/*.dmg
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.tar.gz
+            release-artifacts/**/*.zip
+            release-artifacts/**/update-manifests/*.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Success
+        run: |
+          echo "🎉 Release ${{ github.ref_name || github.event.inputs.version }} 创建成功!"
+          echo "📍 Release URL: ${{ steps.create_release.outputs.html_url }}"
+          echo ""
+          echo "📝 下一步:"
+          echo "1. 检查 Release 页面确认所有文件已上传"
+          echo "2. 测试自动更新功能"
+          echo "3. 通知用户更新可用" 

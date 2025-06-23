@@ -1,430 +1,476 @@
 <template>
-  <div class="h-full flex flex-col" tabindex="0" @focusout="onEditorBlur">
-    <!-- 顶部工具栏 -->
-    <div class="p-2 border-b border-base-300 flex items-center justify-between">
-      <!-- 标题和状态区 -->
-      <div class="flex-1">
-        <input type="text" placeholder="无标题笔记..."
-          class="input input-lg w-full text-xl font-bold p-0 border-0 focus:outline-none bg-transparent"
-          v-model="localNote.title" @input="autoSave" @blur="onTitleBlur" />
-      </div>
-
-      <!-- 操作按钮区 -->
-      <div class="flex items-center gap-2">
-        <!-- AI扩充按钮 -->
-        <button class="btn btn-sm btn-ghost btn-square" title="AI扩充内容" @click="expandWithAI()">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-        </button>
-
-        <div class="dropdown dropdown-end">
-          <button tabindex="0" class="btn btn-sm btn-ghost btn-square" title="更多操作">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-            </svg>
-          </button>
-          <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52">
-            <li><a @click="shareNote">分享链接</a></li>
-            <li><a @click="exportNote">导出</a></li>
-            <li><a @click="$emit('duplicate-note')">创建副本</a></li>
-            <li><a @click="$emit('delete-note')" class="text-error">删除</a></li>
-          </ul>
-        </div>
-      </div>
+  <div class="h-full flex flex-col" v-if="note">
+    <!-- 检查笔记是否加密且未解锁 -->
+    <div v-if="isNoteEncrypted && !isNoteUnlocked" class="h-full">
+      <EncryptedContent 
+        :title="`笔记已加密: ${note.title}`"
+        :description="'此笔记受密码保护，请输入正确的密码来查看内容。'"
+        :loading="encryptionStore.isLoading"
+        :encrypted-at="note.updated_at"
+        @unlock="handleUnlockRequest"
+        @decrypt="handleDecryptRequest"
+      />
     </div>
+    
+    <!-- 正常的笔记编辑界面 -->
+    <div v-else class="h-full flex flex-col">
+      <div class="h-full flex flex-col" tabindex="0" @focusout="onEditorBlur">
+        <!-- 顶部工具栏 -->
+        <div class="p-2 border-b border-base-300 flex items-center justify-between">
+          <!-- 标题和状态区 -->
+          <div class="flex-1">
+            <input type="text" placeholder="无标题笔记..."
+              class="input input-lg w-full text-xl font-bold p-0 border-0 focus:outline-none bg-transparent"
+              v-model="localNote.title" @input="autoSave" @blur="onTitleBlur" />
+          </div>
 
-    <!-- 编辑器工具栏 -->
-    <div class="border-b border-base-300 p-2 flex flex-wrap items-center gap-2 bg-base-200">
-      <div class="btn-group">
-        <button class="btn btn-sm btn-ghost" title="标题1" @click="insertMarkdown('# ')">H1</button>
-        <button class="btn btn-sm btn-ghost" title="标题2" @click="insertMarkdown('## ')">H2</button>
-        <button class="btn btn-sm btn-ghost" title="标题3" @click="insertMarkdown('### ')">H3</button>
-      </div>
-
-      <div class="btn-group">
-        <button class="btn btn-sm btn-ghost" title="粗体" @click="insertMarkdown('**', '**')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-            <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" title="斜体" @click="insertMarkdown('*', '*')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <line x1="19" y1="4" x2="10" y2="4"></line>
-            <line x1="14" y1="20" x2="5" y2="20"></line>
-            <line x1="15" y1="4" x2="9" y2="20"></line>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" title="删除线" @click="insertMarkdown('~~', '~~')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M17 9V5H7v4"></path>
-            <path d="M7 13v6h10v-6"></path>
-            <line x1="4" y1="12" x2="20" y2="12"></line>
-          </svg>
-        </button>
-      </div>
-
-      <div class="btn-group">
-        <button class="btn btn-sm btn-ghost" title="无序列表" @click="insertMarkdown('- ')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"></line>
-            <line x1="8" y1="12" x2="21" y2="12"></line>
-            <line x1="8" y1="18" x2="21" y2="18"></line>
-            <line x1="3" y1="6" x2="3.01" y2="6"></line>
-            <line x1="3" y1="12" x2="3.01" y2="12"></line>
-            <line x1="3" y1="18" x2="3.01" y2="18"></line>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" title="有序列表" @click="insertMarkdown('1. ')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <line x1="10" y1="6" x2="21" y2="6"></line>
-            <line x1="10" y1="12" x2="21" y2="12"></line>
-            <line x1="10" y1="18" x2="21" y2="18"></line>
-            <path d="M4 6h1v4"></path>
-            <path d="M4 10h2"></path>
-            <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" title="任务列表" @click="insertMarkdown('- [ ] ')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <rect x="3" y="5" width="6" height="6" rx="1"></rect>
-            <path d="m9 11-6-6"></path>
-            <line x1="13" y1="8" x2="21" y2="8"></line>
-            <rect x="3" y="17" width="6" height="6" rx="1"></rect>
-            <line x1="13" y1="20" x2="21" y2="20"></line>
-          </svg>
-        </button>
-      </div>
-
-      <button class="btn btn-sm btn-ghost" title="引用块" @click="insertMarkdown('> ')">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <path
-            d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z">
-          </path>
-          <path
-            d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z">
-          </path>
-        </svg>
-      </button>
-
-      <button class="btn btn-sm btn-ghost" title="插入链接" @click="insertMarkdown('[', '](https://)')">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-        </svg>
-      </button>
-
-      <button class="btn btn-sm btn-ghost" title="插入图片" @click="insertMarkdown('![', '](图片URL)')">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <circle cx="8.5" cy="8.5" r="1.5"></circle>
-          <polyline points="21 15 16 10 5 21"></polyline>
-        </svg>
-      </button>
-
-      <button class="btn btn-sm btn-ghost" title="代码块" @click="insertMarkdown('```\n', '\n```')">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <polyline points="16 18 22 12 16 6"></polyline>
-          <polyline points="8 6 2 12 8 18"></polyline>
-        </svg>
-      </button>
-
-      <button class="btn btn-sm btn-ghost" title="插入表格" @click="insertTable">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="2">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="3" y1="9" x2="21" y2="9"></line>
-          <line x1="3" y1="15" x2="21" y2="15"></line>
-          <line x1="9" y1="3" x2="9" y2="21"></line>
-          <line x1="15" y1="3" x2="15" y2="21"></line>
-        </svg>
-      </button>
-
-      <div class="dropdown dropdown-end ml-1">
-        <button tabindex="0" class="btn btn-sm btn-ghost" title="代码高亮主题">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M12 2v20M4 12h16"></path>
-            <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
-          </svg>
-        </button>
-        <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-          <li><a href="#" @click.prevent="setHighlightTheme('default')">Default</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('tomorrow')">Tomorrow</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('okaidia')">Okaidia</a></li>
-          <li><a href="#" @click.prevent="setHighlightTheme('funky')">Funky</a></li>
-        </ul>
-      </div>
-
-      <div class="ml-auto flex gap-1">
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isEditOnly }" @click="setEditMode('editOnly')"
-          title="仅编辑">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isPreviewMode }" @click="setEditMode('preview')"
-          title="预览">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isSplitMode }" @click="setEditMode('split')"
-          title="分屏模式">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="12" y1="3" x2="12" y2="21"></line>
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- 主要编辑区域 -->
-    <div class="flex-1 flex overflow-hidden relative">
-      <!-- Markdown编辑器 -->
-      <textarea v-if="!isPreviewMode || isEditOnly || isSplitMode"
-        class="flex-1 p-4 h-full resize-none focus:outline-none font-mono text-base overflow-auto"
-        :class="{ 'w-1/2': isSplitMode }" placeholder="开始输入内容..." v-model="localNote.content" @input="autoSave"
-        @contextmenu.prevent="handleContextMenu" @paste="handlePaste" @keydown="handleKeyDown"
-        @scroll="handleEditorScroll" ref="editorTextarea" @blur="onContentBlur"></textarea>
-
-      <!-- 右键菜单 -->
-      <div v-if="showContextMenu"
-        class="context-menu absolute bg-base-200 text-base-content rounded-md shadow-lg p-2 z-30"
-        :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }">
-        <ul class="menu menu-sm p-1">
-          <li v-if="hasSelectedText">
-            <button class="flex items-center gap-1" @click="expandSelectedText">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
+          <!-- 操作按钮区 -->
+          <div class="flex items-center gap-2">
+            <!-- AI扩充按钮 -->
+            <button class="btn btn-sm btn-ghost btn-square" title="AI扩充内容" @click="expandWithAI()">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
-              TIP一下
             </button>
-          </li>
-          <li v-if="hasSelectedText">
-            <button class="flex items-center gap-1" @click="explainSelectedText">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              解释一下
-            </button>
-          </li>
-          <li v-if="hasSelectedText">
-            <button class="flex items-center gap-1" @click="translateSelectedText">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-              </svg>
-              翻译一下
-            </button>
-          </li>
-          <li>
-            <button class="flex items-center gap-1" @click="copySelectedText">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-              </svg>
-              复制
-            </button>
-          </li>
-          <li>
-            <button class="flex items-center gap-1" @click="pasteFromClipboard">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              粘贴
-            </button>
-          </li>
-        </ul>
-      </div>
 
-      <!-- AI处理中遮罩 -->
-      <div v-if="isAIProcessing" class="absolute inset-0 bg-base-300/50 flex items-center justify-center z-20">
-        <div class="card bg-base-100 p-4 shadow-lg max-w-md w-full">
-          <div class="flex items-center gap-4 mb-4">
-            <span class="loading loading-spinner loading-md"></span>
-            <p>AI正在处理中...</p>
+            <div class="dropdown dropdown-end">
+              <button tabindex="0" class="btn btn-sm btn-ghost btn-square" title="更多操作">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                </svg>
+              </button>
+              <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52">
+                <li><a @click="shareNote">分享链接</a></li>
+                <li><a @click="exportNote">导出</a></li>
+                <li><a @click="$emit('duplicate-note')">创建副本</a></li>
+                <li><a @click="$emit('delete-note')" class="text-error">删除</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- 编辑器工具栏 -->
+        <div class="border-b border-base-300 p-2 flex flex-wrap items-center gap-2 bg-base-200">
+          <div class="btn-group">
+            <button class="btn btn-sm btn-ghost" title="标题1" @click="insertMarkdown('# ')">H1</button>
+            <button class="btn btn-sm btn-ghost" title="标题2" @click="insertMarkdown('## ')">H2</button>
+            <button class="btn btn-sm btn-ghost" title="标题3" @click="insertMarkdown('### ')">H3</button>
           </div>
 
-          <div v-if="isStreaming && streamingContent" class="mb-4 p-3 bg-base-200 rounded-lg max-h-60 overflow-y-auto">
-            <div class="prose">{{ streamingContent }}</div>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-ghost" title="粗体" @click="insertMarkdown('**', '**')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
+                <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" title="斜体" @click="insertMarkdown('*', '*')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <line x1="19" y1="4" x2="10" y2="4"></line>
+                <line x1="14" y1="20" x2="5" y2="20"></line>
+                <line x1="15" y1="4" x2="9" y2="20"></line>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" title="删除线" @click="insertMarkdown('~~', '~~')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M17 9V5H7v4"></path>
+                <path d="M7 13v6h10v-6"></path>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+              </svg>
+            </button>
           </div>
 
-          <div class="flex justify-end">
-            <button v-if="isStreaming" class="btn btn-sm btn-error" @click="cancelAIGeneration">
-              取消生成
+          <div class="btn-group">
+            <button class="btn btn-sm btn-ghost" title="无序列表" @click="insertMarkdown('- ')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" title="有序列表" @click="insertMarkdown('1. ')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <line x1="10" y1="6" x2="21" y2="6"></line>
+                <line x1="10" y1="12" x2="21" y2="12"></line>
+                <line x1="10" y1="18" x2="21" y2="18"></line>
+                <path d="M4 6h1v4"></path>
+                <path d="M4 10h2"></path>
+                <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" title="任务列表" @click="insertMarkdown('- [ ] ')">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <rect x="3" y="5" width="6" height="6" rx="1"></rect>
+                <path d="m9 11-6-6"></path>
+                <line x1="13" y1="8" x2="21" y2="8"></line>
+                <rect x="3" y="17" width="6" height="6" rx="1"></rect>
+                <line x1="13" y1="20" x2="21" y2="20"></line>
+              </svg>
+            </button>
+          </div>
+
+          <button class="btn btn-sm btn-ghost" title="引用块" @click="insertMarkdown('> ')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path
+                d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z">
+              </path>
+              <path
+                d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z">
+              </path>
+            </svg>
+          </button>
+
+          <button class="btn btn-sm btn-ghost" title="插入链接" @click="insertMarkdown('[', '](https://)')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+          </button>
+
+          <button class="btn btn-sm btn-ghost" title="插入图片" @click="insertMarkdown('![', '](图片URL)')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+          </button>
+
+          <button class="btn btn-sm btn-ghost" title="代码块" @click="insertMarkdown('```\n', '\n```')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </button>
+
+          <button class="btn btn-sm btn-ghost" title="插入表格" @click="insertTable">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="3" y1="15" x2="21" y2="15"></line>
+              <line x1="9" y1="3" x2="9" y2="21"></line>
+              <line x1="15" y1="3" x2="15" y2="21"></line>
+            </svg>
+          </button>
+
+          <div class="dropdown dropdown-end ml-1">
+            <button tabindex="0" class="btn btn-sm btn-ghost" title="代码高亮主题">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M12 2v20M4 12h16"></path>
+                <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
+              </svg>
+              <span class="ml-1 text-xs capitalize">{{ currentHighlightTheme }}</span>
+            </button>
+            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+              <li>
+                <a href="#" 
+                   @click.prevent="setHighlightTheme('default')"
+                   :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'default' }">
+                  Default
+                  <span v-if="currentHighlightTheme === 'default'" class="ml-auto">✓</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" 
+                   @click.prevent="setHighlightTheme('tomorrow')"
+                   :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'tomorrow' }">
+                  Tomorrow
+                  <span v-if="currentHighlightTheme === 'tomorrow'" class="ml-auto">✓</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" 
+                   @click.prevent="setHighlightTheme('okaidia')"
+                   :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'okaidia' }">
+                  Okaidia
+                  <span v-if="currentHighlightTheme === 'okaidia'" class="ml-auto">✓</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" 
+                   @click.prevent="setHighlightTheme('funky')"
+                   :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'funky' }">
+                  Funky
+                  <span v-if="currentHighlightTheme === 'funky'" class="ml-auto">✓</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="ml-auto flex gap-1">
+            <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isEditOnly }" @click="setEditMode('editOnly')"
+              title="仅编辑">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isPreviewMode }" @click="setEditMode('preview')"
+              title="预览">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+            <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isSplitMode }" @click="setEditMode('split')"
+              title="分屏模式">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="12" y1="3" x2="12" y2="21"></line>
+              </svg>
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- Markdown预览区 -->
-      <div v-if="isPreviewMode || isSplitMode"
-        class="flex-1 p-4 overflow-auto prose dark:prose-invert max-w-none"
-        :class="{ 'w-1/2': isSplitMode }" @scroll="handlePreviewScroll" ref="previewDiv">
-        <div v-html="renderedContent" class="prose max-w-none"></div>
-      </div>
-    </div>
+        <!-- 主要编辑区域 -->
+        <div class="flex-1 flex overflow-hidden relative">
+          <!-- Markdown编辑器 -->
+          <textarea v-if="!isPreviewMode || isEditOnly || isSplitMode"
+            class="flex-1 p-4 h-full resize-none focus:outline-none font-mono text-base overflow-auto"
+            :class="{ 'w-1/2': isSplitMode }" placeholder="开始输入内容..." v-model="localNote.content" @input="autoSave"
+            @contextmenu.prevent="handleContextMenu" @paste="handlePaste" @keydown="handleKeyDown"
+            @scroll="handleEditorScroll" ref="editorTextarea" @blur="onContentBlur"></textarea>
 
-    <!-- 底部元数据区域 -->
-    <div class="border-t border-base-100 p-4 bg-base-200">
-      <!-- 将标签选择器和统计信息放在同一行 -->
-      <div class="flex flex-wrap w-full gap-4 items-center justify-between">
-        <!-- 标签选择器组件 -->
-        <div class="flex-1">
-          <TagSelector v-model="localNote.tags" :contentText="localNote.content" :titleText="localNote.title"
-            @saveNote="saveNoteToList" />
-        </div>
-
-        <!-- 统计信息和状态指示器 -->
-        <div class="text-xs text-base-content/80 flex items-center gap-4 shrink-0">
-          <!-- 图片加载状态指示器 -->
-          <div v-if="isLoadingImages" class="flex items-center gap-1 text-info" title="图片加载中...">
-            <span class="loading loading-spinner loading-xs"></span>
-            <span>加载图片</span>
-          </div>
-          <span title="字数">{{ wordCount }} 字</span>
-          <span title="创建时间">创建: {{ formatDateTime(localNote.created_at) }}</span>
-          <span title="修改时间">修改: {{ formatDateTime(localNote.updated_at) }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 在模板中添加AI解释结果的浮动框 -->
-    <div v-if="showExplanationBox" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50">
-      <div class="card bg-base-100 shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div class="card-body p-4">
-          <div class="flex justify-between items-start mb-4">
-            <h2 class="card-title">解释说明</h2>
-            <button class="btn btn-sm btn-ghost" @click="showExplanationBox = false">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div v-if="isExplaining" class="flex items-center gap-2 mb-4">
-            <span class="loading loading-spinner loading-md"></span>
-            <p>AI 正在生成解释...</p>
-          </div>
-
-          <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
-            <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
-              {{ selectedTextForExplanation }}
-            </blockquote>
-            <div v-html="explanationContent"></div>
-          </div>
-
-          <div class="card-actions justify-end mt-4">
-            <button class="btn btn-sm btn-primary" @click="copyExplanation" v-if="!isExplaining && explanationContent">
-              复制解释
-            </button>
-            <button class="btn btn-sm btn-primary" @click="insertExplanationToContent"
-              v-if="!isExplaining && explanationContent">
-              插入到笔记
-            </button>
-            <button class="btn btn-sm btn-ghost" @click="showExplanationBox = false">
-              关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 在模板中添加翻译结果的浮动框 -->
-    <div v-if="showTranslationBox" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50">
-      <div class="card bg-base-100 shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
-        <div class="card-body p-4">
-          <div class="flex justify-between items-start mb-4">
-            <h2 class="card-title">翻译结果</h2>
-            <button class="btn btn-sm btn-ghost" @click="showTranslationBox = false">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+          <!-- 右键菜单 -->
+          <div v-if="showContextMenu"
+            class="context-menu absolute bg-base-200 text-base-content rounded-md shadow-lg p-2 z-30"
+            :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }">
+            <ul class="menu menu-sm p-1">
+              <li v-if="hasSelectedText">
+                <button class="flex items-center gap-1" @click="expandSelectedText">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  TIP一下
+                </button>
+              </li>
+              <li v-if="hasSelectedText">
+                <button class="flex items-center gap-1" @click="explainSelectedText">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  解释一下
+                </button>
+              </li>
+              <li v-if="hasSelectedText">
+                <button class="flex items-center gap-1" @click="translateSelectedText">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                  </svg>
+                  翻译一下
+                </button>
+              </li>
+              <li>
+                <button class="flex items-center gap-1" @click="copySelectedText">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  复制
+                </button>
+              </li>
+              <li>
+                <button class="flex items-center gap-1" @click="pasteFromClipboard">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  粘贴
+                </button>
+              </li>
+            </ul>
           </div>
 
-          <div v-if="isTranslating" class="flex items-center gap-2 mb-4">
-            <span class="loading loading-spinner loading-md"></span>
-            <p>AI 正在翻译...</p>
+          <!-- AI处理中遮罩 -->
+          <div v-if="isAIProcessing" class="absolute inset-0 bg-base-300/50 flex items-center justify-center z-20">
+            <div class="card bg-base-100 p-4 shadow-lg max-w-md w-full">
+              <div class="flex items-center gap-4 mb-4">
+                <span class="loading loading-spinner loading-md"></span>
+                <p>AI正在处理中...</p>
+              </div>
+
+              <div v-if="isStreaming && streamingContent" class="mb-4 p-3 bg-base-200 rounded-lg max-h-60 overflow-y-auto">
+                <div class="prose">{{ streamingContent }}</div>
+              </div>
+
+              <div class="flex justify-end">
+                <button v-if="isStreaming" class="btn btn-sm btn-error" @click="cancelAIGeneration">
+                  取消生成
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
-            <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
-              {{ selectedTextForTranslation }}
-            </blockquote>
-            <div v-html="translationContent"></div>
-          </div>
-
-          <div class="card-actions justify-end mt-4">
-            <button class="btn btn-sm btn-primary" @click="copyTranslation" v-if="!isTranslating && translationContent">
-              复制翻译
-            </button>
-            <button class="btn btn-sm btn-primary" @click="insertTranslationToContent"
-              v-if="!isTranslating && translationContent">
-              插入到笔记
-            </button>
-            <button class="btn btn-sm btn-ghost" @click="showTranslationBox = false">
-              关闭
-            </button>
+          <!-- Markdown预览区 -->
+          <div v-if="isPreviewMode || isSplitMode"
+            class="flex-1 p-4 overflow-auto prose dark:prose-invert max-w-none"
+            :class="{ 'w-1/2': isSplitMode }" @scroll="handlePreviewScroll" ref="previewDiv">
+            <div v-html="renderedContent" class="prose max-w-none"></div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 图片放大模态框 -->
-    <div v-if="showImageModal" class="fixed inset-0 flex items-center justify-center z-50 bg-black/80"
-      @click="closeImageModal">
-      <div class="relative max-w-[95vw] max-h-[95vh] flex items-center justify-center" @click.stop>
-        <img :src="modalImageSrc" :alt="modalImageAlt"
-          class="max-w-full max-h-full object-contain rounded-lg shadow-2xl" @load="onModalImageLoad"
-          @error="onModalImageError" />
+        <!-- 底部元数据区域 -->
+        <div class="border-t border-base-100 p-4 bg-base-200">
+          <!-- 将标签选择器和统计信息放在同一行 -->
+          <div class="flex flex-wrap w-full gap-4 items-center justify-between">
+            <!-- 标签选择器组件 -->
+            <div class="flex-1">
+              <TagSelector v-model="localNote.tags" :contentText="localNote.content" :titleText="localNote.title"
+                @saveNote="saveNoteToList" />
+            </div>
 
-        <!-- 关闭按钮 -->
-        <button class="absolute top-4 right-4 btn btn-sm btn-circle btn-ghost bg-black/50 text-white hover:bg-black/70"
+            <!-- 统计信息和状态指示器 -->
+            <div class="text-xs text-base-content/80 flex items-center gap-4 shrink-0">
+              <!-- 图片加载状态指示器 -->
+              <div v-if="isLoadingImages" class="flex items-center gap-1 text-info" title="图片加载中...">
+                <span class="loading loading-spinner loading-xs"></span>
+                <span>加载图片</span>
+              </div>
+              <span title="字数">{{ wordCount }} 字</span>
+              <span title="创建时间">创建: {{ formatDateTime(localNote.created_at) }}</span>
+              <span title="修改时间">修改: {{ formatDateTime(localNote.updated_at) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 在模板中添加AI解释结果的浮动框 -->
+        <div v-if="showExplanationBox" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50">
+          <div class="card bg-base-100 shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="card-body p-4">
+              <div class="flex justify-between items-start mb-4">
+                <h2 class="card-title">解释说明</h2>
+                <button class="btn btn-sm btn-ghost" @click="showExplanationBox = false">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div v-if="isExplaining" class="flex items-center gap-2 mb-4">
+                <span class="loading loading-spinner loading-md"></span>
+                <p>AI 正在生成解释...</p>
+              </div>
+
+              <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
+                <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
+                  {{ selectedTextForExplanation }}
+                </blockquote>
+                <div v-html="explanationContent"></div>
+              </div>
+
+              <div class="card-actions justify-end mt-4">
+                <button class="btn btn-sm btn-primary" @click="copyExplanation" v-if="!isExplaining && explanationContent">
+                  复制解释
+                </button>
+                <button class="btn btn-sm btn-primary" @click="insertExplanationToContent"
+                  v-if="!isExplaining && explanationContent">
+                  插入到笔记
+                </button>
+                <button class="btn btn-sm btn-ghost" @click="showExplanationBox = false">
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 在模板中添加翻译结果的浮动框 -->
+        <div v-if="showTranslationBox" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50">
+          <div class="card bg-base-100 shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="card-body p-4">
+              <div class="flex justify-between items-start mb-4">
+                <h2 class="card-title">翻译结果</h2>
+                <button class="btn btn-sm btn-ghost" @click="showTranslationBox = false">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div v-if="isTranslating" class="flex items-center gap-2 mb-4">
+                <span class="loading loading-spinner loading-md"></span>
+                <p>AI 正在翻译...</p>
+              </div>
+
+              <div v-else class="overflow-y-auto max-h-[60vh] prose dark:prose-invert">
+                <blockquote class="bg-base-200 p-3 rounded-lg mb-4">
+                  {{ selectedTextForTranslation }}
+                </blockquote>
+                <div v-html="translationContent"></div>
+              </div>
+
+              <div class="card-actions justify-end mt-4">
+                <button class="btn btn-sm btn-primary" @click="copyTranslation" v-if="!isTranslating && translationContent">
+                  复制翻译
+                </button>
+                <button class="btn btn-sm btn-primary" @click="insertTranslationToContent"
+                  v-if="!isTranslating && translationContent">
+                  插入到笔记
+                </button>
+                <button class="btn btn-sm btn-ghost" @click="showTranslationBox = false">
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 图片放大模态框 -->
+        <div v-if="showImageModal" class="fixed inset-0 flex items-center justify-center z-50 bg-black/80"
           @click="closeImageModal">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+          <div class="relative max-w-[95vw] max-h-[95vh] flex items-center justify-center" @click.stop>
+            <img :src="modalImageSrc" :alt="modalImageAlt"
+              class="max-w-full max-h-full object-contain rounded-lg shadow-2xl" @load="onModalImageLoad"
+              @error="onModalImageError" />
 
-        <!-- 图片信息 -->
-        <div v-if="modalImageAlt"
-          class="absolute bottom-4 left-4 right-4 bg-black/50 text-white p-2 rounded text-center text-sm">
-          {{ modalImageAlt }}
-        </div>
+            <!-- 关闭按钮 -->
+            <button class="absolute top-4 right-4 btn btn-sm btn-circle btn-ghost bg-black/50 text-white hover:bg-black/70"
+              @click="closeImageModal">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
 
-        <!-- 加载指示器 -->
-        <div v-if="modalImageLoading" class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
-          <span class="loading loading-spinner loading-lg text-white"></span>
+            <!-- 图片信息 -->
+            <div v-if="modalImageAlt"
+              class="absolute bottom-4 left-4 right-4 bg-black/50 text-white p-2 rounded text-center text-sm">
+              {{ modalImageAlt }}
+            </div>
+
+            <!-- 加载指示器 -->
+            <div v-if="modalImageLoading" class="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
+              <span class="loading loading-spinner loading-lg text-white"></span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -436,13 +482,14 @@ import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, on
 import DOMPurify from 'dompurify'
 import { invoke } from '@tauri-apps/api/core'
 import TagSelector from './TagSelector.vue'
+import EncryptedContent from './EncryptedContent.vue'
+import { useEncryptionStore } from '../stores/encryptionStore'
 // 使用 marked 和 Prism 替代 highlight.js
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import Prism from 'prismjs'
-// 导入 Prism 的核心样式和主题
-import 'prismjs/themes/prism-tomorrow.css'
-import 'prismjs/themes/prism-dark.css'
+// 导入 Prism 的核心样式和主题 - 只导入一个基础主题
+import 'prismjs/themes/prism.css'
 // 导入行号插件
 import 'prismjs/plugins/line-numbers/prism-line-numbers.css'
 import 'prismjs/plugins/line-numbers/prism-line-numbers'
@@ -471,6 +518,29 @@ import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-php'
 import 'prismjs/components/prism-csharp'
 
+// 预定义主题样式映射，避免动态加载CSS
+const PRISM_THEMES = {
+  default: {
+    background: '#f5f2f0',
+    color: '#728fcb',
+    selectionBackground: '#b3d4fc'
+  },
+  tomorrow: {
+    background: '#2d3748',
+    color: '#a0aec0',
+    selectionBackground: '#4a5568'
+  },
+  okaidia: {
+    background: '#272822',
+    color: '#f8f8f2',
+    selectionBackground: '#49483e'
+  },
+  funky: {
+    background: '#000000',
+    color: '#ffffff',
+    selectionBackground: '#333333'
+  }
+}
 
 // 安全检查 Prism 语言是否可用
 function isPrismLanguageAvailable(lang: string): boolean {
@@ -497,9 +567,7 @@ function isPrismLanguageAvailable(lang: string): boolean {
 async function loadPrismLanguages() {
   try {
     // 检查已加载的语言
-    const loadedLanguages = typeof Prism !== 'undefined' ? Object.keys(Prism.languages || {}) : [];
-    console.log('Prism 语言组件已静态加载:', loadedLanguages);
-    console.log('Prism 语言组件加载完成');
+    console.log('Prism语言组件加载完成')
   } catch (error) {
     console.error('检查 Prism 语言组件失败:', error);
   }
@@ -537,8 +605,13 @@ const emit = defineEmits([
   'duplicate-note',
   'add-tag',
   'remove-tag',
-  'toggle-pin'
+  'toggle-pin',
+  'unlock-note',
+  'decrypt-note'
 ])
+
+// 加密store
+const encryptionStore = useEncryptionStore()
 
 // 状态
 const localNote = ref<Note>({ ...props.note })
@@ -606,7 +679,6 @@ async function loadNoteImages(noteId: string, timeout: number = 5000): Promise<R
 
   try {
     isLoadingImages.value = true
-    console.log(`开始异步加载笔记(${noteId})的图片...`)
 
     // 创建超时Promise
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -622,7 +694,6 @@ async function loadNoteImages(noteId: string, timeout: number = 5000): Promise<R
     const totalCount = await Promise.race([countPromise, timeoutPromise])
 
     if (totalCount === 0) {
-      console.log(`笔记(${noteId})没有图片`)
       imageLoadCache.value.set(noteId, {})
       return {}
     }
@@ -705,10 +776,18 @@ watch(() => props.note, async (newNote, oldNote) => {
     const images = newNote.images ? { ...newNote.images } : undefined;
     localNote.value = { ...newNote, images };
 
+    // 检查笔记是否为已解锁的加密笔记
+    if (encryptionStore.isItemEncrypted(newNote.id) && encryptionStore.isItemUnlocked(newNote.id)) {
+      // 获取解密后的内容
+      const decryptedContent = await encryptionStore.getUnlockedNoteContent(newNote.id);
+      if (decryptedContent !== null) {
+        localNote.value.content = decryptedContent;
+      }
+    }
+
     // 如果笔记有ID但没有images数据，异步加载图片（不阻塞界面）
     if (newNote.id && !newNote.images) {
       // 立即显示笔记内容，图片稍后异步加载
-      console.log(`笔记(${newNote.id})将异步加载图片，不阻塞界面显示`)
       loadImagesAsync(newNote.id)
     }
   }
@@ -721,8 +800,84 @@ watch(() => props.note, async (newNote, oldNote) => {
     if (newNote.tags && JSON.stringify(newNote.tags) !== JSON.stringify(localNote.value.tags)) {
       localNote.value.tags = newNote.tags;
     }
+    
+    // 重要：检查内容是否从加密状态变为解密状态
+    // 如果内容发生变化且笔记已解锁，则更新本地内容
+    // 或者如果当前显示的是占位符，而新内容不是占位符，也要更新
+    if (newNote.content !== localNote.value.content) {
+      const isCurrentPlaceholder = localNote.value.content === "[此笔记已加密，请解锁后查看]"
+      const isNewContentDecrypted = newNote.content !== "[此笔记已加密，请解锁后查看]" && 
+                                   !newNote.content.includes('"salt"') && 
+                                   !newNote.content.includes('"encrypted_data"')
+      
+      // 如果当前是占位符，新内容是解密后的内容，或者笔记已解锁，则更新
+      if (isCurrentPlaceholder && isNewContentDecrypted) {
+        console.log('检测到内容从占位符变为解密内容，更新本地内容')
+        localNote.value.content = newNote.content;
+      } else if (encryptionStore.isItemEncrypted(newNote.id) && encryptionStore.isItemUnlocked(newNote.id)) {
+        console.log('检测到已解锁笔记内容变化，更新本地内容')
+        localNote.value.content = newNote.content;
+      }
+    }
   }
 }, { immediate: true, deep: true })
+
+// 添加对解锁状态变化的监听
+watch(
+  () => ({
+    noteId: props.note.id,
+    isEncrypted: encryptionStore.isItemEncrypted(props.note.id),
+    isUnlocked: encryptionStore.isItemUnlocked(props.note.id),
+    noteContent: props.note.content // 添加内容监听
+  }),
+  async (newState, oldState) => {
+    console.log('NoteEditor: 检测到状态变化', {
+      noteId: newState.noteId,
+      isEncrypted: newState.isEncrypted,
+      isUnlocked: newState.isUnlocked,
+      contentLength: newState.noteContent.length,
+      contentPreview: newState.noteContent.substring(0, 50),
+      currentLocalContent: localNote.value.content.substring(0, 50)
+    })
+    
+    // 如果笔记刚刚被解锁（之前未解锁，现在已解锁）
+    if (newState.isEncrypted && 
+        newState.isUnlocked && 
+        oldState && 
+        !oldState.isUnlocked) {
+      console.log('NoteEditor: 检测到笔记解锁状态变化，获取解密内容')
+      const decryptedContent = await encryptionStore.getUnlockedNoteContent(newState.noteId);
+      if (decryptedContent !== null) {
+        console.log('NoteEditor: 成功获取解密内容，长度:', decryptedContent.length)
+        localNote.value.content = decryptedContent;
+        console.log('NoteEditor: 已更新为解密后的内容')
+      } else {
+        console.error('NoteEditor: 获取解密内容失败')
+      }
+    }
+    
+    // 如果内容从占位符变为真实内容，也要更新
+    if (oldState && 
+        oldState.noteContent === "[此笔记已加密，请解锁后查看]" &&
+        newState.noteContent !== "[此笔记已加密，请解锁后查看]" &&
+        newState.isEncrypted &&
+        newState.isUnlocked) {
+      console.log('NoteEditor: 检测到内容从占位符变为解密内容')
+      localNote.value.content = newState.noteContent;
+    }
+    
+    // 如果当前本地内容是占位符，但传入的内容是解密后的内容，也要更新
+    if (localNote.value.content === "[此笔记已加密，请解锁后查看]" &&
+        newState.noteContent !== "[此笔记已加密，请解锁后查看]" &&
+        !newState.noteContent.includes('"salt"') &&
+        !newState.noteContent.includes('"encrypted_data"') &&
+        newState.isUnlocked) {
+      console.log('NoteEditor: 检测到本地内容为占位符，传入内容为解密内容，更新本地内容')
+      localNote.value.content = newState.noteContent;
+    }
+  },
+  { deep: true }
+)
 
 // 添加键盘快捷键处理函数
 function handleKeyDown(event: KeyboardEvent) {
@@ -857,6 +1012,9 @@ function redo() {
 const renderedContent = computed(() => {
   if (!localNote.value.content) return ''
 
+  // 添加对主题的依赖，确保主题切换时重新渲染
+  const currentTheme = currentHighlightTheme.value
+
   try {
     // 首先替换本地图片引用
     let processedContent = localNote.value.content
@@ -866,14 +1024,22 @@ const renderedContent = computed(() => {
       // 匹配 ![xxx](local://img_id) 格式的图片引用
       const localImageRegex = /!\[([^\]]*)\]\(local:\/\/([^)]+)\)/g
 
-      processedContent = processedContent.replace(localImageRegex, (match, alt, imageId) => {
+      processedContent = processedContent.replace(localImageRegex, (_match, alt, imageId) => {
         // 检查图片ID是否存在于images对象中
         if (localNote.value.images && localNote.value.images[imageId]) {
-          // 返回HTML图片标签，使用base64数据，添加响应式类名
-          return `<img src="${localNote.value.images[imageId]}" alt="${alt || '图片'}" class="embedded-image responsive-image" loading="lazy" />`
+          // 验证base64数据格式
+          const imageData = localNote.value.images[imageId]
+          if (imageData && imageData.startsWith('data:image/') && imageData.includes('base64,')) {
+            // 返回HTML图片标签，使用base64数据，添加响应式类名
+            return `<img src="${imageData}" alt="${alt || '图片'}" class="embedded-image responsive-image" loading="lazy" />`
+          } else {
+            console.log(`[渲染] ❌ 图片数据格式无效: ${imageId}, 数据开头: ${imageData?.substring(0, 50)}`)
+            return `<div class="image-placeholder">图片格式错误 (${alt || imageId})</div>`
+          }
         }
-        // 如果找不到图片，保持原样
-        return match
+        // 如果找不到图片，显示占位符
+        console.log(`[渲染] ❌ 图片未找到: ${imageId}`)
+        return `<div class="image-placeholder">图片加载中... (${alt || imageId})</div>`
       })
     }
 
@@ -914,12 +1080,25 @@ const renderedContent = computed(() => {
 
     // 使用DOMPurify清理HTML，防止XSS，但允许安全的HTML标签和图片
     const cleanHtml = DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'data-code', 'data-language']
+      ADD_TAGS: ['iframe', 'pre', 'code', 'img', 'mark'],
+      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'data-code', 'data-language', 'data-search-index', 'loading', 'decoding'],
+      ALLOW_DATA_ATTR: true,
+      ALLOW_UNKNOWN_PROTOCOLS: true,
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
     })
 
+    // 处理代码块的后处理逻辑
     nextTick(() => {
-      enhanceCodeBlocks()
+      console.log(`渲染内容完成，当前主题: ${currentTheme}，开始处理代码块`)
+      
+      // 应用当前主题样式
+      applyThemeStyles(currentTheme)
+      
+      // 处理代码块
+      setTimeout(() => {
+        enhanceCodeBlocks()
+        console.log(`代码块增强完成，主题: ${currentTheme}`)
+      }, 5)
     })
 
     return cleanHtml
@@ -932,15 +1111,24 @@ const renderedContent = computed(() => {
 })
 
 function enhanceCodeBlocks() {
-  // 查找所有包含language-类的code元素，以及没有language-类的pre>code元素
-  const codeElements = document.querySelectorAll('.prose code[class*="language-"], .prose pre > code:not([class*="language-"])')
+  // 查找所有还未处理的代码块
+  const codeElements = document.querySelectorAll('.prose pre > code:not([data-enhanced])')
+  const currentTheme = currentHighlightTheme.value || 'default'
   
-  codeElements.forEach((codeElement) => {
+  console.log(`enhanceCodeBlocks 开始处理，找到 ${codeElements.length} 个未处理的代码块，当前主题: ${currentTheme}`)
+  
+  codeElements.forEach((codeElement, index) => {
     const pre = codeElement.closest('pre')
     if (!pre) return
     
+    console.log(`处理第 ${index + 1} 个代码块`)
+    
+    // 标记已处理，避免重复处理
+    codeElement.setAttribute('data-enhanced', 'true')
+    
     // 避免重复处理
     if (pre.closest('.code-block-container')) {
+      console.log(`代码块 ${index + 1} 已存在容器，跳过`)
       return
     }
 
@@ -954,20 +1142,20 @@ function enhanceCodeBlocks() {
       codeElement.classList.add('language-plaintext')
     }
 
+    // 清理可能存在的旧样式类
+    codeElement.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+    pre.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+
+    // 添加当前主题类
+    const themeClass = `prism-${currentTheme}`
+    codeElement.classList.add(themeClass)
+    pre.classList.add(themeClass)
+    
+    console.log(`代码块 ${index + 1} 应用主题类: ${themeClass}`)
 
     // 创建容器
     const container = document.createElement('div')
     container.className = 'code-block-container'
-
-    // 创建头部
-    const header = document.createElement('div')
-    header.className = 'code-block-header'
-
-    // 语言标识
-    const langLabel = document.createElement('span')
-    langLabel.className = 'code-language'
-    langLabel.textContent = lang
-
 
 
     // 为pre元素添加行号支持
@@ -977,10 +1165,13 @@ function enhanceCodeBlocks() {
     const parent = pre.parentNode
     if (parent) {
       parent.insertBefore(container, pre)
-      container.appendChild(header)
       container.appendChild(pre)
     }
+    
+    console.log(`代码块 ${index + 1} 处理完成，语言: ${lang}，主题: ${currentTheme}`)
   })
+  
+  console.log(`enhanceCodeBlocks 处理完成，共处理 ${codeElements.length} 个代码块`)
 }
 
 // HTML 转义函数
@@ -1786,11 +1977,11 @@ function getDefaultHighlightTheme() {
   if (window.matchMedia) {
     // 检查是否为暗色模式
     const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
-    return isDarkMode ? 'dark' : 'default'
+    return isDarkMode ? 'tomorrow' : 'default'
   }
 
-  // 默认使用暗色主题
-  return 'dark'
+  // 默认使用默认主题
+  return 'default'
 }
 
 // 设置代码复制功能
@@ -1848,22 +2039,8 @@ function setupCodeCopyFeature() {
 
 // 监听组件挂载，获取可用标签
 onMounted(async () => {
-  // 检查 Prism 初始状态
-  console.log('Prism 初始状态:', {
-    available: typeof Prism !== 'undefined',
-    languages: typeof Prism !== 'undefined' ? Object.keys(Prism.languages || {}) : [],
-    highlight: typeof Prism !== 'undefined' && typeof Prism.highlight === 'function'
-  });
-
   // 首先加载 Prism 语言组件
   await loadPrismLanguages()
-
-  // 加载完成后再次检查状态
-  console.log('Prism 加载后状态:', {
-    available: typeof Prism !== 'undefined',
-    languages: typeof Prism !== 'undefined' ? Object.keys(Prism.languages || {}) : [],
-    highlight: typeof Prism !== 'undefined' && typeof Prism.highlight === 'function'
-  });
 
   // 设置文档点击监听器
   setupDocumentClickListener()
@@ -1874,20 +2051,50 @@ onMounted(async () => {
   // 设置图片点击放大功能
   setupImageClickHandler()
 
-  // 加载默认主题
-  const theme = currentHighlightTheme.value
+  // 加载保存的代码高亮主题
+  const savedTheme = localStorage.getItem('mytips-highlight-theme')
+  const theme = savedTheme || getDefaultHighlightTheme()
+  currentHighlightTheme.value = theme
   console.log(`初始化代码高亮主题: ${theme}`)
 
-  // 动态加载主题样式表
-  loadPrismTheme(theme)
-
   // 应用代码高亮主题
-  setHighlightTheme(currentHighlightTheme.value)
+  setHighlightTheme(theme)
 
-    // 初始化Prism行号插件
-    if (typeof Prism !== 'undefined' && Prism.plugins && Prism.plugins.lineNumbers) {
-    console.log('Prism 行号插件已加载')
+  // 添加全局主题变更监听器
+  const handleGlobalThemeChange = (event: CustomEvent) => {
+    const { theme } = event.detail
+    if (theme !== currentHighlightTheme.value) {
+      console.log(`接收到全局主题变更事件: ${theme}`)
+      currentHighlightTheme.value = theme
+      
+      // 重新应用主题
+      nextTick(() => {
+        applyThemeStyles(theme)
+        
+        // 清理并重新处理代码块
+        const codeBlocks = document.querySelectorAll('.prose pre code[data-enhanced]')
+        codeBlocks.forEach(codeBlock => {
+          codeBlock.removeAttribute('data-enhanced')
+          codeBlock.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+          
+          const preElement = codeBlock.closest('pre')
+          if (preElement) {
+            preElement.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+          }
+        })
+        
+        setTimeout(() => {
+          enhanceCodeBlocks()
+          Prism.highlightAll()
+        }, 50)
+      })
+    }
   }
+
+  window.addEventListener('prism-theme-changed', handleGlobalThemeChange as EventListener)
+
+  // 保存监听器引用以便后续清理
+  ;(window as any)._prismThemeListener = handleGlobalThemeChange
 
   // 监听系统主题变化
   if (window.matchMedia) {
@@ -1897,7 +2104,7 @@ onMounted(async () => {
     const themeChangeHandler = (event: MediaQueryListEvent) => {
       // 如果用户没有手动设置主题，则自动切换
       if (!localStorage.getItem('mytips-highlight-theme-manual')) {
-        const newTheme = event.matches ? 'dark' : 'default'
+        const newTheme = event.matches ? 'tomorrow' : 'default'
         setHighlightTheme(newTheme)
       }
     }
@@ -1909,77 +2116,190 @@ onMounted(async () => {
       // Safari和旧版浏览器支持
       darkModeMediaQuery.addListener(themeChangeHandler)
     }
+
+    // 保存监听器引用以便后续清理
+    ;(window as any)._systemThemeListener = themeChangeHandler
+    ;(window as any)._darkModeMediaQuery = darkModeMediaQuery
   }
 })
 
-// 修改setHighlightTheme函数，移除hljs相关代码
+// 强制刷新代码块主题的辅助函数
+function forceRefreshCodeBlocks(theme: string) {
+  console.log(`强制刷新代码块主题: ${theme}`)
+  
+  // 找到所有代码块
+  const allCodeBlocks = document.querySelectorAll('.prose pre code')
+  console.log(`找到 ${allCodeBlocks.length} 个代码块需要更新主题`)
+  
+  allCodeBlocks.forEach((codeBlock, index) => {
+    // 移除所有主题类
+    codeBlock.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+    
+    // 添加新主题类
+    codeBlock.classList.add(`prism-${theme}`)
+    
+    // 更新父级pre元素
+    const preElement = codeBlock.closest('pre')
+    if (preElement) {
+      preElement.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia', 'prism-funky')
+      preElement.classList.add(`prism-${theme}`)
+    }
+    
+    console.log(`代码块 ${index + 1} 主题更新完成: ${theme}`)
+  })
+  
+  // 重新应用 Prism 高亮
+  Prism.highlightAll()
+  console.log(`所有代码块主题刷新完成: ${theme}`)
+}
+
+// 修改setHighlightTheme函数，移除hljs相关代码，使用CSS变量方式
 function setHighlightTheme(theme: string) {
+  console.log(`切换代码高亮主题: ${theme}`)
   currentHighlightTheme.value = theme
   localStorage.setItem('mytips-highlight-theme', theme)
 
   // 标记用户已手动选择主题
   localStorage.setItem('mytips-highlight-theme-manual', 'true')
 
-  // 动态加载对应的Prism主题
-  loadPrismTheme(theme)
-
-  // 更新所有代码块的样式类
-  nextTick(() => {
-    const codeBlocks = document.querySelectorAll('.prose pre code')
-    console.log(`应用主题: ${theme}, 找到 ${codeBlocks.length} 个代码块`)
-
-    codeBlocks.forEach(codeBlock => {
-      // 移除所有主题类
-      codeBlock.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia')
-      // 添加当前主题类
-      codeBlock.classList.add(`prism-${theme}`)
-
-      // 更新父级pre元素的主题类
-      const preElement = codeBlock.closest('pre')
-      if (preElement) {
-        preElement.classList.remove('prism-default', 'prism-tomorrow', 'prism-okaidia')
-        preElement.classList.add(`prism-${theme}`)
-
-      }
-    })
-
-    // 重新应用 Prism 高亮
-    setTimeout(() => {
-      Prism.highlightAll()
-    }, 10)
-  })
-}
-
-// 加载 Prism 主题的函数
-function loadPrismTheme(theme: string) {
-  // 移除之前可能加载的主题样式
+  // 移除旧的动态加载的主题样式
   const existingThemeLinks = document.querySelectorAll('link[data-prism-theme]')
   existingThemeLinks.forEach(link => link.remove())
 
-  // 根据主题名称选择对应的 Prism 主题文件
-  let themeFile = 'prism-tomorrow.css' // 默认主题
-  switch (theme) {
-    case 'tomorrow':
-      themeFile = 'prism-tomorrow.css'
-      break
-    case 'okaidia':
-      themeFile = 'prism-okaidia.css'
-      break
-    case 'default':
-    default:
-      themeFile = 'prism.css'
+  // 立即应用主题样式
+  applyThemeStyles(theme)
+
+  // 立即强制刷新所有代码块
+  setTimeout(() => {
+    forceRefreshCodeBlocks(theme)
+  }, 10)
+
+  // 发送全局事件，通知其他笔记编辑器实例更新主题
+  window.dispatchEvent(new CustomEvent('prism-theme-changed', { 
+    detail: { theme } 
+  }))
+}
+
+// 新增函数：应用主题样式
+function applyThemeStyles(theme: string) {
+  const themeConfig = PRISM_THEMES[theme as keyof typeof PRISM_THEMES] || PRISM_THEMES.default
+  
+  // 创建样式元素
+  let styleElement = document.getElementById('prism-theme-styles') as HTMLStyleElement
+  if (!styleElement) {
+    styleElement = document.createElement('style')
+    styleElement.id = 'prism-theme-styles'
+    document.head.appendChild(styleElement)
   }
 
-  // 创建新的样式链接
-  const linkElement = document.createElement('link')
-  linkElement.rel = 'stylesheet'
-  linkElement.href = `https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/${themeFile}`
-  linkElement.setAttribute('data-prism-theme', theme)
+  // 根据主题生成CSS样式
+  const cssContent = `
+    /* 代码块主题样式 - ${theme} */
+    .prose pre.prism-${theme} {
+      background-color: ${themeConfig.background} !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+      border-radius: 0.5rem !important;
+      overflow: auto !important;
+      margin: 1rem 0 !important;
+      padding: 0 !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+    }
 
-  // 添加到文档头部
-  document.head.appendChild(linkElement)
+    .prose pre.prism-${theme} code {
+      background: transparent !important;
+      color: ${themeConfig.color} !important;
+      padding: 1rem !important;
+      border: none !important;
+      border-radius: 0 !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      font-size: 0.875rem !important;
+      line-height: 1.5 !important;
+      white-space: pre-wrap !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+    }
 
-  console.log(`已加载 Prism 代码高亮主题: ${theme}`)
+    .prose .code-block-container {
+      margin: 1rem 0 !important;
+      border-radius: 0.5rem !important;
+      overflow: hidden !important;
+      border: 1px solid rgba(0,0,0,0.1) !important;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+    }
+
+    .prose .code-block-header {
+      background: rgba(0,0,0,0.05) !important;
+      padding: 0.5rem 1rem !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+      font-size: 0.75rem !important;
+    }
+
+    .prose .code-language {
+      color: rgba(0,0,0,0.6) !important;
+      font-weight: 500 !important;
+      text-transform: uppercase !important;
+    }
+
+    .prose .copy-code-btn {
+      opacity: 0.6 !important;
+      transition: opacity 0.2s ease !important;
+    }
+
+    .prose .copy-code-btn:hover {
+      opacity: 1 !important;
+    }
+
+    /* 暗色主题适配 */
+    ${theme === 'tomorrow' || theme === 'okaidia' || theme === 'funky' ? `
+      .prose .code-block-header {
+        background: rgba(255,255,255,0.05) !important;
+        border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+      }
+
+      .prose .code-language {
+        color: rgba(255,255,255,0.8) !important;
+      }
+
+      .prose pre.prism-${theme} {
+        border: 1px solid rgba(255,255,255,0.1) !important;
+      }
+
+      .prose .code-block-container {
+        border: 1px solid rgba(255,255,255,0.1) !important;
+      }
+    ` : ''}
+
+    /* 行号样式 */
+    .prose pre.line-numbers {
+      position: relative !important;
+      padding-left: 3em !important;
+      counter-reset: linenumber !important;
+    }
+
+    .prose pre.line-numbers > code {
+      position: relative !important;
+    }
+
+    .prose pre.line-numbers .line-numbers-rows {
+      position: absolute !important;
+      pointer-events: none !important;
+      top: 1rem !important;
+      font-size: 100% !important;
+      left: -3.8em !important;
+      width: 3em !important;
+      letter-spacing: -1px !important;
+      border-right: 1px solid rgba(0,0,0,0.2) !important;
+      user-select: none !important;
+      ${theme === 'tomorrow' || theme === 'okaidia' || theme === 'funky' ? 
+        'border-right-color: rgba(255,255,255,0.2) !important;' : ''}
+    }
+  `
+
+  styleElement.textContent = cssContent
+  console.log(`已应用${theme}主题样式`)
 }
 
 // 添加插入表格的函数
@@ -2051,8 +2371,27 @@ watch(() => localNote.value.content, () => {
       const previewScrollable = previewDiv.value.scrollHeight - previewDiv.value.clientHeight;
       previewDiv.value.scrollTop = editorScrollRatio * previewScrollable;
     }
+
+    // 内容变化后，应用保存的代码高亮主题
+    const savedTheme = localStorage.getItem('mytips-highlight-theme')
+    if (savedTheme) {
+      // 确保主题样式已应用
+      applyThemeStyles(savedTheme)
+      
+      // 延迟应用主题，确保内容已渲染
+      setTimeout(() => {
+        enhanceCodeBlocks()
+        Prism.highlightAll()
+      }, 100)
+    } else {
+      // 如果主题没有变化，只是重新增强代码块
+      setTimeout(() => {
+        enhanceCodeBlocks()
+        Prism.highlightAll()
+      }, 50)
+    }
   });
-});
+})
 
 // 在切换模式时同步滚动位置
 watch(() => isSplitMode.value, (newValue) => {
@@ -2107,6 +2446,38 @@ onBeforeUnmount(() => {
     clearTimeout(timeoutId)
   })
   imageLoadTimeouts.value.clear()
+
+  // 清理全局主题变更监听器
+  const themeListener = (window as any)._prismThemeListener
+  if (themeListener) {
+    window.removeEventListener('prism-theme-changed', themeListener)
+    delete (window as any)._prismThemeListener
+  }
+
+  // 清理系统主题变更监听器
+  const systemThemeListener = (window as any)._systemThemeListener
+  const darkModeMediaQuery = (window as any)._darkModeMediaQuery
+  if (systemThemeListener && darkModeMediaQuery) {
+    if (darkModeMediaQuery.removeEventListener) {
+      darkModeMediaQuery.removeEventListener('change', systemThemeListener)
+    } else if (darkModeMediaQuery.removeListener) {
+      darkModeMediaQuery.removeListener(systemThemeListener)
+    }
+    delete (window as any)._systemThemeListener
+    delete (window as any)._darkModeMediaQuery
+  }
+
+  // 清理动态创建的主题样式元素
+  const themeStyleElement = document.getElementById('prism-theme-styles')
+  if (themeStyleElement) {
+    themeStyleElement.remove()
+  }
+
+  // 清理可能残留的动态加载的主题CSS链接
+  const existingThemeLinks = document.querySelectorAll('link[data-prism-theme]')
+  existingThemeLinks.forEach(link => link.remove())
+
+  console.log('NoteEditor组件资源清理完成')
 
   // 可选：清理图片缓存（如果需要释放内存）
   // imageLoadCache.value.clear()
@@ -2345,6 +2716,70 @@ function onEditorBlur(event: FocusEvent) {
   }
 }
 
+// 计算属性 - 检查笔记是否加密
+const isNoteEncrypted = computed(() => {
+  // 先检查store中是否有加密状态
+  const storeResult = encryptionStore.isItemEncrypted(props.note.id)
+  if (storeResult) {
+    return true
+  }
+  
+  // 如果内容是占位符，也认为是加密状态
+  if (props.note.content === "[此笔记已加密，请解锁后查看]") {
+    return true
+  }
+  
+  // 检查内容是否为加密的JSON格式数据
+  if (props.note.content && props.note.content.trim().startsWith('{') && props.note.content.includes('"salt"') && props.note.content.includes('"encrypted_data"')) {
+    console.log('检测到加密的JSON数据格式')
+    return true
+  }
+  
+  return false
+})
+
+// 计算属性 - 检查笔记是否已解锁
+const isNoteUnlocked = computed(() => {
+  // 如果内容是占位符，说明未解锁
+  if (props.note.content === "[此笔记已加密，请解锁后查看]") {
+    return false
+  }
+  
+  // 如果内容是加密的JSON数据，说明未解锁
+  if (props.note.content && props.note.content.trim().startsWith('{') && props.note.content.includes('"salt"') && props.note.content.includes('"encrypted_data"')) {
+    return false
+  }
+  
+  // 否则检查store中的解锁状态
+  return encryptionStore.isItemUnlocked(props.note.id)
+})
+
+// 处理解锁请求
+function handleUnlockRequest() {
+  emit('unlock-note', props.note.id)
+}
+
+// 处理解密请求
+function handleDecryptRequest() {
+  emit('decrypt-note', props.note.id)
+}
+
+// 监听主题变化，强制重新渲染代码块 - 简化监听器，避免重复处理
+watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
+  if (newTheme !== oldTheme) {
+    console.log(`主题变化监听器触发: ${oldTheme} -> ${newTheme}`)
+    
+    // 只有当主题变化不是由setHighlightTheme函数触发时才处理
+    // setHighlightTheme函数已经处理了主题应用，这里只需要处理其他情况
+    setTimeout(() => {
+      // 确保样式已经应用
+      applyThemeStyles(newTheme)
+      
+      // 刷新代码块
+      forceRefreshCodeBlocks(newTheme)
+    }, 50)
+  }
+}, { immediate: false })
 
 </script>
 
@@ -2354,15 +2789,13 @@ function onEditorBlur(event: FocusEvent) {
 :deep(.line-numbers .line-numbers-rows) {
   position: absolute;
   pointer-events: none;
-  top: 0;
-
+  top: 1rem;
   left: -3.8em;
   width: 3em;
   letter-spacing: -1px;
   border-right: 1px solid #a2a2a2;
   user-select: none;
 }
-
 
 :deep(.prose pre code) {
   background: transparent;
@@ -2378,7 +2811,6 @@ function onEditorBlur(event: FocusEvent) {
   overflow-wrap: break-word; 
   word-break: break-all;
 }
-
 
 /* NoteEditor特有的样式 */
 
@@ -2603,5 +3035,124 @@ function onEditorBlur(event: FocusEvent) {
   word-break: break-all !important; /* 强制在任意字符间换行 */
 }
 
+/* 行内代码样式 - 区别于代码块中的代码 */
+:deep(.prose code:not(pre code)) {
+  background-color: rgba(var(--bc), 0.1) !important;
+  color: rgb(214, 51, 132) !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: 0.25rem !important;
+  font-size: 0.875em !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-weight: 500 !important;
+  border: 1px solid rgba(var(--bc), 0.2) !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-all !important;
+  /* 修复重影问题 */
+  text-shadow: none !important;
+}
+
+/* 暗色主题下的行内代码样式 */
+[data-theme="dark"] :deep(.prose code:not(pre code)),
+[data-theme="night"] :deep(.prose code:not(pre code)),
+[data-theme="black"] :deep(.prose code:not(pre code)) {
+  background-color: rgb(45, 45, 45);
+  color: rgb(245, 245, 245);
+  border: 1px solid rgb(75, 75, 75);
+}
+
+/* 确保行内代码在不同背景下都有良好的对比度 */
+:deep(.prose p code:not(pre code)),
+:deep(.prose li code:not(pre code)),
+:deep(.prose td code:not(pre code)),
+:deep(.prose th code:not(pre code)),
+:deep(.prose blockquote code:not(pre code)) {
+  background-color: rgba(175, 184, 193, 0.2);
+  color: rgb(214, 51, 132);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  font-weight: 600;
+}
+
+/* 暗色主题下的特定上下文行内代码 */
+[data-theme="dark"] :deep(.prose p code:not(pre code)),
+[data-theme="dark"] :deep(.prose li code:not(pre code)),
+[data-theme="dark"] :deep(.prose td code:not(pre code)),
+[data-theme="dark"] :deep(.prose th code:not(pre code)),
+[data-theme="dark"] :deep(.prose blockquote code:not(pre code)),
+[data-theme="night"] :deep(.prose p code:not(pre code)),
+[data-theme="night"] :deep(.prose li code:not(pre code)),
+[data-theme="night"] :deep(.prose td code:not(pre code)),
+[data-theme="night"] :deep(.prose th code:not(pre code)),
+[data-theme="night"] :deep(.prose blockquote code:not(pre code)),
+[data-theme="black"] :deep(.prose p code:not(pre code)),
+[data-theme="black"] :deep(.prose li code:not(pre code)),
+[data-theme="black"] :deep(.prose td code:not(pre code)),
+[data-theme="black"] :deep(.prose th code:not(pre code)),
+[data-theme="black"] :deep(.prose blockquote code:not(pre code)) {
+  background-color: rgba(100, 100, 100, 0.3);
+  color: rgb(255, 182, 193);
+}
+
+/* 链接中的行内代码样式 */
+:deep(.prose a code:not(pre code)) {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] :deep(.prose a code:not(pre code)),
+[data-theme="night"] :deep(.prose a code:not(pre code)),
+[data-theme="black"] :deep(.prose a code:not(pre code)) {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 修复代码块样式冲突 */
+:deep(.prose pre) {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 1rem 0 !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+}
+
+:deep(.prose pre code) {
+  background: transparent !important;
+  padding: 1rem !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  white-space: pre-wrap !important;
+  word-wrap: break-word !important;
+  overflow-wrap: break-word !important;
+  word-break: break-all !important;
+  display: block !important;
+  width: 100% !important;
+  /* 修复重影问题 */
+  text-shadow: none !important;
+  font-weight: normal !important;
+}
+
+/* 修复代码块容器样式 */
+:deep(.prose .code-block-container) {
+  margin: 1rem 0 !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(var(--bc), 0.1) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+:deep(.prose .code-block-header) {
+  background: rgba(var(--bc), 0.05) !important;
+  padding: 0.5rem 1rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-bottom: 1px solid rgba(var(--bc), 0.1) !important;
+  font-size: 0.75rem !important;
+}
 
 </style>
