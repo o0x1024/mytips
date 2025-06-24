@@ -1,12 +1,11 @@
 use arboard::Clipboard;
 use base64::{engine::general_purpose, Engine as _};
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        atomic::{AtomicBool, Ordering}, Mutex,
     },
     thread,
     time::Duration,
@@ -532,7 +531,6 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
             if let Ok(current_text) = clipboard.get_text() {
                 // 检查内容是否为空或与上次相同
                 if !current_text.is_empty() && current_text != last_text {
-                    println!("检测到新的剪贴板文本内容");
                     last_text = current_text.clone();
 
                     // 检查此内容是否最近被处理过，防止重复添加
@@ -588,7 +586,6 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                             });
                             
                             if should_ignore {
-                                println!("内容来源 '{}' 在白名单中，跳过添加", source_name);
                                 if let Some(ref proc_name) = process_name {
                                     println!("进程名称: {}", proc_name);
                                 }
@@ -701,7 +698,6 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                     });
                                     
                                     if should_ignore {
-                                        println!("内容来源 '{}' 在白名单中，跳过添加", source_name);
                                         if let Some(ref proc_name) = process_name {
                                             println!("进程名称: {}", proc_name);
                                         }

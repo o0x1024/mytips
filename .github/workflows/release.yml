@@ -12,7 +12,7 @@ on:
       release_notes:
         description: '更新说明'
         required: false
-        default: '修复了一些已知问题，提升了用户体验。'
+        default: '关闭后最小化到托盘，'
 
 jobs:
   build-and-release:

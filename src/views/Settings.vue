@@ -739,7 +739,7 @@
                     <svg v-if="showApiKey" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                     <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
@@ -838,6 +838,59 @@
                   </span>
                   <span v-else>测试API连接</span>
                 </button>
+              </div>
+
+              <div class="divider">自定义模型配置</div>
+
+              <!-- 自定义模型列表 -->
+              <div class="form-control mb-4">
+                <label class="label">
+                  <span class="label-text">已配置的自定义模型</span>
+                  <button class="btn btn-sm btn-primary" @click="openCustomModelModal">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    添加自定义模型
+                  </button>
+                </label>
+                
+                <div v-if="customModels.length === 0" class="text-center py-8 text-base-content/60">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                  <p>暂无自定义模型配置</p>
+                  <p class="text-sm">点击上方按钮添加您的第一个自定义模型</p>
+                </div>
+
+                <div v-else class="space-y-3">
+                  <div v-for="model in customModels" :key="model.id" 
+                       class="card bg-base-200 border border-base-300">
+                    <div class="card-body p-4">
+                      <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                          <h4 class="font-semibold">{{ model.name }}</h4>
+                          <p class="text-sm text-base-content/70 mb-2">{{ model.endpoint }}</p>
+                          <div class="flex gap-2 text-xs">
+                            <span class="badge badge-outline">{{ model.adapter_type || 'openai' }}</span>
+                            <span class="badge badge-outline">{{ model.model_name }}</span>
+                          </div>
+                        </div>
+                        <div class="flex gap-2">
+                          <button class="btn btn-sm btn-ghost" @click="editCustomModel(model.id)" title="编辑">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button class="btn btn-sm btn-ghost text-error" @click="deleteCustomModel(model.id)" title="删除">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1026,8 +1079,7 @@
               <button class="btn btn-xs btn-error ml-3" @click="removeModel(index)">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                   stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
               </button>
             </div>
@@ -1050,6 +1102,144 @@
         </div>
       </div>
     </dialog>
+
+    <!-- 自定义模型配置模态框 -->
+    <dialog ref="customModelModal" class="modal">
+      <div class="modal-box w-11/12 max-w-2xl">
+        <h3 class="font-bold text-lg mb-4">{{ editingCustomModelId ? '编辑自定义模型' : '添加自定义模型' }}</h3>
+        
+        <div class="space-y-4">
+          <!-- 模型名称 -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">模型名称 *</span>
+            </label>
+            <input type="text" v-model="customModelForm.name" placeholder="例如：我的GPT模型" 
+                   class="input input-bordered w-full" />
+          </div>
+
+          <!-- API端点 -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">API端点 *</span>
+            </label>
+            <input type="text" v-model="customModelForm.endpoint" 
+                   placeholder="例如：https://api.openai.com/v1/chat/completions" 
+                   class="input input-bordered w-full" />
+            <label class="label">
+              <span class="label-text-alt">完整的API端点URL，包括协议和路径</span>
+            </label>
+          </div>
+
+          <!-- 模型名称（API） -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">模型标识符 *</span>
+            </label>
+            <input type="text" v-model="customModelForm.model_name" 
+                   placeholder="例如：gpt-3.5-turbo" 
+                   class="input input-bordered w-full" />
+            <label class="label">
+              <span class="label-text-alt">API调用时使用的模型名称</span>
+            </label>
+          </div>
+
+          <!-- API密钥 -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">API密钥</span>
+            </label>
+            <div class="input-group">
+              <input 
+                :type="showCustomModelApiKey ? 'text' : 'password'" 
+                v-model="customModelForm.api_key" 
+                placeholder="可选，某些本地模型不需要API密钥" 
+                class="input input-bordered flex-1" />
+              <button 
+                type="button" 
+                class="btn btn-square" 
+                @click="showCustomModelApiKey = !showCustomModelApiKey">
+                <svg v-if="showCustomModelApiKey" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L8.464 8.464M9.878 9.878a3 3 0 104.243 4.243M4.929 19.071L19.071 4.929" />
+                </svg>
+                <svg v-else class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </button>
+            </div>
+            <label class="label">
+              <span class="label-text-alt">留空表示不需要认证（如本地模型）</span>
+            </label>
+          </div>
+
+          <!-- 适配器类型 -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">适配器类型</span>
+            </label>
+            <select v-model="customModelForm.adapter_type" class="select select-bordered w-full">
+              <option value="openai">OpenAI 兼容</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+            <label class="label">
+              <span class="label-text-alt">选择API格式兼容的类型</span>
+            </label>
+          </div>
+
+          <!-- 自定义头部 -->
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">自定义HTTP头部</span>
+              <button type="button" class="btn btn-xs btn-primary" @click="addCustomHeader">
+                添加头部
+              </button>
+            </label>
+            <div v-if="customModelForm.custom_headers.length > 0" class="space-y-2">
+              <div v-for="(header, index) in customModelForm.custom_headers" :key="index" 
+                   class="flex gap-2 items-center">
+                <input 
+                  v-model="header.key" 
+                  placeholder="头部名称" 
+                  class="input input-bordered input-sm flex-1" />
+                <input 
+                  v-model="header.value" 
+                  placeholder="头部值" 
+                  class="input input-bordered input-sm flex-1" />
+                <button type="button" class="btn btn-xs btn-error" @click="removeCustomHeader(index)">
+                  删除
+                </button>
+              </div>
+            </div>
+            <label class="label">
+              <span class="label-text-alt">可选，用于添加额外的HTTP头部</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- 模态框操作按钮 -->
+        <div class="modal-action">
+          <button class="btn" @click="closeCustomModelModal">取消</button>
+          <button 
+            class="btn btn-secondary" 
+            @click="testCustomModelConnection"
+            :disabled="!canTestCustomModel || isTestingCustomModel">
+            <span v-if="isTestingCustomModel" class="loading loading-spinner loading-xs"></span>
+            {{ isTestingCustomModel ? '测试中...' : '测试连接' }}
+          </button>
+          <button 
+            class="btn btn-primary" 
+            @click="saveCustomModel"
+            :disabled="!canSaveCustomModel || isSavingCustomModel">
+            <span v-if="isSavingCustomModel" class="loading loading-spinner loading-xs"></span>
+            {{ isSavingCustomModel ? '保存中...' : '保存配置' }}
+          </button>
+        </div>
+      </div>
+    </dialog>
+
   </div>
 </template>
 
@@ -1469,6 +1659,9 @@ onActivated(async () => {
       // 加载剪贴板设置
       await loadClipboardSettingsFromBackend()
       
+      // 加载自定义模型列表
+      await loadCustomModels()
+      
       // 标记设置已加载
       uiStore.settingsLoaded = true
     } catch (error) {
@@ -1520,6 +1713,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('获取当前版本失败:', error)
   }
+  
+  // 加载自定义模型列表
+  await loadCustomModels()
 })
 
 // 保存代理设置
@@ -1664,7 +1860,6 @@ const availableModels = [
   { id: 'claude', name: 'Anthropic Claude' },
   { id: 'doubao', name: '字节豆包' },
   { id: 'grok', name: 'xAI Grok' },
-  { id: 'custom', name: '自定义API' }
 ]
 
 // 默认的各AI模型的常用模型名称数据
@@ -2108,6 +2303,211 @@ function addPresetApp(appName: string) {
   updateClipboardSettings()
   
   message(`已添加 "${appName}" 到白名单`, { title: '成功' })
+}
+
+// 新增自定义模型配置管理功能
+const customModels = ref<Array<{
+  id: string
+  name: string
+  endpoint: string
+  model_name: string
+  adapter_type: string
+  api_key?: string
+}>>([])
+
+const customModelModal = ref<HTMLDialogElement | null>(null)
+const editingCustomModelId = ref('')
+const showCustomModelApiKey = ref(false)
+const isSavingCustomModel = ref(false)
+const isTestingCustomModel = ref(false)
+
+const customModelForm = ref({
+  name: '',
+  endpoint: '',
+  model_name: '',
+  api_key: '',
+  adapter_type: 'openai',
+  custom_headers: [] as Array<{ key: string, value: string }>
+})
+
+// 计算属性
+const canSaveCustomModel = computed(() => {
+  return customModelForm.value.name.trim() &&
+         customModelForm.value.endpoint.trim() &&
+         customModelForm.value.model_name.trim()
+         // 移除API密钥的必填验证，允许为空
+})
+
+const canTestCustomModel = computed(() => {
+  return customModelForm.value.endpoint.trim() &&
+         customModelForm.value.model_name.trim()
+         // 测试连接时也不要求API密钥
+})
+
+// 加载自定义模型列表
+async function loadCustomModels(): Promise<void> {
+  try {
+    const models = await invoke('list_custom_model_configs')
+    customModels.value = models as Array<{
+      id: string
+      name: string
+      endpoint: string
+      model_name: string
+      adapter_type: string
+    }>
+  } catch (error) {
+    console.error('加载自定义模型失败:', error)
+    customModels.value = []
+  }
+}
+
+// 打开自定义模型配置模态框
+function openCustomModelModal(): void {
+  editingCustomModelId.value = ''
+  customModelForm.value = {
+    name: '',
+    endpoint: '',
+    model_name: '',
+    api_key: '',
+    adapter_type: 'openai',
+    custom_headers: []
+  }
+  showCustomModelApiKey.value = false
+  customModelModal.value?.showModal()
+}
+
+// 编辑自定义模型
+async function editCustomModel(modelId: string): Promise<void> {
+  try {
+    const config = await invoke('get_custom_model_config', { configId: modelId })
+    const configData = config as any
+    
+    editingCustomModelId.value = modelId
+    customModelForm.value = {
+      name: configData.name || '',
+      endpoint: configData.endpoint || '',
+      model_name: configData.model_name || '',
+      api_key: configData.api_key || '',
+      adapter_type: configData.adapter_type || 'openai',
+      custom_headers: Object.entries(configData.custom_headers || {}).map(([key, value]) => ({
+        key,
+        value: value as string
+      }))
+    }
+    showCustomModelApiKey.value = false
+    customModelModal.value?.showModal()
+  } catch (error) {
+    console.error('获取自定义模型配置失败:', error)
+    message('获取自定义模型配置失败: ' + error, { title: '错误' })
+  }
+}
+
+// 关闭自定义模型配置模态框
+function closeCustomModelModal(): void {
+  editingCustomModelId.value = ''
+  customModelForm.value = {
+    name: '',
+    endpoint: '',
+    model_name: '',
+    api_key: '',
+    adapter_type: 'openai',
+    custom_headers: []
+  }
+  customModelModal.value?.close()
+}
+
+// 保存自定义模型配置
+async function saveCustomModel(): Promise<void> {
+  if (!canSaveCustomModel.value) return
+  
+  isSavingCustomModel.value = true
+  try {
+    const configId = editingCustomModelId.value || `custom_${Date.now()}`
+    
+    // 转换自定义头部为对象格式
+    const customHeaders = customModelForm.value.custom_headers
+      .filter(h => h.key.trim() && h.value.trim())
+      .reduce((acc, h) => {
+        acc[h.key.trim()] = h.value.trim()
+        return acc
+      }, {} as Record<string, string>)
+
+    await invoke('save_custom_model_config', {
+      configId,
+      name: customModelForm.value.name.trim(),
+      endpoint: customModelForm.value.endpoint.trim(),
+      modelName: customModelForm.value.model_name.trim(),
+      apiKey: customModelForm.value.api_key.trim(),
+      adapterType: customModelForm.value.adapter_type,
+      customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : null
+    })
+
+    message(editingCustomModelId.value ? '自定义模型配置更新成功' : '自定义模型配置添加成功', { title: '成功' })
+    closeCustomModelModal()
+    await loadCustomModels()
+  } catch (error) {
+    console.error('保存自定义模型配置失败:', error)
+    message('保存自定义模型配置失败: ' + error, { title: '错误' })
+  } finally {
+    isSavingCustomModel.value = false
+  }
+}
+
+// 删除自定义模型配置
+async function deleteCustomModel(modelId: string): Promise<void> {
+  if (!confirm('确定要删除这个自定义模型配置吗？')) return
+  
+  try {
+    await invoke('delete_custom_model_config', { configId: modelId })
+    message('自定义模型配置删除成功', { title: '成功' })
+    await loadCustomModels()
+  } catch (error) {
+    console.error('删除自定义模型配置失败:', error)
+    message('删除自定义模型配置失败: ' + error, { title: '错误' })
+  }
+}
+
+// 测试自定义模型连接
+async function testCustomModelConnection(): Promise<void> {
+  if (!canTestCustomModel.value) return
+  
+  isTestingCustomModel.value = true
+  try {
+    // 转换自定义头部为对象格式
+    const customHeaders = customModelForm.value.custom_headers
+      .filter(h => h.key.trim() && h.value.trim())
+      .reduce((acc, h) => {
+        acc[h.key.trim()] = h.value.trim()
+        return acc
+      }, {} as Record<string, string>)
+
+    // 调用后端测试API
+    const result = await invoke('test_custom_model_connection', {
+      endpoint: customModelForm.value.endpoint.trim(),
+      modelName: customModelForm.value.model_name.trim(),
+      apiKey: customModelForm.value.api_key.trim(),
+      adapterType: customModelForm.value.adapter_type,
+      customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : null
+    })
+
+    message(result as string, { title: '测试结果' })
+    
+  } catch (error) {
+    console.error('测试自定义模型连接失败:', error)
+    message('测试连接失败: ' + error, { title: '错误' })
+  } finally {
+    isTestingCustomModel.value = false
+  }
+}
+
+// 添加自定义头部
+function addCustomHeader(): void {
+  customModelForm.value.custom_headers.push({ key: '', value: '' })
+}
+
+// 移除自定义头部
+function removeCustomHeader(index: number): void {
+  customModelForm.value.custom_headers.splice(index, 1)
 }
 </script>
 

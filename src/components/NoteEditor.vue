@@ -54,10 +54,24 @@
 
         <!-- 编辑器工具栏 -->
         <div class="border-b border-base-300 p-2 flex flex-wrap items-center gap-2 bg-base-200">
-          <div class="btn-group">
-            <button class="btn btn-sm btn-ghost" title="标题1" @click="insertMarkdown('# ')">H1</button>
-            <button class="btn btn-sm btn-ghost" title="标题2" @click="insertMarkdown('## ')">H2</button>
-            <button class="btn btn-sm btn-ghost" title="标题3" @click="insertMarkdown('### ')">H3</button>
+          <div class="dropdown dropdown-bottom">
+            <button tabindex="0" class="btn btn-sm btn-ghost" title="插入标题">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M6 12h12M6 20V4M18 20V4M14 4v16M10 4v16"></path>
+              </svg>
+              <span class="ml-1 text-xs">标题</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
+              <li><a @click="insertMarkdown('# ')" class="text-2xl font-bold">H1</a></li>
+              <li><a @click="insertMarkdown('## ')" class="text-xl font-bold">H2</a></li>
+              <li><a @click="insertMarkdown('### ')" class="text-lg font-bold">H3</a></li>
+              <li><a @click="insertMarkdown('#### ')" class="text-base font-bold">H4</a></li>
+              <li><a @click="insertMarkdown('##### ')" class="text-sm font-bold">H5</a></li>
+              <li><a @click="insertMarkdown('###### ')" class="text-xs font-bold">H6</a></li>
+            </ul>
           </div>
 
           <div class="btn-group">

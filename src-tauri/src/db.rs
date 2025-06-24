@@ -958,6 +958,24 @@ impl DbManager {
         }
     }
 
+    // 获取所有以指定前缀开头的设置键
+    pub fn get_settings_by_prefix(&self, prefix: &str) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT key FROM settings WHERE key LIKE ? AND value != ''"
+        )?;
+        let pattern = format!("{}%", prefix);
+        let key_iter = stmt.query_map(params![pattern], |row| {
+            Ok(row.get::<_, String>(0)?)
+        })?;
+
+        let mut keys = Vec::new();
+        for key in key_iter {
+            keys.push(key?);
+        }
+
+        Ok(keys)
+    }
+
     // --- 剪贴板历史记录相关结束 ---
 
     // --- AI角色相关 ---

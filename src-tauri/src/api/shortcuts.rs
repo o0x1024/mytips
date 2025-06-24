@@ -50,7 +50,7 @@ pub fn update_global_shortcut(app: AppHandle, config: ShortcutConfig) -> Result<
         .try_state::<std::sync::Mutex<crate::db::DbManager>>()
         .ok_or("数据库状态未初始化")?;
 
-    let mut db = db_state
+    let db = db_state
         .lock()
         .map_err(|e| format!("锁定数据库失败: {}", e))?;
 

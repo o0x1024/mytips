@@ -3,8 +3,8 @@ use futures::Stream;
 use genai::{
     adapter::AdapterKind,
     chat::{ChatMessage, ChatRequest},
-    resolver::AuthData,
-    Client,
+    resolver::{AuthData, Endpoint, ServiceTargetResolver},
+    Client, ModelIden, ServiceTarget,
 };
 use std::pin::Pin;
 use tokio::sync::mpsc;
@@ -574,4 +574,266 @@ fn get_model_display_name(model_id: &str) -> &str {
         "custom" => "自定义模型",
         _ => "未知模型",
     }
+}
+
+// 创建自定义GenAI客户端，使用ServiceTargetResolver
+pub async fn create_custom_genai_client(
+    endpoint_url: String,
+    api_key: String,
+    model_name: String,
+    adapter_type: String,
+    custom_headers: Option<std::collections::HashMap<String, String>>,
+) -> Result<Client, String> {
+    // 获取代理设置
+    let proxy_settings = crate::api::settings::get_proxy_settings_internal().await?;
+
+    // 如果代理启用，设置环境变量
+    if proxy_settings.enabled {
+        let proxy_url = format!(
+            "{}://{}:{}",
+            proxy_settings.r#type, proxy_settings.host, proxy_settings.port
+        );
+        println!("为自定义GenAI客户端配置代理: {}", proxy_url);
+        std::env::set_var("HTTP_PROXY", &proxy_url);
+        std::env::set_var("HTTPS_PROXY", &proxy_url);
+
+        if proxy_settings.auth {
+            println!("警告：通过环境变量设置代理时不支持认证");
+        }
+    } else {
+        std::env::remove_var("HTTP_PROXY");
+        std::env::remove_var("HTTPS_PROXY");
+    }
+
+    // 解析适配器类型
+    let adapter_kind = match adapter_type.to_lowercase().as_str() {
+        "openai" => AdapterKind::OpenAI,
+        "anthropic" | "claude" => AdapterKind::Anthropic,
+        "gemini" | "google" => AdapterKind::Gemini,
+        "deepseek" => AdapterKind::DeepSeek,
+        _ => AdapterKind::OpenAI, // 默认使用OpenAI格式
+    };
+
+    println!("创建自定义客户端: endpoint={}, model={}, adapter={:?}", 
+             endpoint_url, model_name, adapter_kind);
+
+    // 创建ServiceTargetResolver
+    let target_resolver = ServiceTargetResolver::from_resolver_fn(
+        move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+            let ServiceTarget { .. } = service_target;
+            
+            // 使用自定义端点
+            let endpoint = Endpoint::from_owned(endpoint_url.clone());
+            
+            // 使用提供的API密钥，如果为空则不设置认证
+            let auth = if api_key.is_empty() {
+                AuthData::from_single("") // 空认证
+            } else {
+                AuthData::from_single(api_key.clone())
+            };
+            
+            // 创建模型标识符，使用自定义模型名称
+            let model_iden = ModelIden::new(adapter_kind, &model_name);
+
+            Ok(ServiceTarget {
+                endpoint,
+                auth,
+                model: model_iden,
+            })
+        },
+    );
+
+    // 构建客户端
+    let client = Client::builder()
+        .with_service_target_resolver(target_resolver)
+        .build();
+
+    Ok(client)
+}
+
+// 使用自定义配置发送消息
+pub async fn send_message_to_custom_ai(
+    endpoint_url: String,
+    api_key: String,
+    model_name: String,
+    adapter_type: String,
+    custom_headers: Option<std::collections::HashMap<String, String>>,
+    message: String,
+) -> Result<String, String> {
+    // 创建自定义genai客户端
+    let client = create_custom_genai_client(
+        endpoint_url,
+        api_key,
+        model_name.clone(),
+        adapter_type,
+        custom_headers,
+    ).await?;
+
+    // 创建聊天请求
+    let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
+
+    // 发送请求并获取响应
+    let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
+        Ok(res) => res,
+        Err(e) => return Ok(format_ai_error(&format!("自定义AI请求失败: {}", e))),
+    };
+
+    // 提取响应文本
+    match chat_res.content_text_as_str() {
+        Some(content) => Ok(content.to_string()),
+        None => Ok(format_ai_error("无法获取自定义AI响应内容")),
+    }
+}
+
+// 使用自定义配置进行流式聊天
+pub async fn stream_message_from_custom_ai(
+    endpoint_url: String,
+    api_key: String,
+    model_name: String,
+    adapter_type: String,
+    custom_headers: Option<std::collections::HashMap<String, String>>,
+    message: String,
+) -> Result<TextStream, String> {
+    println!("启动自定义AI流式请求: endpoint={}, model={}", endpoint_url, model_name);
+
+    // 创建自定义genai客户端
+    let client = match create_custom_genai_client(
+        endpoint_url,
+        api_key,
+        model_name.clone(),
+        adapter_type,
+        custom_headers,
+    ).await {
+        Ok(client) => client,
+        Err(e) => {
+            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
+            let error_msg = format_ai_error(&format!("创建自定义AI客户端失败: {}", e));
+            let _ = tx.send(Ok(error_msg)).await;
+            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            return Ok(Box::pin(stream) as TextStream);
+        }
+    };
+
+    // 创建聊天请求
+    let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
+
+    // 创建mpsc通道
+    let (tx, rx) = mpsc::channel::<Result<String, String>>(100);
+
+    // 在后台任务中处理
+    tokio::spawn(async move {
+        println!("开始获取自定义AI响应...");
+
+        match client.exec_chat(&model_name, chat_req, None).await {
+            Ok(response) => {
+                println!("获取自定义AI响应成功");
+
+                if let Some(content) = response.content_text_as_str() {
+                    println!("响应内容长度: {} 字符", content.len());
+
+                    // 模拟流式输出
+                    for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(5).enumerate() {
+                        if i % 20 == 0 {
+                            println!("发送第 {} 块...", i);
+                        }
+
+                        let chunk_str: String = chunk.iter().collect();
+                        let _ = tx.send(Ok(chunk_str)).await;
+                        sleep(Duration::from_millis(30)).await;
+                    }
+                    println!("自定义AI响应内容已发送完毕");
+                } else {
+                    println!("无法从自定义AI响应中提取内容");
+                    let error_msg = format_ai_error("无法从自定义AI响应中提取内容");
+                    let _ = tx.send(Ok(error_msg)).await;
+                }
+            }
+            Err(e) => {
+                println!("自定义AI请求失败: {}", e);
+                let error_msg = format_ai_error(&format!("自定义AI请求失败: {}", e));
+                let _ = tx.send(Ok(error_msg)).await;
+            }
+        }
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    Ok(Box::pin(stream) as TextStream)
+}
+
+// 使用自定义配置进行历史对话
+pub async fn stream_chat_with_history_custom_ai(
+    endpoint_url: String,
+    api_key: String,
+    model_name: String,
+    adapter_type: String,
+    custom_headers: Option<std::collections::HashMap<String, String>>,
+    messages: Vec<ChatMessage>,
+) -> Result<TextStream, String> {
+    println!(
+        "启动自定义AI历史对话流式请求: endpoint={}, model={}, messages={}",
+        endpoint_url, model_name, messages.len()
+    );
+
+    // 创建自定义genai客户端
+    let client = match create_custom_genai_client(
+        endpoint_url,
+        api_key,
+        model_name.clone(),
+        adapter_type,
+        custom_headers,
+    ).await {
+        Ok(client) => client,
+        Err(e) => {
+            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
+            let error_msg = format_ai_error(&format!("创建自定义AI客户端失败: {}", e));
+            let _ = tx.send(Ok(error_msg)).await;
+            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            return Ok(Box::pin(stream) as TextStream);
+        }
+    };
+
+    // 创建聊天请求，使用完整的消息历史
+    let chat_req = ChatRequest::new(messages);
+
+    // 创建mpsc通道
+    let (tx, rx) = mpsc::channel::<Result<String, String>>(100);
+
+    // 在后台任务中处理
+    tokio::spawn(async move {
+        println!("开始获取自定义AI历史对话响应...");
+
+        match client.exec_chat(&model_name, chat_req, None).await {
+            Ok(response) => {
+                println!("获取自定义AI历史对话响应成功");
+
+                if let Some(content) = response.content_text_as_str() {
+                    println!("响应内容长度: {} 字符", content.len());
+
+                    // 模拟流式输出
+                    for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(5).enumerate() {
+                        if i % 20 == 0 {
+                            println!("发送第 {} 块...", i);
+                        }
+
+                        let chunk_str: String = chunk.iter().collect();
+                        let _ = tx.send(Ok(chunk_str)).await;
+                        sleep(Duration::from_millis(30)).await;
+                    }
+                    println!("自定义AI历史对话响应内容已发送完毕");
+                } else {
+                    println!("无法从自定义AI历史对话响应中提取内容");
+                    let error_msg = format_ai_error("无法从自定义AI历史对话响应中提取内容");
+                    let _ = tx.send(Ok(error_msg)).await;
+                }
+            }
+            Err(e) => {
+                println!("自定义AI历史对话请求失败: {}", e);
+                let error_msg = format_ai_error(&format!("自定义AI历史对话请求失败: {}", e));
+                let _ = tx.send(Ok(error_msg)).await;
+            }
+        }
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    Ok(Box::pin(stream) as TextStream)
 }

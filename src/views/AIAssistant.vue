@@ -162,7 +162,7 @@
                 <div class="chat-image avatar">
                   <div class="w-10 rounded-full bg-base-300 overflow-hidden">
                     <img v-if="message.role === 'user'" src="/img/user-avatar.svg" alt="User" />
-                    <img v-else :src="`/img/${selectedModel}-avatar.svg`" :alt="getSelectedModelName()" />
+                    <img v-else :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
                   </div>
                 </div>
                 <div class="chat-header">
@@ -245,7 +245,7 @@
             <div v-if="isStreaming && streamingContent" class="chat chat-start">
               <div class="chat-image avatar">
                 <div class="w-10 rounded-full bg-base-300 overflow-hidden">
-                  <img :src="`/img/${selectedModel}-avatar.svg`" :alt="getSelectedModelName()" />
+                  <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
                 </div>
               </div>
               <div class="chat-header">
@@ -259,14 +259,14 @@
             <div v-if="isLoading || (isStreaming && !streamingContent)" class="chat chat-start">
               <div class="chat-image avatar">
                 <div class="w-10 rounded-full bg-base-300 overflow-hidden">
-                  <img :src="`/img/${selectedModel}-avatar.svg`" :alt="getSelectedModelName()" />
+                  <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
                 </div>
               </div>
               <div class="chat-header">
                 {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
                 <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
               </div>
-              <div class="chat-bubble bg-base-200 ai-thinking">
+              <div class="chat-bubble bg-base-150 ai-thinking">
                 <div class="flex items-center gap-2">
                   <span class="loading loading-dots loading-sm"></span>
                   <span class="text-sm opacity-70">正在思考中...</span>
@@ -333,11 +333,12 @@
               <div class="input-toolbar flex items-center justify-between p-2 border-b border-base-300">
                 <div class="flex items-center gap-2">
                   <!-- AI模型选择 -->
-                  <select v-model="selectedModel" class="select select-sm select-bordered">
+                  <select v-model="selectedModel" class="select select-sm select-bordered" @change="handleModelChange">
                     <option disabled value="">选择AI模型</option>
                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
                       {{ model.name }}
                     </option>
+                    <option value="__configure__"> - 配置模型</option>
                   </select>
 
                   <!-- 设置按钮 - 跳转到设置页面 -->
@@ -417,7 +418,7 @@
               </div>
 
               <!-- API密钥警告 -->
-              <div v-if="!hasApiKey" class="alert alert-warning m-2">
+              <div v-if="!hasApiKey && !selectedModel.startsWith('custom_')" class="alert alert-warning m-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none"
                   viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -445,7 +446,7 @@
                 <textarea ref="messageTextarea" v-model="userInput" @keydown="handleInputKeydown"
                   @keydown.enter.prevent="handleEnterKey" :placeholder="getInputPlaceholder()"
                   class="textarea w-full resize-none border-0 focus:outline-none bg-transparent"
-                  :disabled="!selectedModel || !hasApiKey || isLoading || isStreaming" rows="3"></textarea>
+                  :disabled="!selectedModel || (!selectedModel.startsWith('custom_') && !hasApiKey) || isLoading || isStreaming" rows="3"></textarea>
 
                 <!-- 笔记选择器 -->
                 <div v-if="showNoteSelector"
@@ -504,7 +505,7 @@
                 <!-- 发送按钮 -->
                 <button @click="isStreaming ? cancelGeneration() : sendMessage()" class="btn absolute right-5 bottom-5"
                   :class="isStreaming ? 'btn-error' : 'btn-primary'"
-                  :disabled="(!userInput.trim() && uploadedFiles.length === 0 && !isStreaming) || !selectedModel || !hasApiKey"
+                  :disabled="(!userInput.trim() && uploadedFiles.length === 0 && !isStreaming) || !selectedModel || (!selectedModel.startsWith('custom_') && !hasApiKey)"
                   :title="isStreaming ? '取消生成' : '发送消息'">
                   <!-- 发送图标（右箭头） -->
                   <svg v-if="!isStreaming" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
@@ -961,6 +962,8 @@ const isNoteSaving = ref(false)
 const showSaveSuccess = ref(false)
 const isNotePreviewMode = ref(true) // 笔记预览模式
 
+
+
 // 编辑对话标题相关
 const editTitleModal = ref<HTMLDialogElement | null>(null)
 const editingTitle = ref('')
@@ -982,7 +985,7 @@ const uploadedFiles = ref<Array<{
 }>>([])
 
 // 可用的AI模型
-const availableModels = [
+const availableModels = ref([
   { id: 'chatgpt', name: 'OpenAI ChatGPT' },
   { id: 'gemini', name: 'Google Gemini' },
   { id: 'deepseek', name: 'DeepSeek' },
@@ -990,10 +993,36 @@ const availableModels = [
   { id: 'claude', name: 'Anthropic Claude' },
   { id: 'doubao', name: '字节豆包' },
   { id: 'grok', name: 'xAI Grok' },
-  { id: 'custom', name: '自定义API' }
-]
+])
 
-
+// 加载自定义模型列表
+async function loadCustomModels(): Promise<void> {
+  try {
+    const customModels = await invoke('list_custom_model_configs')
+    const customModelList = customModels as Array<{
+      id: string
+      name: string
+      endpoint: string
+      model_name: string
+      adapter_type: string
+    }>
+    
+    // 清除之前的自定义模型
+    availableModels.value = availableModels.value.filter(m => !m.id.startsWith('custom_'))
+    
+    // 添加新的自定义模型
+    customModelList.forEach(model => {
+      availableModels.value.push({
+        id: `custom_${model.id}`,
+        name: `${model.name} (自定义)`
+      })
+    })
+    
+    console.log('加载了自定义模型:', customModelList.length, '个')
+  } catch (error) {
+    console.error('加载自定义模型失败:', error)
+  }
+}
 
 // 加载对话列表
 async function loadConversations() {
@@ -1222,8 +1251,8 @@ async function sendMessage(resendMessage?: any) {
     if (resendIndex !== -1) messages.value.splice(resendIndex, 1)
   } else {
     // 正常发送新消息
-    if ((!userInput.value.trim() && uploadedFiles.value.length === 0) || !selectedModel.value || isLoading.value || isStreaming.value) {
-      return
+    if (!userInput.value.trim() || !selectedModel.value || (!selectedModel.value.startsWith('custom_') && !hasApiKey.value)) {
+      return;
     }
     messageToSend = userInput.value
 
@@ -1401,6 +1430,12 @@ async function sendMessage(resendMessage?: any) {
 const checkApiKey = async () => {
   if (!selectedModel.value) {
     hasApiKey.value = false
+    return
+  }
+
+  // 对于自定义模型，允许空的 API 密钥
+  if (selectedModel.value.startsWith('custom_')) {
+    hasApiKey.value = true
     return
   }
 
@@ -1642,16 +1677,28 @@ const generateUniqueId = () => {
 
 // 清空当前对话消息
 const clearMessages = async () => {
-  if (!activeConversationId.value) return;
+  console.log('clearMessages 被调用，activeConversationId:', activeConversationId.value);
+  
+  // 如果没有活动对话ID，直接清空当前显示的消息
+  if (!activeConversationId.value) {
+    console.log('没有活动对话ID，直接清空消息数组');
+    messages.value = [];
+    return;
+  }
   
   try {
+    console.log('调用后端清空对话API...');
     // 调用后端清空当前对话的消息
     await invoke('clear_ai_conversation', { conversation_id: activeConversationId.value });
     
+    console.log('后端API调用成功，重新加载消息...');
     // 重新加载消息以更新UI
     await loadMessages(activeConversationId.value);
+    console.log('消息重新加载完成');
   } catch (error) {
     console.error('清空对话失败:', error);
+    // 即使后端调用失败，也尝试清空前端显示的消息
+    messages.value = [];
   }
 }
 
@@ -1686,15 +1733,25 @@ const orderedConversations = computed(() => {
 
 // 获取模型名称
 const getModelNameById = (modelId: string): string => {
-  const model = availableModels.find(m => m.id === modelId)
+  const model = availableModels.value.find((m: any) => m.id === modelId)
   return model ? model.name : modelId
 }
 
 // 获取选中的模型名称
 const getSelectedModelName = () => {
   if (!selectedModel.value) return ''
-  const model = availableModels.find(m => m.id === selectedModel.value)
+  const model = availableModels.value.find((m: any) => m.id === selectedModel.value)
   return model ? model.name : ''
+}
+
+// 获取模型头像路径
+const getModelAvatarPath = (modelId: string) => {
+  // 对于自定义模型（以custom_开头），使用通用的custom头像
+  if (modelId.startsWith('custom_')) {
+    return '/img/custom-avatar.svg'
+  }
+  // 对于其他模型，使用对应的头像文件
+  return `/img/${modelId}-avatar.svg`
 }
 
 // 打开对话列表抽屉
@@ -1714,6 +1771,9 @@ async function openConversationsList() {
 // 组件挂载时加载
 onMounted(async () => {
   console.log('组件挂载，开始加载数据...');
+
+  // 加载自定义模型
+  await loadCustomModels();
 
   // 加载模型配置
   // await loadModelSuggestions();
@@ -1787,7 +1847,7 @@ const handleEnterKey = (e: KeyboardEvent) => {
   }
 
   // 检查是否可以发送消息
-  if (!userInput.value.trim() || !selectedModel.value || !hasApiKey.value) {
+  if (!userInput.value.trim() || !selectedModel.value || (!selectedModel.value.startsWith('custom_') && !hasApiKey.value)) {
     return;
   }
 
@@ -2601,6 +2661,24 @@ watch(isNotePreviewMode, (newValue) => {
 watch(noteContent, (newValue) => {
   console.log('笔记内容变化，新长度:', newValue.length)
 })
+
+// 处理模型选择变化
+const handleModelChange = () => {
+  const currentValue = selectedModel.value
+  if (currentValue === '__configure__') {
+    // 恢复到上一个选择的模型（如果有的话）
+    const lastModel = localStorage.getItem('ai-selected-model')
+    if (lastModel && lastModel !== '__configure__' && availableModels.value.some((m: any) => m.id === lastModel)) {
+      selectedModel.value = lastModel
+    } else if (availableModels.value.length > 0) {
+      selectedModel.value = availableModels.value[0].id
+    } else {
+      selectedModel.value = ''
+    }
+    // 跳转到设置页面的AI助手部分
+    goToAISettings()
+  }
+}
 
 // 前往设置页面
 const goToAISettings = () => {

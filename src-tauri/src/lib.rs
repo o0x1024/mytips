@@ -140,6 +140,12 @@ pub fn run() {
             api::encryption::get_unlocked_note_content,
             api::encryption::encrypt_data_cmd,
             api::encryption::clear_session_unlocks,
+            // 自定义模型配置API
+            save_custom_model_config,
+            get_custom_model_config,
+            list_custom_model_configs,
+            delete_custom_model_config,
+            test_custom_model_connection,
         ])
         .setup(|app| {
             // 初始化数据库
@@ -318,6 +324,14 @@ pub fn run() {
             }
 
             Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                window.hide().unwrap();
+                api.prevent_close();
+            }
+
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

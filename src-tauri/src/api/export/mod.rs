@@ -1,4 +1,3 @@
-use std::io::Write;
 use tauri_plugin_dialog::DialogExt;
 
 // 导出为Markdown
@@ -389,7 +388,7 @@ pub async fn export_as_pdf(
     use crate::db::DbManager;
     use printpdf::*;
     use std::fs;
-    use std::io::{BufWriter, Write};
+    use std::io::BufWriter;
 
     // 获取笔记
     let db = DbManager::init().map_err(|e| e.to_string())?;

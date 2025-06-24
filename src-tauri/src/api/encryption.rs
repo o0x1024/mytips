@@ -137,15 +137,6 @@ pub async fn get_encryption_statuses(
     
     match db.get_encryption_statuses() {
         Ok(statuses) => {
-            println!("数据库中的加密状态数量: {}", statuses.len());
-            for status in &statuses {
-                if let Some(note_id) = &status.note_id {
-                    println!("笔记 {} 加密状态: encrypted={}, unlocked={}", note_id, status.is_encrypted, status.is_unlocked);
-                }
-                if let Some(notebook_id) = &status.notebook_id {
-                    println!("笔记本 {} 加密状态: encrypted={}, unlocked={}", notebook_id, status.is_encrypted, status.is_unlocked);
-                }
-            }
             Ok(statuses)
         },
         Err(e) => Err(format!("获取加密状态失败: {}", e)),

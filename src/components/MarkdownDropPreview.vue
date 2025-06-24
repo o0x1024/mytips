@@ -24,9 +24,6 @@
         <h3 class="text-xl font-bold mb-2">拖拽Markdown文件到此处</h3>
         <p class="text-base-content/70">支持 .md 和 .markdown 文件</p>
         <p class="text-xs text-base-content/50 mt-2">按 ESC 键或点击关闭按钮可关闭此覆盖层</p>
-        <!-- <div class="text-xs text-base-content/50 mt-2">
-          位置: {{ dragPosition.x }}, {{ dragPosition.y }}
-        </div> -->
       </div>
     </div>
   </div>
@@ -121,7 +118,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Marked } from 'marked'
 import { markedHighlight } from "marked-highlight";
 import Prism from 'prismjs'
-import 'prismjs/themes/prism-tomorrow.css'
+import 'prismjs/themes/prism-okaidia.css'
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-python'
