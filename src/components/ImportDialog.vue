@@ -328,6 +328,26 @@ async function nextStep() {
     if (importType.value === 'directory') {
       // 获取预览
       await loadPreview()
+    } else {
+      // 对于单个文件，创建简单的预览数据
+      const fileName = selectedPath.value.split(/[/\\]/).pop() || '未知文件'
+      const fileTitle = fileName.replace(/\.(md|markdown)$/i, '')
+      const targetNotebook = props.notebooks.find(n => n.id === targetNotebookId.value)
+      
+      preview.value = {
+        notebooks: [{
+          name: targetNotebook?.name || '选中的笔记本',
+          path: selectedPath.value,
+          notes: [{
+            title: fileTitle,
+            path: selectedPath.value,
+            images: []
+          }],
+          children: []
+        }],
+        total_notes: 1,
+        total_images: 0
+      }
     }
     currentStep.value = 2
   }

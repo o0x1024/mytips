@@ -106,14 +106,11 @@ jobs:
       - name: Display structure of downloaded files
         run: find release-artifacts -type f
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name || github.event.inputs.version }}
-          release_name: ${{ github.ref_name || github.event.inputs.version }}
+          name: ${{ github.ref_name || github.event.inputs.version }}
           body: |
             ## 🚀 MyTips ${{ github.ref_name || github.event.inputs.version }}
             
@@ -140,11 +137,6 @@ jobs:
             **完整更新日志**: https://github.com/${{ github.repository }}/commits/${{ github.ref_name || github.event.inputs.version }}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
-
-      - name: Upload Release Assets
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name || github.event.inputs.version }}
           files: |
             release-artifacts/**/*.exe
             release-artifacts/**/*.msi
@@ -160,7 +152,7 @@ jobs:
       - name: Notify Success
         run: |
           echo "🎉 Release ${{ github.ref_name || github.event.inputs.version }} 创建成功!"
-          echo "📍 Release URL: ${{ steps.create_release.outputs.html_url }}"
+          echo "📍 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name || github.event.inputs.version }}"
           echo ""
           echo "📝 下一步:"
           echo "1. 检查 Release 页面确认所有文件已上传"

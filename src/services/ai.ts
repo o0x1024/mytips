@@ -3,9 +3,8 @@ import { invoke } from '@tauri-apps/api/core'
 // 对话相关API
 export async function sendAIMessage(conversationId: string, message: string, model: string) {
   return await invoke('send_ai_message', { 
-    conversation_id: conversationId, 
-    message, 
-    model 
+    modelId: model,
+    message
   })
 }
 
@@ -67,6 +66,15 @@ export async function updateAIRole(roleId: string, name: string, description: st
 
 export async function deleteAIRole(roleId: string) {
   return await invoke('delete_ai_role', { role_id: roleId })
+}
+
+// 默认AI模型相关API
+export async function saveDefaultAIModel(modelId: string) {
+  return await invoke('save_default_ai_model', { modelId })
+}
+
+export async function getDefaultAIModel() {
+  return await invoke('get_default_ai_model')
 }
 
 // 添加别名函数以兼容现有代码

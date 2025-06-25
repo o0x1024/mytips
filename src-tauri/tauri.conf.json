@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MyTips",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "identifier": "com.o0x1024.mytips",
   "build": {
     "beforeDevCommand": "yarn dev",
@@ -16,7 +16,7 @@
         "height": 800,
         "minWidth": 1400,
         "minHeight": 800,
-        "title": "MyTips",  
+        "title": "MyTips",
         "center": true,
         "resizable": true,
         "label": "main",
@@ -25,11 +25,25 @@
     ],
     "security": {
       "csp": {
-        "default-src": ["'self'"],
-        "img-src": ["'self'", "https://*", "data:"],
-        "connect-src": ["'self'", "https://*"],
-        "script-src": ["'self'"],
-        "style-src": ["'self'", "'unsafe-inline'"]
+        "default-src": [
+          "'self'"
+        ],
+        "img-src": [
+          "'self'",
+          "https://*",
+          "data:"
+        ],
+        "connect-src": [
+          "'self'",
+          "https://*"
+        ],
+        "script-src": [
+          "'self'"
+        ],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'"
+        ]
       }
     }
   },
@@ -55,6 +69,7 @@
       "minimumSystemVersion": "10.13",
       "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)"
     },
+    "windows": {},
     "active": true,
     "targets": "all",
     "icon": [
@@ -65,16 +80,19 @@
       "icons/icon.ico"
     ]
   },
-  "plugins": {
+    "plugins": {
     "fs": {
       "requireLiteralLeadingDot": false
     },
     "dialog": null,
+    "shell": {
+      "open": true
+    },
     "global-shortcut": null,
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRGOUMzQTc2MjE4NjVFRjcKUldUM1hvWWhkanFjVDhFa1pUVEZ5Y1JIanNwa3dtU3lPWkdOcllSMzVHRVIxSGxnQ0ZoSWNIU0cK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFRjc0MUIyN0M5Njk2NzEKUldSWTJMa0tvOEZ2bWJzbXJEVXJxYnBocXNoVjU1VDY2ZWRyRzVlS0d1T2wzR3hCVzFqeVd3QVAK",
       "endpoints": [
-        "https://github.com/o0x1024/mytips/releases/latest/download/{{target}}-{{arch}}.json"
+        "https://github.com/o0x1024/mytips/releases/latest/download/latest.json"
       ]
     }
   }

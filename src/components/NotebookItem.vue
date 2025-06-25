@@ -106,27 +106,6 @@
       />
     </div>
     
-    <!-- 右键菜单 -->
-    <ul v-if="showContextMenu" class="dropdown-content z-50 menu p-2 shadow bg-base-100 rounded-box w-36" :style="{ position: 'fixed', left: menuX + 'px', top: menuY + 'px' }">
-      <!-- 加密/解密选项 -->
-      <li><a @click="handleEncrypt" class="text-warning">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-        </svg>
-        加密笔记本
-      </a></li>
-      <li><a @click="handleDecrypt" class="text-info">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-        </svg>
-        解密笔记本
-      </a></li>
-      <li class="divider"></li>
-      <!-- 原有选项 -->
-      <li><a @click="handleEdit">编辑</a></li>
-      <li><a @click="handleAddChild">添加子笔记本</a></li>
-      <li><a @click="handleDelete" class="text-error">删除</a></li>
-    </ul>
   </div>
 </template>
 

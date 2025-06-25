@@ -34,6 +34,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             // 笔记相关API
@@ -80,11 +81,14 @@ pub fn run() {
             save_max_tokens_config,
             get_max_tokens_config,
             migrate_config_to_database,
+            save_default_ai_model,
+            get_default_ai_model,
             // AI对话数据库相关API
             list_ai_conversations,
             list_ai_messages,
             create_ai_conversation,
             delete_ai_conversation,
+            clear_ai_conversation,
             update_ai_conversation_title,
             add_ai_message,
             // AI角色相关API
@@ -124,11 +128,15 @@ pub fn run() {
             // 更新相关API
             check_for_updates,
             check_for_updates_with_config,
+            check_for_updates_no_signature,
             start_auto_update,
             get_current_version,
             set_update_endpoints,
             test_windows_update_with_proxy,
+            test_windows_update_no_signature,
             get_platform_info,
+            show_confirm_dialog,
+            open_url,
             // 加密相关API
             api::encryption::get_encryption_statuses,
             api::encryption::encrypt_note,

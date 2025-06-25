@@ -14,6 +14,7 @@ let checkTimer: NodeJS.Timeout | null = null
 let unlistenProgress: (() => void) | null = null
 let unlistenInstalling: (() => void) | null = null
 let unlistenCompleted: (() => void) | null = null
+let unlistenManualUpdate: (() => void) | null = null
 
 // 启动更新服务
 onMounted(async () => {
@@ -37,6 +38,7 @@ onUnmounted(() => {
   if (unlistenProgress) unlistenProgress()
   if (unlistenInstalling) unlistenInstalling()
   if (unlistenCompleted) unlistenCompleted()
+  if (unlistenManualUpdate) unlistenManualUpdate()
   if (checkTimer) clearInterval(checkTimer)
 })
 
@@ -56,6 +58,25 @@ async function setupEventListeners() {
     // 监听更新完成
     unlistenCompleted = await listen('update-completed', () => {
       console.log('更新安装完成')
+    })
+    
+    // 监听需要手动更新的事件
+    unlistenManualUpdate = await listen('manual_update_required', async () => {
+      console.log('收到手动更新请求')
+      try {
+        const confirmed = await invoke('show_confirm_dialog', {
+          message: '由于签名验证失败，无法自动更新。这可能是由于网络问题或配置错误导致的。您想前往发布页面手动下载最新版本吗？',
+          title: '需要手动更新'
+        }) as boolean
+        
+        if (confirmed) {
+          await invoke('open_url', {
+            url: 'https://github.com/o0x1024/mytips/releases/latest'
+          })
+        }
+      } catch (error) {
+        console.error('处理手动更新请求失败:', error)
+      }
     })
   } catch (error) {
     console.error('设置事件监听器失败:', error)

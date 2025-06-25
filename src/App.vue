@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // App.vue 无需额外初始化，因为已经在main.ts中完成了UI初始化
+import FloatingAIButton from './components/FloatingAIButton.vue'
 </script>
 
 <template>
@@ -15,6 +16,9 @@
         :is="Component" 
       />
     </router-view>
+    
+    <!-- 全局浮动AI按钮 -->
+    <FloatingAIButton />
   </div>
 </template>
 

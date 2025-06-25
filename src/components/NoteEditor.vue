@@ -416,6 +416,116 @@
           </div>
         </div>
 
+        <!-- TIP提示词编辑对话框 -->
+        <div v-if="showTipDialog" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50 tip-dialog-overlay" @click="closeTipDialog" @keydown.esc="closeTipDialog">
+          <div class="card bg-base-100 shadow-xl w-full max-w-3xl max-h-[85vh] flex flex-col tip-dialog-content" @click.stop>
+            <div class="card-body p-6">
+              <div class="flex justify-between items-start mb-4">
+                <h2 class="card-title text-lg">TIP一下 - 编辑内容</h2>
+                <button class="btn btn-sm btn-ghost" @click="closeTipDialog">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <!-- 选中的文本显示 -->
+
+              <!-- 提示词编辑区 -->
+              <div class="flex-1 mb-4">
+                                 <label class="label">
+                   <span class="label-text font-medium">提示词：</span>
+                   <span class="label-text-alt flex gap-2">
+                     <button class="btn btn-xs btn-ghost" @click="resetTipPrompt" title="重置为默认提示词">
+                       重置
+                     </button>
+                     <button class="btn btn-xs btn-ghost" @click="saveCurrentAsTemplate" title="保存为模板" v-if="tipPrompt.trim()">
+                       💾 保存
+                     </button>
+                   </span>
+                 </label>
+                                 <textarea 
+                   v-model="tipPrompt" 
+                   class="textarea textarea-bordered w-full h-40 font-mono text-sm tip-prompt-textarea"
+                   placeholder="请输入您的提示词..."
+                   @keydown.ctrl.enter="confirmTip"
+                   @keydown.meta.enter="confirmTip"
+                 ></textarea>
+                <div class="label">
+                  <span class="label-text-alt text-xs opacity-70">
+                    提示：可以修改上面的提示词来自定义AI的回应方式。按 Ctrl+Enter 快速发送。
+                  </span>
+                                     <span class="label-text-alt text-xs char-count">
+                     字符数：{{ tipPrompt.length }}
+                   </span>
+                </div>
+              </div>
+
+              <!-- 预设提示词模板 -->
+              <div class="mb-4">
+                <label class="label">
+                  <span class="label-text font-medium">快速模板：</span>
+                </label>
+                <div class="flex flex-wrap gap-2">
+                                     <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('expand')"
+                     title="扩充内容">
+                     📝 扩充
+                   </button>
+                   <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('improve')"
+                     title="改进内容">
+                     ✨ 改进
+                   </button>
+                   <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('rewrite')"
+                     title="重写内容">
+                     🔄 重写
+                   </button>
+                   <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('summarize')"
+                     title="总结内容">
+                     📋 总结
+                   </button>
+                   <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('question')"
+                     title="提出问题">
+                     ❓ 提问
+                   </button>
+                   <button 
+                     class="btn btn-xs btn-outline template-btn" 
+                     @click="setTipTemplate('code')"
+                     title="代码相关">
+                     💻 代码
+                   </button>
+                </div>
+              </div>
+
+              <!-- 操作按钮 -->
+              <div class="card-actions justify-end">
+                <button class="btn btn-ghost" @click="closeTipDialog">
+                  取消
+                </button>
+                <button 
+                  class="btn btn-primary" 
+                  @click="confirmTip"
+                  :disabled="!tipPrompt.trim()">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  发送给AI
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 在模板中添加翻译结果的浮动框 -->
         <div v-if="showTranslationBox" class="fixed inset-0 flex items-center justify-center z-50 bg-base-300/50">
           <div class="card bg-base-100 shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
@@ -498,7 +608,6 @@ import { invoke } from '@tauri-apps/api/core'
 import TagSelector from './TagSelector.vue'
 import EncryptedContent from './EncryptedContent.vue'
 import { useEncryptionStore } from '../stores/encryptionStore'
-// 使用 marked 和 Prism 替代 highlight.js
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import Prism from 'prismjs'
@@ -664,6 +773,11 @@ const showTranslationBox = ref(false)
 const translationContent = ref('')
 const selectedTextForTranslation = ref('')
 const isTranslating = ref(false)
+// 添加TIP对话框相关状态
+const showTipDialog = ref(false)
+const tipPrompt = ref('')
+const selectedTextForTip = ref('')
+const originalTipPrompt = ref('')
 let globalUnlisten: (() => void) | null = null; // 全局事件监听器引用
 
 // 添加撤销/重做堆栈
@@ -1348,9 +1462,18 @@ async function expandSelectedText() {
   }
 
   const selectedText = localNote.value.content.substring(start, end)
-
-  // 使用AI扩充选中的文本
-  await expandWithAI(selectedText, start, end)
+  
+  // 显示TIP对话框让用户修改提示词，保存选择位置
+  selectedTextForTip.value = selectedText
+  originalTipPrompt.value = selectedText
+  tipPrompt.value = originalTipPrompt.value
+  
+  // 保存选择位置用于后续处理
+  ;(window as any)._tipSelectionStart = start
+  ;(window as any)._tipSelectionEnd = end
+  
+  showTipDialog.value = true
+  showContextMenu.value = false
 }
 
 // 添加解释功能函数
@@ -1420,7 +1543,7 @@ async function expandWithAI(input?: string, start?: number, end?: number) {
   }
 
   // 构建提示
-  const expandPrompt = `请基于以下内容进行扩充和完善：\n\n${promptText}`
+  const expandPrompt = promptText
 
   // 处理AI请求
   await processWithAI(promptText, expandPrompt, false, startPos, endPos)
@@ -1995,7 +2118,7 @@ function getDefaultHighlightTheme() {
   }
 
   // 默认使用默认主题
-  return 'default'
+  return 'okaidia'
 }
 
 // 设置代码复制功能
@@ -2234,10 +2357,10 @@ function applyThemeStyles(theme: string) {
     }
 
     .prose .code-block-container {
-      margin: 1rem 0 !important;
+      // margin: 1rem 0 !important;
       border-radius: 0.5rem !important;
-      overflow: hidden !important;
-      border: 1px solid rgba(0,0,0,0.1) !important;
+      // overflow: hidden !important;
+      // border: 1px solid rgba(0,0,0,0.1) !important;
       box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
     }
 
@@ -2282,7 +2405,7 @@ function applyThemeStyles(theme: string) {
       }
 
       .prose .code-block-container {
-        border: 1px solid rgba(255,255,255,0.1) !important;
+        // border: 1px solid rgba(255,255,255,0.1) !important;
       }
     ` : ''}
 
@@ -2672,6 +2795,120 @@ function insertTranslationToContent() {
 
   // 触发自动保存
   autoSave()
+}
+
+// TIP对话框相关函数
+function closeTipDialog() {
+  showTipDialog.value = false
+  tipPrompt.value = ''
+  selectedTextForTip.value = ''
+  originalTipPrompt.value = ''
+  // 清理保存的位置
+  delete (window as any)._tipSelectionStart
+  delete (window as any)._tipSelectionEnd
+}
+
+function resetTipPrompt() {
+  tipPrompt.value = originalTipPrompt.value
+}
+
+async function confirmTip() {
+  if (!tipPrompt.value.trim()) {
+    alert('请输入提示词')
+    return
+  }
+
+  // 获取之前保存的选择位置
+  const start = (window as any)._tipSelectionStart || 0
+  const end = (window as any)._tipSelectionEnd || 0
+
+  // 关闭对话框
+  showTipDialog.value = false
+
+  try {
+    // 使用用户自定义的提示词进行AI处理
+    await processWithAI(selectedTextForTip.value, tipPrompt.value, false, start, end)
+  } catch (error) {
+    console.error('TIP处理失败:', error)
+    alert('TIP处理失败: ' + error)
+  } finally {
+    // 清理状态
+    tipPrompt.value = ''
+    selectedTextForTip.value = ''
+    originalTipPrompt.value = ''
+    // 清理保存的位置
+    delete (window as any)._tipSelectionStart
+    delete (window as any)._tipSelectionEnd
+  }
+}
+
+function setTipTemplate(templateType: string) {
+  const selectedText = selectedTextForTip.value
+  
+  const templates = {
+    expand: `请基于以下内容进行详细扩充和完善，添加更多相关信息和细节：\n\n${selectedText}`,
+    improve: `请改进以下内容，使其更加清晰、准确和易于理解：\n\n${selectedText}`,
+    rewrite: `请重新组织和重写以下内容，保持原意但改善表达方式：\n\n${selectedText}`,
+    summarize: `请总结以下内容的要点和核心信息：\n\n${selectedText}`,
+    question: `请基于以下内容提出一些深入的思考问题：\n\n${selectedText}`,
+    code: `请分析以下代码或技术内容，并提供详细的解释和改进建议：\n\n${selectedText}`
+  }
+  
+  // 检查是否有用户自定义的模板
+  const customTemplates = getCustomTipTemplates()
+  const allTemplates = { ...templates, ...customTemplates }
+  
+  let selectedTemplate = allTemplates[templateType as keyof typeof allTemplates] || originalTipPrompt.value
+  
+  // 如果是自定义模板，替换占位符
+  if (customTemplates[templateType] && selectedTemplate.includes('{{SELECTED_TEXT}}')) {
+    selectedTemplate = selectedTemplate.replace('{{SELECTED_TEXT}}', selectedText)
+  }
+  
+  tipPrompt.value = selectedTemplate
+}
+
+// 获取用户自定义的提示词模板
+function getCustomTipTemplates() {
+  try {
+    const saved = localStorage.getItem('mytips-custom-tip-templates')
+    return saved ? JSON.parse(saved) : {}
+  } catch (error) {
+    console.error('获取自定义模板失败:', error)
+    return {}
+  }
+}
+
+// 保存用户自定义的提示词模板
+function saveCustomTipTemplate(name: string, template: string) {
+  try {
+    const customTemplates = getCustomTipTemplates()
+    customTemplates[name] = template
+    localStorage.setItem('mytips-custom-tip-templates', JSON.stringify(customTemplates))
+    console.log(`已保存自定义模板: ${name}`)
+  } catch (error) {
+    console.error('保存自定义模板失败:', error)
+    alert('保存模板失败，请检查浏览器存储空间')
+  }
+}
+
+// 保存当前提示词为模板
+function saveCurrentAsTemplate() {
+  if (!tipPrompt.value.trim()) {
+    alert('提示词不能为空')
+    return
+  }
+  
+  const templateName = prompt('请输入模板名称:')
+  if (!templateName || !templateName.trim()) {
+    return
+  }
+  
+  // 将选中的文本替换为占位符，使模板可以复用
+  const templateContent = tipPrompt.value.replace(selectedTextForTip.value, '{{SELECTED_TEXT}}')
+  
+  saveCustomTipTemplate(templateName.trim(), templateContent)
+  alert(`模板 "${templateName.trim()}" 已保存成功！`)
 }
 
 // 添加粘贴功能
@@ -3110,6 +3347,70 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
   color: rgb(255, 182, 193);
 }
 
+/* TIP对话框样式 */
+.tip-dialog-overlay {
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.tip-dialog-content {
+  animation: slideIn 0.3s ease-out;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 快速模板按钮样式 */
+.template-btn {
+  transition: all 0.2s ease;
+  border: 1px solid hsl(var(--bc) / 0.2);
+}
+
+.template-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  border-color: hsl(var(--primary));
+}
+
+/* 提示词编辑区样式 */
+.tip-prompt-textarea {
+  transition: border-color 0.2s ease;
+  resize: vertical;
+  min-height: 120px;
+  max-height: 300px;
+}
+
+.tip-prompt-textarea:focus {
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
+}
+
+/* 选中文本显示区域样式 */
+.selected-text-display {
+  border-left: 4px solid hsl(var(--primary));
+  background: linear-gradient(90deg, hsl(var(--primary) / 0.1), transparent);
+}
+
+/* 字符计数样式 */
+.char-count {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
 /* 链接中的行内代码样式 */
 :deep(.prose a code:not(pre code)) {
   color: inherit;
@@ -3152,10 +3453,10 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
 
 /* 修复代码块容器样式 */
 :deep(.prose .code-block-container) {
-  margin: 1rem 0 !important;
+  /* margin: 1rem 0 !important; */
   border-radius: 0.5rem !important;
-  overflow: hidden !important;
-  border: 1px solid rgba(var(--bc), 0.1) !important;
+  /* overflow: hidden !important; */
+  /* border: 1px solid rgba(var(--bc), 0.1) !important; */
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
 }
 

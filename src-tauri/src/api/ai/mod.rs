@@ -42,6 +42,40 @@ fn convert_to_chat_message(message: &serde_json::Value) -> Option<ChatMessage> {
     }
 }
 
+// 保存默认全局AI模型
+#[tauri::command]
+pub async fn save_default_ai_model(app: tauri::AppHandle, model_id: String) -> Result<(), String> {
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
+        .ok_or("数据库状态未初始化")?;
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
+    db.save_setting("default_ai_model", &model_id)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+// 获取默认全局AI模型
+#[tauri::command]
+pub async fn get_default_ai_model(app: tauri::AppHandle) -> Result<String, String> {
+    let db_state = app
+        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
+        .ok_or("数据库状态未初始化")?;
+
+    let db = db_state
+        .lock()
+        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
+    match db.get_setting("default_ai_model").map_err(|e| e.to_string())? {
+        Some(model_id) => Ok(model_id),
+        None => Ok("chatgpt".to_string()), // 默认使用ChatGPT
+    }
+}
+
 // 保存API密钥
 #[tauri::command]
 pub async fn save_api_key(

@@ -992,6 +992,16 @@
                 </button>
                 
                 <button 
+                  class="btn btn-outline btn-primary" 
+                  @click="checkForUpdatesNoSignature"
+                  :disabled="updateStore.isChecking"
+                  title="跳过签名验证检查更新（用于解决签名问题）"
+                >
+                  <span v-if="updateStore.isChecking" class="loading loading-spinner loading-sm mr-2"></span>
+                  {{ updateStore.isChecking ? '检查中...' : '检查更新(无签名)' }}
+                </button>
+                
+                <button 
                   v-if="updateStore.hasUpdate" 
                   class="btn btn-accent" 
                   @click="showUpdateDialog = true"
@@ -1013,6 +1023,16 @@
                   @click="showPlatformInfo"
                 >
                   平台信息
+                </button>
+
+                <button 
+                  class="btn btn-outline btn-warning" 
+                  @click="testWindowsUpdateNoSignature"
+                  :disabled="isTestingWindowsUpdateNoSig"
+                  title="测试无签名验证的Windows更新（用于网络问题诊断）"
+                >
+                  <span v-if="isTestingWindowsUpdateNoSig" class="loading loading-spinner loading-sm mr-2"></span>
+                  {{ isTestingWindowsUpdateNoSig ? '测试中...' : '网络诊断测试' }}
                 </button>
               </div>
             </div>
@@ -1285,6 +1305,7 @@ function getCurrentPageTitle() {
 const showUpdateDialog = ref(false)
 const checkIntervalHours = ref(1)
 const isTestingWindowsUpdate = ref(false)
+const isTestingWindowsUpdateNoSig = ref(false)
 
 // 主题设置
 const selectedTheme = ref(uiStore.settings.theme)
@@ -1716,6 +1737,9 @@ onMounted(async () => {
   
   // 加载自定义模型列表
   await loadCustomModels()
+  
+  // 加载默认AI模型
+  await loadDefaultAIModel()
 })
 
 // 保存代理设置
@@ -1800,9 +1824,25 @@ watch(proxySettings, async () => {
   await saveProxySettings()
 }, { deep: true })
 
-const defaultAIModel = ref(localStorage.getItem('mytips-default-ai-model') || 'gemini')
-function saveDefaultAIModel() {
-  localStorage.setItem('mytips-default-ai-model', defaultAIModel.value)
+const defaultAIModel = ref('chatgpt')
+async function saveDefaultAIModel() {
+  try {
+    await invoke('save_default_ai_model', { modelId: defaultAIModel.value })
+  } catch (error) {
+    console.error('保存默认AI模型失败:', error)
+  }
+}
+
+// 加载默认AI模型
+async function loadDefaultAIModel() {
+  try {
+    const model = await invoke('get_default_ai_model')
+    if (model && typeof model === 'string') {
+      defaultAIModel.value = model
+    }
+  } catch (error) {
+    console.error('获取默认AI模型失败:', error)
+  }
 }
 
 // 新增手动清理过期剪贴板条目的方法
@@ -2227,6 +2267,39 @@ async function checkForUpdates(): Promise<void> {
   }
 }
 
+// 无签名验证的更新检查
+async function checkForUpdatesNoSignature(): Promise<void> {
+  if (updateStore.isChecking) return
+  
+  updateStore.setChecking(true)
+  
+  try {
+    const updateResult = await invoke('check_for_updates_no_signature', {
+      timeoutSeconds: 30,
+      proxy: null
+    }) as any
+    
+    if (updateResult.available) {
+      updateStore.setUpdateInfo({
+        version: updateResult.version,
+        pub_date: updateResult.pub_date || '',
+        body: updateResult.body || '',
+        available: true
+      })
+      message(`发现新版本 ${updateResult.version}！（无签名验证模式）`, { title: '更新检查' })
+    } else {
+      updateStore.setUpdateInfo(null)
+      message('当前已是最新版本！（无签名验证模式）', { title: '更新检查' })
+    }
+  } catch (error) {
+    console.error('检查更新失败:', error)
+    updateStore.setUpdateInfo(null)
+    message('检查更新失败: ' + error, { title: '错误' })
+  } finally {
+    updateStore.setChecking(false)
+  }
+}
+
 function updateAutoCheckSetting(): void {
   // 这里可以添加保存到本地存储的逻辑
   console.log('自动检查设置更新:', updateStore.autoCheck)
@@ -2253,6 +2326,23 @@ async function testWindowsUpdate(): Promise<void> {
     message('Windows 更新测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingWindowsUpdate.value = false
+  }
+}
+
+// Windows 更新网络诊断测试函数
+async function testWindowsUpdateNoSignature(): Promise<void> {
+  if (isTestingWindowsUpdateNoSig.value) return
+  
+  isTestingWindowsUpdateNoSig.value = true
+  
+  try {
+    const result = await invoke('test_windows_update_no_signature') as string
+    message(result, { title: '网络诊断测试' })
+  } catch (error) {
+    console.error('网络诊断测试失败:', error)
+    message('网络诊断测试失败: ' + error, { title: '错误' })
+  } finally {
+    isTestingWindowsUpdateNoSig.value = false
   }
 }
 

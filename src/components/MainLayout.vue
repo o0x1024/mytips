@@ -18,6 +18,7 @@
         @toggle-tag="toggleTag"
         @select-note="selectNote"
         @add-notebook="showAddNotebookModal = true"
+        @add-tag="showAddTagModal = true"
         @import="openImportDialog"
         @add-child-notebook="addChildNotebook"
         @edit-notebook="editNotebook"

@@ -24,8 +24,7 @@ MyTips 是一款基于 Tauri 框架构建的现代化桌面应用，旨在提供
 
 ## 📸 应用截图
 
-*此处可以放置应用的主界面截图*
-![MyTips 主界面](placeholder-for-main-ui.png)
+![MyTips 主界面](./public/placeholder-for-main-ui.png)
 
 ## ✨ 主要特性
 
@@ -60,9 +59,9 @@ MyTips 是一款基于 Tauri 框架构建的现代化桌面应用，旨在提供
 
 您可以从下面的地址下载适用于您操作系统的最新版本：
 
-[**➡️ 前往 GitHub Releases 下载**](https://github.com/your-username/mytips/releases)
+[**➡️ 前往 GitHub Releases 下载**](https://github.com/o0x1024/mytips/releases)
 
-- **Windows**: 下载 `.msi` 安装包。
+- **Windows**: 下载 `.msi或exe` 安装包。
 - **macOS**: 下载 `.dmg` 文件 (支持 Apple Silicon 和 Intel 芯片)。
 - **Linux**: 下载 `.AppImage` 或 `.deb` 文件。
 
@@ -122,7 +121,7 @@ bun tauri dev
 
 ## 📝 许可证
 
-本项目基于 [GPL-3.0](LICENSE) 许可证开源。
+本项目基于 [MIT](LICENSE) 许可证开源。
 
 ## 🙏 致谢
 
@@ -130,7 +129,6 @@ MyTips 的发展离不开以下优秀开源项目的支持：
 
 - [Tauri](https://tauri.app/)
 - [Vue.js](https://vuejs.org/)
-- [Vditor](https://github.com/Vanessa219/vditor)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [DaisyUI](https://daisyui.com/)
 - 以及所有在 `package.json` 和 `Cargo.toml` 中列出的依赖库。

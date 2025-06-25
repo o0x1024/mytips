@@ -129,24 +129,177 @@
         <!-- 聊天界面 -->
         <div class="chat-container bg-base-200 rounded-lg p-4 flex-1 flex flex-col overflow-hidden">
           <!-- 消息显示区域 -->
-          <div class="flex-grow overflow-y-auto mb-4 space-y-4" ref="messagesContainer" @mouseup="handleTextSelection"
-            @contextmenu.prevent="handleContextMenu">
-            <div v-if="messages.length === 0"
-              class="flex flex-col items-center justify-center h-full text-base-content/60">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                stroke="currentColor" class="w-16 h-16 mb-4">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-              </svg>
-              <p class="text-lg">选择AI模型开始对话</p>
-              <p class="text-sm">您的对话仅保存在本地，不会上传到服务器</p>
+          <div class="flex-grow overflow-y-auto mb-4 flex flex-col-reverse" ref="messagesContainer" @mouseup="handleTextSelection"
+            @contextmenu.prevent="handleContextMenu" @scroll="handleScroll">
+            
+            <!-- 加载中指示器和流式输出 - 在反向布局中显示在顶部 -->
+            <div class="space-y-4">
+              <!-- 加载中指示器 - 优化显示条件 -->
+              <div v-if="isLoading || (isStreaming && !streamingContent)" class="chat chat-start">
+                <div class="chat-image avatar">
+                  <div class="w-10 rounded-full bg-base-300 overflow-hidden">
+                    <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
+                  </div>
+                </div>
+                <div class="chat-header">
+                  {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
+                  <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
+                </div>
+                <div class="chat-bubble bg-base-150 ai-thinking">
+                  <div class="flex items-center gap-2">
+                    <span class="loading loading-dots loading-sm"></span>
+                    <span class="text-sm opacity-70">正在思考中...</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 流式输出响应 -->
+              <div v-if="isStreaming && streamingContent" class="chat chat-start">
+                <div class="chat-image avatar">
+                  <div class="w-10 rounded-full bg-base-300 overflow-hidden">
+                    <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
+                  </div>
+                </div>
+                <div class="chat-header">
+                  {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
+                  <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
+                </div>
+                <div class="chat-bubble" v-html="formatMessage(streamingContent)"></div>
+              </div>
             </div>
 
-            <!-- 消息数量提示 -->
-            <div v-if="messages.length > MAX_VISIBLE_MESSAGES" class="message-count-notice bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4 text-center">
+            <!-- 消息列表 - 正常时间顺序显示 -->
+            <div class="space-y-4">
+              <template v-for="(message, _messageIndex) in visibleMessages" :key="_messageIndex">
+                <div :class="['chat', message.role === 'user' ? 'chat-end' : 'chat-start']">
+                  <div class="chat-image avatar">
+                    <div class="w-10 rounded-full bg-base-300 overflow-hidden">
+                      <img v-if="message.role === 'user'" src="/img/user-avatar.svg" alt="User" />
+                      <img v-else :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
+                    </div>
+                  </div>
+                  <div class="chat-header">
+                    {{ message.role === 'user' ? '您' : (message.role_name || getSelectedModelName()) }}
+                    <time class="text-xs opacity-50 ml-1">{{ formatTime(message.timestamp) }}</time>
+                  </div>
+                  <div :class="['chat-bubble', message.failed ? 'border border-red-500' : '']">
+                    <!-- 显示附件 -->
+                    <div v-if="message.attachments && message.attachments.length > 0" class="mb-2">
+                      <div v-for="attachment in message.attachments" :key="attachment.id" class="attachment-item mb-2">
+                        <!-- 图片附件 -->
+                        <div v-if="attachment.type.startsWith('image/')" class="image-attachment">
+                          <img :src="attachment.url" :alt="attachment.name"
+                            class="max-w-xs max-h-48 rounded-lg cursor-pointer" @click="previewImage(attachment.url)" />
+                          <p class="text-xs text-base-content/70 mt-1">{{ attachment.name }}</p>
+                        </div>
+                        <!-- 文档附件 -->
+                        <div v-else class="document-attachment flex items-center p-2 bg-base-300 rounded-lg">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-primary" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div class="flex-1">
+                            <p class="text-sm font-medium">{{ attachment.name }}</p>
+                            <p class="text-xs text-base-content/70">{{ formatFileSize(attachment.size) }}</p>
+                          </div>
+                          <button class="btn btn-xs btn-ghost" @click="downloadFile(attachment)">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                              stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 显示引用的笔记 -->
+                    <div v-if="message.referencedNotes && message.referencedNotes.length > 0" class="mb-2">
+                      <div v-for="note in message.referencedNotes" :key="note.id" class="referenced-note-item mb-2">
+                        <div
+                          class="flex p-2 bg-info/10 rounded-lg border border-info/20 cursor-pointer hover:bg-info/20 transition-colors"
+                          @click="showNoteDetail(note)">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-info flex-shrink-0" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-info ">{{ note.title }}</p>
+                            <p class="text-xs text-base-content/70">{{ note.tip_type }} • 点击查看详情</p>
+                          </div>
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info flex-shrink-0 ml-1" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 消息内容 -->
+                    <div v-html="formatMessage(message.content)"></div>
+                  </div>
+                  <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'assistant'">
+                    <button 
+                      class="btn btn-xs btn-ghost" 
+                      :class="{ 'copy-success': copyingStates[`${_messageIndex}_assistant`] === 'success' }"
+                      @click="copyToClipboardWithFeedback(message.content, $event)"
+                      :disabled="!!copyingStates[`${_messageIndex}_assistant`]"
+                    >
+                      <span v-if="copyingStates[`${_messageIndex}_assistant`] === 'copying'">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </span>
+                      <span v-else-if="copyingStates[`${_messageIndex}_assistant`] === 'success'" class="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        已复制
+                      </span>
+                      <span v-else>复制</span>
+                    </button>
+                    <button class="btn btn-xs btn-ghost" @click="addToNote(message.content)">添加到笔记</button>
+                  </div>
+                  <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'user'">
+                    <button class="btn btn-xs btn-ghost" @click="resendMessage(message)">重发</button>
+                    <button 
+                      class="btn btn-xs btn-ghost" 
+                      :class="{ 'copy-success': copyingStates[`${_messageIndex}_user`] === 'success' }"
+                      @click="copyToClipboardWithFeedback(message.content, $event)"
+                      :disabled="!!copyingStates[`${_messageIndex}_user`]"
+                    >
+                      <span v-if="copyingStates[`${_messageIndex}_user`] === 'copying'">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </span>
+                      <span v-else-if="copyingStates[`${_messageIndex}_user`] === 'success'" class="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        已复制
+                      </span>
+                      <span v-else>复制</span>
+                    </button>
+                  </div>
+                  <div class="chat-footer opacity-80 flex gap-1" v-if="message.failed && message.role === 'user'">
+                    <span class="text-red-500">发送失败</span>
+                    <button class="btn btn-xs btn-error" @click="sendMessage(message)">重新发送</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <!-- 消息数量提示 - 在反向布局中显示在底部 -->
+            <div v-if="messages.length > MAX_VISIBLE_MESSAGES"
+              class="message-count-notice bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4 text-center">
               <div class="flex items-center justify-center gap-2 text-warning-content">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span class="text-sm font-medium">
                   为了提升性能，仅显示最新的 {{ MAX_VISIBLE_MESSAGES }} 条消息 (共 {{ messages.length }} 条)
@@ -157,121 +310,16 @@
               </p>
             </div>
 
-            <template v-for="(message, _messageIndex) in visibleMessages" :key="_messageIndex">
-              <div :class="['chat', message.role === 'user' ? 'chat-end' : 'chat-start']">
-                <div class="chat-image avatar">
-                  <div class="w-10 rounded-full bg-base-300 overflow-hidden">
-                    <img v-if="message.role === 'user'" src="/img/user-avatar.svg" alt="User" />
-                    <img v-else :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
-                  </div>
-                </div>
-                <div class="chat-header">
-                  {{ message.role === 'user' ? '您' : (message.role_name || getSelectedModelName()) }}
-                  <time class="text-xs opacity-50 ml-1">{{ formatTime(message.timestamp) }}</time>
-                </div>
-                <div :class="['chat-bubble', message.failed ? 'border border-red-500' : '']">
-                  <!-- 显示附件 -->
-                  <div v-if="message.attachments && message.attachments.length > 0" class="mb-2">
-                    <div v-for="attachment in message.attachments" :key="attachment.id" class="attachment-item mb-2">
-                      <!-- 图片附件 -->
-                      <div v-if="attachment.type.startsWith('image/')" class="image-attachment">
-                        <img :src="attachment.url" :alt="attachment.name"
-                          class="max-w-xs max-h-48 rounded-lg cursor-pointer" @click="previewImage(attachment.url)" />
-                        <p class="text-xs text-base-content/70 mt-1">{{ attachment.name }}</p>
-                      </div>
-                      <!-- 文档附件 -->
-                      <div v-else class="document-attachment flex items-center p-2 bg-base-300 rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2 text-primary" fill="none"
-                          viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <div class="flex-1">
-                          <p class="text-sm font-medium">{{ attachment.name }}</p>
-                          <p class="text-xs text-base-content/70">{{ formatFileSize(attachment.size) }}</p>
-                        </div>
-                        <button class="btn btn-xs btn-ghost" @click="downloadFile(attachment)">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 显示引用的笔记 -->
-                  <div v-if="message.referencedNotes && message.referencedNotes.length > 0" class="mb-2">
-                    <div v-for="note in message.referencedNotes" :key="note.id" class="referenced-note-item mb-2">
-                      <div
-                        class="flex p-2 bg-info/10 rounded-lg border border-info/20 cursor-pointer hover:bg-info/20 transition-colors"
-                        @click="showNoteDetail(note)">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-info flex-shrink-0" fill="none"
-                          viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <div class="flex-1 min-w-0">
-                          <p class="text-sm font-medium text-info ">{{ note.title }}</p>
-                          <p class="text-xs text-base-content/70">{{ note.tip_type }} • 点击查看详情</p>
-                        </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info flex-shrink-0 ml-1" fill="none"
-                          viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 消息内容 -->
-                  <div v-html="formatMessage(message.content)"></div>
-                </div>
-                <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'assistant'">
-                  <button class="btn btn-xs btn-ghost" @click="copyToClipboard(message.content)">复制</button>
-                  <button class="btn btn-xs btn-ghost" @click="addToNote(message.content)">添加到笔记</button>
-                </div>
-                <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'user'">
-                  <button class="btn btn-xs btn-ghost" @click="copyToClipboard(message.content)">复制</button>
-                </div>
-                <div class="chat-footer opacity-80 flex gap-1" v-if="message.failed && message.role === 'user'">
-                  <span class="text-red-500">发送失败</span>
-                  <button class="btn btn-xs btn-error" @click="sendMessage(message)">重新发送</button>
-                </div>
-              </div>
-            </template>
-
-            <!-- 流式输出响应 -->
-            <div v-if="isStreaming && streamingContent" class="chat chat-start">
-              <div class="chat-image avatar">
-                <div class="w-10 rounded-full bg-base-300 overflow-hidden">
-                  <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
-                </div>
-              </div>
-              <div class="chat-header">
-                {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
-                <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
-              </div>
-              <div class="chat-bubble" v-html="formatMessage(streamingContent)"></div>
-            </div>
-
-            <!-- 加载中指示器 - 优化显示条件 -->
-            <div v-if="isLoading || (isStreaming && !streamingContent)" class="chat chat-start">
-              <div class="chat-image avatar">
-                <div class="w-10 rounded-full bg-base-300 overflow-hidden">
-                  <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
-                </div>
-              </div>
-              <div class="chat-header">
-                {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
-                <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
-              </div>
-              <div class="chat-bubble bg-base-150 ai-thinking">
-                <div class="flex items-center gap-2">
-                  <span class="loading loading-dots loading-sm"></span>
-                  <span class="text-sm opacity-70">正在思考中...</span>
-                </div>
-              </div>
+            <!-- 空状态显示 - 在反向布局中显示在底部 -->
+            <div v-if="messages.length === 0"
+              class="flex flex-col items-center justify-center h-full text-base-content/60">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                stroke="currentColor" class="w-16 h-16 mb-4">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+              </svg>
+              <p class="text-lg">选择AI模型开始对话</p>
+              <p class="text-sm">您的对话仅保存在本地，不会上传到服务器</p>
             </div>
           </div>
 
@@ -424,7 +472,8 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <span>您尚未配置{{ getSelectedModelName() }}的API密钥。<button @click="goToAISettings" class="link link-primary">前往设置</button></span>
+                <span>您尚未配置{{ getSelectedModelName() }}的API密钥。<button @click="goToAISettings"
+                    class="link link-primary">前往设置</button></span>
               </div>
 
               <!-- 文本输入区域 -->
@@ -446,7 +495,8 @@
                 <textarea ref="messageTextarea" v-model="userInput" @keydown="handleInputKeydown"
                   @keydown.enter.prevent="handleEnterKey" :placeholder="getInputPlaceholder()"
                   class="textarea w-full resize-none border-0 focus:outline-none bg-transparent"
-                  :disabled="!selectedModel || (!selectedModel.startsWith('custom_') && !hasApiKey) || isLoading || isStreaming" rows="3"></textarea>
+                  :disabled="!selectedModel || (!selectedModel.startsWith('custom_') && !hasApiKey) || isLoading || isStreaming"
+                  rows="3"></textarea>
 
                 <!-- 笔记选择器 -->
                 <div v-if="showNoteSelector"
@@ -553,44 +603,36 @@
                 <span class="label-text">笔记内容 (支持Markdown格式)</span>
               </label>
               <div class="btn-group btn-group-sm">
-                <button 
-                  class="btn btn-sm " 
-                  :class="{ 'btn-active': !isNotePreviewMode }" 
-                  @click="() => { console.log('切换到编辑模式'); isNotePreviewMode = false }"
-                  title="编辑模式"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <button class="btn btn-sm " :class="{ 'btn-active': !isNotePreviewMode }"
+                  @click="() => { console.log('切换到编辑模式'); isNotePreviewMode = false }" title="编辑模式">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
                 </button>
-                <button 
-                  class="btn btn-sm " 
-                  :class="{ 'btn-active': isNotePreviewMode } " 
+                <button class="btn btn-sm " :class="{ 'btn-active': isNotePreviewMode }"
                   @click="() => { console.log('切换到预览模式', 'noteContent:', noteContent); isNotePreviewMode = true }"
-                  title="预览模式"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  title="预览模式">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                   </svg>
                 </button>
               </div>
             </div>
-            
+
             <!-- 编辑模式 -->
-            <textarea 
-              v-if="!isNotePreviewMode"
-              v-model="noteContent" 
-              placeholder="可以从左侧AI对话添加内容到这里..."
-              class="textarea textarea-bordered w-full flex-1 font-mono resize-none"
-            ></textarea>
-            
+            <textarea v-if="!isNotePreviewMode" v-model="noteContent" placeholder="可以从左侧AI对话添加内容到这里..."
+              class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+
             <!-- 预览模式 -->
-            <div 
-              v-else
+            <div v-else
               class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
-              v-html="renderedNoteContent"
-            ></div>
+              v-html="renderedNoteContent"></div>
           </div>
         </div>
       </transition>
@@ -603,8 +645,8 @@
       </div>
     </div>
 
-    
-    
+
+
 
     <!-- 编辑对话标题对话框 -->
     <dialog ref="editTitleModal" class="modal">
@@ -634,7 +676,7 @@
       </div>
     </dialog>
 
-  
+
 
     <!-- 自定义右键菜单 -->
     <div v-if="showContextMenu"
@@ -831,7 +873,7 @@
               stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-          </svg>
+            </svg>
             复制内容
           </button>
         </div>
@@ -872,17 +914,16 @@ const tipsStore = useTipsStore()
 
 // 返回主页
 const goBack = () => {
-  console.log('AI助手 - 开始返回主界面')
-  
+
   // 使用两种方式：localStorage 和路由参数
   localStorage.setItem('need-refresh-tips', 'true')
   console.log('AI助手 - 已设置刷新标记:', localStorage.getItem('need-refresh-tips'))
-  
+
   // 验证设置是否成功
   const verifyMark = localStorage.getItem('need-refresh-tips')
   console.log('AI助手 - 验证刷新标记:', verifyMark)
   console.log('AI助手 - 验证刷新标记类型:', typeof verifyMark)
-  
+
   // 使用路由参数传递刷新信号
   console.log('AI助手 - 开始路由跳转（带参数）')
   router.push({ path: '/', query: { refresh: 'tips', timestamp: Date.now().toString() } })
@@ -895,10 +936,10 @@ function isPrismLanguageAvailable(lang: string): boolean {
     if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
       return true;
     }
-    
+
     return !!(
-      typeof Prism !== 'undefined' && 
-      Prism.languages && 
+      typeof Prism !== 'undefined' &&
+      Prism.languages &&
       typeof Prism.languages === 'object' &&
       Prism.languages[lang] &&
       typeof Prism.highlight === 'function'
@@ -929,6 +970,14 @@ const hasApiKey = ref(true)
 const userInput = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
+
+// 滚动控制相关 - 适配反向布局
+const isAtBottom = ref(true)
+const shouldAutoScroll = ref(true)
+const intersectionObserver = ref<IntersectionObserver | null>(null)
+const lastScrollTop = ref(0)
+const isScrollingUp = ref(false)
+const scrollThreshold = ref(50) // 滚动阈值，用于判断是否接近底部
 
 // 流式输出相关
 const isStreaming = ref(false)
@@ -1006,10 +1055,10 @@ async function loadCustomModels(): Promise<void> {
       model_name: string
       adapter_type: string
     }>
-    
+
     // 清除之前的自定义模型
     availableModels.value = availableModels.value.filter(m => !m.id.startsWith('custom_'))
-    
+
     // 添加新的自定义模型
     customModelList.forEach(model => {
       availableModels.value.push({
@@ -1017,7 +1066,7 @@ async function loadCustomModels(): Promise<void> {
         name: `${model.name} (自定义)`
       })
     })
-    
+
     console.log('加载了自定义模型:', customModelList.length, '个')
   } catch (error) {
     console.error('加载自定义模型失败:', error)
@@ -1118,6 +1167,16 @@ async function loadMessages(conversationId: string) {
     })
 
     console.log(`加载到 ${messages.value.length} 条消息`)
+    
+      // 加载消息后滚动到底部 - 适配反向布局
+  await nextTick()
+  if (messagesContainer.value && messages.value.length > 0) {
+    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+    messagesContainer.value.scrollTop = 0
+    // 确保滚动状态正确
+    shouldAutoScroll.value = true
+    isAtBottom.value = true
+  }
   } catch (error) {
     console.error(`加载消息失败:`, error)
     messages.value = []
@@ -1134,6 +1193,11 @@ async function createNewConversation() {
   activeConversationId.value = newId
   await loadMessages(String(newId))
   showConversationsDrawer.value = false
+  
+  // 新建对话后确保滚动状态正确 - 适配反向布局
+  await nextTick()
+  shouldAutoScroll.value = true
+  isAtBottom.value = true
 }
 
 // 切换对话
@@ -1141,6 +1205,12 @@ async function switchConversation(conversationId: string) {
   activeConversationId.value = conversationId
   await loadMessages(conversationId)
   showConversationsDrawer.value = false
+  
+  // 切换对话后强制滚动到底部 - 适配反向布局
+  await nextTick()
+  setTimeout(() => {
+    forceScrollToBottom()
+  }, 100)
 }
 
 // 删除对话
@@ -1184,6 +1254,7 @@ const setupStreamListeners = async () => {
         isLoading.value = false;
 
         // 滚动到底部
+        await nextTick();
         scrollToBottom();
       } else {
         // 收到内容chunk，累加到流式内容中
@@ -1194,8 +1265,10 @@ const setupStreamListeners = async () => {
           isLoading.value = false;
         }
 
-        // 滚动到底部
-        scrollToBottom();
+        // 如果在底部且用户没有在滚动，自动滚动
+        if (shouldAutoScroll.value && !isUserScrolling.value) {
+          scrollToBottom();
+        }
       }
     });
   } catch (error) {
@@ -1338,7 +1411,9 @@ async function sendMessage(resendMessage?: any) {
     isLoading.value = true
 
     await nextTick()
-    scrollToBottom()
+    // 确保在开始生成时滚动到底部
+    shouldAutoScroll.value = true
+    forceScrollToBottom()
   }
 
   // 设置加载状态
@@ -1417,7 +1492,7 @@ async function sendMessage(resendMessage?: any) {
       attachments: attachments
     })
     await nextTick()
-    scrollToBottom()
+    forceScrollToBottom()
     isStreaming.value = false
     streamingContent.value = ''
     currentStreamingId.value = null
@@ -1447,6 +1522,39 @@ const checkApiKey = async () => {
   }
 }
 
+// 监听消息变化，自动滚动到底部
+watch(messages, async (newMessages, oldMessages) => {
+  // 如果有新消息且用户在底部且没有在手动滚动，自动滚动
+  if (newMessages.length > (oldMessages?.length || 0) && shouldAutoScroll.value && !isUserScrolling.value) {
+    console.log('shouldAutoScroll', shouldAutoScroll.value)
+    console.log('isUserScrolling', isUserScrolling.value)
+    await nextTick()
+    scrollToBottom()
+  }
+  
+  // 如果是第一次加载消息或消息数量从0变为有消息，强制滚动到底部 - 适配反向布局
+  if ((oldMessages?.length || 0) === 0 && newMessages.length > 0) {
+    await nextTick()
+    setTimeout(() => {
+      if (messagesContainer.value) {
+        // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+        messagesContainer.value.scrollTop = 0
+        shouldAutoScroll.value = true
+        isAtBottom.value = true
+      }
+    }, 50)
+  }
+}, { deep: false })
+
+// 监听流式内容变化，确保在底部时自动滚动
+watch(streamingContent, async () => {
+  console.log('shouldAutoScroll:', shouldAutoScroll.value, "  isUserScrolling:",isUserScrolling.value)
+  if (shouldAutoScroll.value && !isUserScrolling.value) {
+    await nextTick()
+    scrollToBottom()
+  }
+})
+
 // 监听模型选择变化
 watch(selectedModel, async (newModel) => {
   await checkApiKey()
@@ -1464,27 +1572,27 @@ const formatMessage = (content: string): string => {
   try {
     // 创建 marked 实例并配置高亮
     const marked = new Marked();
-    
+
     // 使用 marked-highlight 扩展
     marked.use(markedHighlight({
       langPrefix: 'language-',
       highlight(code: string, lang: string) {
         // 如果没有指定语言，使用 plaintext 作为默认语言
         const actualLang = lang || 'plaintext';
-        
+
         // 限制代码块大小，超过50KB的代码块不进行语法高亮
         const MAX_CODE_SIZE = 50 * 1024; // 50KB
         const MAX_LINES = 1000; // 最大行数限制
-        
+
         const codeLines = code.split('\n');
         const isLargeCode = code.length > MAX_CODE_SIZE || codeLines.length > MAX_LINES;
-        
+
         if (isLargeCode) {
           // 对于大代码块，显示警告并提供折叠功能
-          const truncatedCode = codeLines.length > MAX_LINES 
+          const truncatedCode = codeLines.length > MAX_LINES
             ? codeLines.slice(0, MAX_LINES).join('\n') + `\n\n... (剩余 ${codeLines.length - MAX_LINES} 行已省略)`
             : code;
-          
+
           return `<div class="large-code-block">
             <div class="code-warning bg-warning/20 text-warning-content p-2 text-sm rounded-t border border-warning/40">
               ⚠️ 大代码块 (${codeLines.length} 行, ${(code.length / 1024).toFixed(1)}KB) - 已禁用语法高亮以提升性能
@@ -1496,7 +1604,7 @@ const formatMessage = (content: string): string => {
             ${codeLines.length > MAX_LINES ? `<pre class="code-content" style="display: none;"><code class="language-${actualLang}">${DOMPurify.sanitize(code)}</code></pre>` : ''}
           </div>`;
         }
-        
+
         // 使用安全检查函数
         if (actualLang && isPrismLanguageAvailable(actualLang)) {
           try {
@@ -1506,7 +1614,7 @@ const formatMessage = (content: string): string => {
             return escapeHtml(code);
           }
         }
-        
+
         // 如果 plaintext 也不可用，直接返回转义的代码
         return escapeHtml(code);
       }
@@ -1537,12 +1645,12 @@ const formatMessage = (content: string): string => {
       }
     }
     messageRenderCache.value.set(cacheKey, result);
-    
+
     // 在下一个 tick 中处理代码块UI增强
     nextTick(() => {
       enhanceCodeBlocks()
     })
-    
+
     return result;
   } catch (err) {
     console.error('Markdown渲染错误:', err);
@@ -1556,11 +1664,11 @@ const formatMessage = (content: string): string => {
 function enhanceCodeBlocks() {
   // 查找所有包含language-类的code元素，以及没有language-类的pre>code元素
   const codeElements = document.querySelectorAll('.chat-bubble code[class*="language-"], .chat-bubble pre > code:not([class*="language-"])')
-  
+
   codeElements.forEach((codeElement) => {
     const pre = codeElement.closest('pre')
     if (!pre) return
-    
+
     // 避免重复处理
     if (pre.closest('.code-block-container')) {
       return
@@ -1603,6 +1711,309 @@ function enhanceCodeBlocks() {
       container.appendChild(pre)
     }
   })
+
+  // 应用代码块主题样式
+  applyCodeBlockTheme()
+}
+
+// 新增函数：应用代码块主题样式
+function applyCodeBlockTheme() {
+  // 创建样式元素
+  let styleElement = document.getElementById('ai-prism-theme-styles') as HTMLStyleElement
+  if (!styleElement) {
+    styleElement = document.createElement('style')
+    styleElement.id = 'ai-prism-theme-styles'
+    document.head.appendChild(styleElement)
+  }
+
+
+  // 根据当前主题生成CSS样式
+  const cssContent = `
+    /* AI助手代码块主题样式修复 - Okaidia 默认主题 */
+    .chat-bubble pre {
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      border-radius: 0.5rem !important;
+      overflow: auto !important;
+      margin: 1rem 0 !important;
+      padding: 0 !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .chat-bubble pre code {
+      background: transparent !important;
+      padding: 1rem !important;
+      border: none !important;
+      border-radius: 0 !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      font-size: 0.875rem !important;
+      line-height: 1.5 !important;
+      white-space: pre-wrap !important;
+      word-wrap: break-word !important;
+      overflow-wrap: break-word !important;
+      word-break: break-all !important;
+      display: block !important;
+      width: 100% !important;
+      /* 修复重影问题 */
+      text-shadow: none !important;
+      font-weight: normal !important;
+      text-decoration: none !important;
+      font-style: normal !important;
+    }
+
+    .chat-bubble .code-block-container {
+      margin: 1rem 0 !important;
+      border-radius: 0.5rem !important;
+      overflow: hidden !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .chat-bubble .code-block-header {
+      background: rgba(0, 0, 0, 0.2) !important;
+      padding: 0.5rem 1rem !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+      font-size: 0.75rem !important;
+    }
+
+    .chat-bubble .code-language {
+      font-weight: 500 !important;
+      text-transform: uppercase !important;
+      opacity: 0.8 !important;
+    }
+
+    .chat-bubble .copy-code-btn {
+      opacity: 0.6 !important;
+      transition: opacity 0.2s ease !important;
+      background: transparent !important;
+      border: none !important;
+      cursor: pointer !important;
+      padding: 0.25rem !important;
+      border-radius: 0.25rem !important;
+    }
+
+    .chat-bubble .copy-code-btn:hover {
+      opacity: 1 !important;
+    }
+
+    /* 行内代码样式修复 */
+    .chat-bubble code:not(pre code) {
+      background-color: rgba(255, 255, 255, 0.1) !important;
+      color: rgb(251, 191, 36) !important;
+      padding: 0.125rem 0.25rem !important;
+      border-radius: 0.25rem !important;
+      font-size: 0.875em !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      /* 修复重影问题 */
+      text-shadow: none !important;
+      font-weight: normal !important;
+      text-decoration: none !important;
+      font-style: normal !important;
+    }
+
+    /* 暗色主题适配 - 继续使用 okaidia 主题 */
+    [data-theme="dark"] .chat-bubble pre,
+    [data-theme="night"] .chat-bubble pre,
+    [data-theme="black"] .chat-bubble pre,
+    [data-theme="dracula"] .chat-bubble pre,
+    [data-theme="halloween"] .chat-bubble pre,
+    [data-theme="business"] .chat-bubble pre,
+    [data-theme="luxury"] .chat-bubble pre,
+    [data-theme="coffee"] .chat-bubble pre,
+    [data-theme="forest"] .chat-bubble pre,
+    [data-theme="synthwave"] .chat-bubble pre {
+      border-color: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    [data-theme="dark"] .chat-bubble pre code,
+    [data-theme="night"] .chat-bubble pre code,
+    [data-theme="black"] .chat-bubble pre code,
+    [data-theme="dracula"] .chat-bubble pre code,
+    [data-theme="halloween"] .chat-bubble pre code,
+    [data-theme="business"] .chat-bubble pre code,
+    [data-theme="luxury"] .chat-bubble pre code,
+    [data-theme="coffee"] .chat-bubble pre code,
+    [data-theme="forest"] .chat-bubble pre code,
+    [data-theme="synthwave"] .chat-bubble pre code {
+    }
+
+    [data-theme="dark"] .chat-bubble .code-block-header,
+    [data-theme="night"] .chat-bubble .code-block-header,
+    [data-theme="black"] .chat-bubble .code-block-header,
+    [data-theme="dracula"] .chat-bubble .code-block-header,
+    [data-theme="halloween"] .chat-bubble .code-block-header,
+    [data-theme="business"] .chat-bubble .code-block-header,
+    [data-theme="luxury"] .chat-bubble .code-block-header,
+    [data-theme="coffee"] .chat-bubble .code-block-header,
+    [data-theme="forest"] .chat-bubble .code-block-header,
+    [data-theme="synthwave"] .chat-bubble .code-block-header {
+      background: rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* 亮色主题适配 - 使用 GitHub 风格 */
+    [data-theme="light"] .chat-bubble pre,
+    [data-theme="cupcake"] .chat-bubble pre,
+    [data-theme="bumblebee"] .chat-bubble pre,
+    [data-theme="emerald"] .chat-bubble pre,
+    [data-theme="corporate"] .chat-bubble pre,
+    [data-theme="retro"] .chat-bubble pre,
+    [data-theme="cyberpunk"] .chat-bubble pre,
+    [data-theme="valentine"] .chat-bubble pre,
+    [data-theme="garden"] .chat-bubble pre,
+    [data-theme="aqua"] .chat-bubble pre,
+    [data-theme="lofi"] .chat-bubble pre,
+    [data-theme="pastel"] .chat-bubble pre,
+    [data-theme="fantasy"] .chat-bubble pre,
+    [data-theme="wireframe"] .chat-bubble pre,
+    [data-theme="cmyk"] .chat-bubble pre,
+    [data-theme="autumn"] .chat-bubble pre,
+    [data-theme="acid"] .chat-bubble pre,
+    [data-theme="lemonade"] .chat-bubble pre,
+    [data-theme="winter"] .chat-bubble pre {
+      border-color: rgba(0, 0, 0, 0.1) !important;
+    }
+
+    [data-theme="light"] .chat-bubble pre code,
+    [data-theme="cupcake"] .chat-bubble pre code,
+    [data-theme="bumblebee"] .chat-bubble pre code,
+    [data-theme="emerald"] .chat-bubble pre code,
+    [data-theme="corporate"] .chat-bubble pre code,
+    [data-theme="retro"] .chat-bubble pre code,
+    [data-theme="cyberpunk"] .chat-bubble pre code,
+    [data-theme="valentine"] .chat-bubble pre code,
+    [data-theme="garden"] .chat-bubble pre code,
+    [data-theme="aqua"] .chat-bubble pre code,
+    [data-theme="lofi"] .chat-bubble pre code,
+    [data-theme="pastel"] .chat-bubble pre code,
+    [data-theme="fantasy"] .chat-bubble pre code,
+    [data-theme="wireframe"] .chat-bubble pre code,
+    [data-theme="cmyk"] .chat-bubble pre code,
+    [data-theme="autumn"] .chat-bubble pre code,
+    [data-theme="acid"] .chat-bubble pre code,
+    [data-theme="lemonade"] .chat-bubble pre code,
+    [data-theme="winter"] .chat-bubble pre code {
+    }
+
+    [data-theme="light"] .chat-bubble .code-block-header,
+    [data-theme="cupcake"] .chat-bubble .code-block-header,
+    [data-theme="bumblebee"] .chat-bubble .code-block-header,
+    [data-theme="emerald"] .chat-bubble .code-block-header,
+    [data-theme="corporate"] .chat-bubble .code-block-header,
+    [data-theme="retro"] .chat-bubble .code-block-header,
+    [data-theme="cyberpunk"] .chat-bubble .code-block-header,
+    [data-theme="valentine"] .chat-bubble .code-block-header,
+    [data-theme="garden"] .chat-bubble .code-block-header,
+    [data-theme="aqua"] .chat-bubble .code-block-header,
+    [data-theme="lofi"] .chat-bubble .code-block-header,
+    [data-theme="pastel"] .chat-bubble .code-block-header,
+    [data-theme="fantasy"] .chat-bubble .code-block-header,
+    [data-theme="wireframe"] .chat-bubble .code-block-header,
+    [data-theme="cmyk"] .chat-bubble .code-block-header,
+    [data-theme="autumn"] .chat-bubble .code-block-header,
+    [data-theme="acid"] .chat-bubble .code-block-header,
+    [data-theme="lemonade"] .chat-bubble .code-block-header,
+    [data-theme="winter"] .chat-bubble .code-block-header {
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+    }
+
+    [data-theme="light"] .chat-bubble .code-language,
+    [data-theme="cupcake"] .chat-bubble .code-language,
+    [data-theme="bumblebee"] .chat-bubble .code-language,
+    [data-theme="emerald"] .chat-bubble .code-language,
+    [data-theme="corporate"] .chat-bubble .code-language,
+    [data-theme="retro"] .chat-bubble .code-language,
+    [data-theme="cyberpunk"] .chat-bubble .code-language,
+    [data-theme="valentine"] .chat-bubble .code-language,
+    [data-theme="garden"] .chat-bubble .code-language,
+    [data-theme="aqua"] .chat-bubble .code-language,
+    [data-theme="lofi"] .chat-bubble .code-language,
+    [data-theme="pastel"] .chat-bubble .code-language,
+    [data-theme="fantasy"] .chat-bubble .code-language,
+    [data-theme="wireframe"] .chat-bubble .code-language,
+    [data-theme="cmyk"] .chat-bubble .code-language,
+    [data-theme="autumn"] .chat-bubble .code-language,
+    [data-theme="acid"] .chat-bubble .code-language,
+    [data-theme="lemonade"] .chat-bubble .code-language,
+    [data-theme="winter"] .chat-bubble .code-language {
+      opacity: 0.7 !important;
+    }
+
+    [data-theme="light"] .chat-bubble .copy-code-btn,
+    [data-theme="cupcake"] .chat-bubble .copy-code-btn,
+    [data-theme="bumblebee"] .chat-bubble .copy-code-btn,
+    [data-theme="emerald"] .chat-bubble .copy-code-btn,
+    [data-theme="corporate"] .chat-bubble .copy-code-btn,
+    [data-theme="retro"] .chat-bubble .copy-code-btn,
+    [data-theme="cyberpunk"] .chat-bubble .copy-code-btn,
+    [data-theme="valentine"] .chat-bubble .copy-code-btn,
+    [data-theme="garden"] .chat-bubble .copy-code-btn,
+    [data-theme="aqua"] .chat-bubble .copy-code-btn,
+    [data-theme="lofi"] .chat-bubble .copy-code-btn,
+    [data-theme="pastel"] .chat-bubble .copy-code-btn,
+    [data-theme="fantasy"] .chat-bubble .copy-code-btn,
+    [data-theme="wireframe"] .chat-bubble .copy-code-btn,
+    [data-theme="cmyk"] .chat-bubble .copy-code-btn,
+    [data-theme="autumn"] .chat-bubble .copy-code-btn,
+    [data-theme="acid"] .chat-bubble .copy-code-btn,
+    [data-theme="lemonade"] .chat-bubble .copy-code-btn,
+    [data-theme="winter"] .chat-bubble .copy-code-btn {
+      opacity: 0.6 !important;
+    }
+
+    [data-theme="light"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="cupcake"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="bumblebee"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="emerald"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="corporate"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="retro"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="cyberpunk"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="valentine"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="garden"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="aqua"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="lofi"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="pastel"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="fantasy"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="wireframe"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="cmyk"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="autumn"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="acid"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="lemonade"] .chat-bubble .copy-code-btn:hover,
+    [data-theme="winter"] .chat-bubble .copy-code-btn:hover {
+      background: rgba(0, 0, 0, 0.1) !important;
+      opacity: 1 !important;
+    }
+
+    /* 行内代码在亮色主题下的样式 */
+    [data-theme="light"] .chat-bubble code:not(pre code),
+    [data-theme="cupcake"] .chat-bubble code:not(pre code),
+    [data-theme="bumblebee"] .chat-bubble code:not(pre code),
+    [data-theme="emerald"] .chat-bubble code:not(pre code),
+    [data-theme="corporate"] .chat-bubble code:not(pre code),
+    [data-theme="retro"] .chat-bubble code:not(pre code),
+    [data-theme="cyberpunk"] .chat-bubble code:not(pre code),
+    [data-theme="valentine"] .chat-bubble code:not(pre code),
+    [data-theme="garden"] .chat-bubble code:not(pre code),
+    [data-theme="aqua"] .chat-bubble code:not(pre code),
+    [data-theme="lofi"] .chat-bubble code:not(pre code),
+    [data-theme="pastel"] .chat-bubble code:not(pre code),
+    [data-theme="fantasy"] .chat-bubble code:not(pre code),
+    [data-theme="wireframe"] .chat-bubble code:not(pre code),
+    [data-theme="cmyk"] .chat-bubble code:not(pre code),
+    [data-theme="autumn"] .chat-bubble code:not(pre code),
+    [data-theme="acid"] .chat-bubble code:not(pre code),
+    [data-theme="lemonade"] .chat-bubble code:not(pre code),
+    [data-theme="winter"] .chat-bubble code:not(pre code) {
+      background-color: rgba(175, 184, 193, 0.2) !important;
+      color: rgb(124, 58, 237) !important;
+      border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    }
+  `
+
+  styleElement.textContent = cssContent
+  console.log('已应用AI助手代码块主题样式')
 }
 
 // 设置代码复制功能
@@ -1658,17 +2069,104 @@ function setupCodeCopyFeature() {
   })
 }
 
-// 确保消息区域滚动到底部
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    const container = messagesContainer.value;
-    // 使用平滑滚动效果
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    });
+// 滚动事件防抖
+let scrollTimeout: NodeJS.Timeout | null = null
+let isUserScrolling = ref(false)
+
+// 处理滚动事件 - 适配反向布局
+const handleScroll = () => {
+  if (!messagesContainer.value) return
+  
+  const container = messagesContainer.value
+  const currentScrollTop = container.scrollTop
+  
+  // 在反向布局中，scrollTop = 0 表示在最底部（最新消息）
+  // scrollTop > 0 表示向上滚动查看历史消息
+  const distanceFromBottom = currentScrollTop
+  
+  // 检测滚动方向
+  isScrollingUp.value = currentScrollTop > lastScrollTop.value
+  lastScrollTop.value = currentScrollTop
+  
+  // 判断是否在底部附近（显示最新消息的位置）
+  const nearBottom = distanceFromBottom <= scrollThreshold.value
+  isAtBottom.value = nearBottom
+  
+  // 标记用户正在滚动
+  isUserScrolling.value = true
+  
+  // 如果用户向上滚动查看历史消息，禁用自动滚动
+  if (isScrollingUp.value && distanceFromBottom > scrollThreshold.value) {
+    shouldAutoScroll.value = false
   }
-};
+  
+  // 如果用户滚动回底部附近，恢复自动滚动
+  if (nearBottom) {
+    shouldAutoScroll.value = true
+  }
+  
+  // 清除之前的定时器
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+  }
+  
+
+}
+
+
+
+// 清理 IntersectionObserver
+const cleanupIntersectionObserver = () => {
+  if (intersectionObserver.value) {
+    intersectionObserver.value.disconnect()
+    intersectionObserver.value = null
+  }
+}
+
+// 智能滚动到底部 - 适配反向布局
+const scrollToBottom = () => {
+  if (!messagesContainer.value || !shouldAutoScroll.value || isUserScrolling.value) return
+
+  const container = messagesContainer.value
+  
+  // 使用 requestAnimationFrame 优化性能
+  requestAnimationFrame(() => {
+    // 再次检查用户是否在滚动，避免干扰用户操作
+    if (isUserScrolling.value) return
+    
+    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+    container.scrollTo({
+      top: 0,
+      behavior: isAtBottom.value ? 'smooth' : 'auto'
+    })
+  })
+}
+
+// 强制滚动到底部（用于新消息） - 适配反向布局
+const forceScrollToBottom = () => {
+  if (!messagesContainer.value) return
+  
+  const container = messagesContainer.value
+  
+  // 重置所有滚动状态
+  shouldAutoScroll.value = true
+  isUserScrolling.value = false
+  isScrollingUp.value = false
+  isAtBottom.value = true
+  
+  requestAnimationFrame(() => {
+    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+    container.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
+    
+    // 更新最后滚动位置
+    setTimeout(() => {
+      lastScrollTop.value = container.scrollTop
+    }, 100)
+  })
+}
 
 // 生成唯一ID
 const generateUniqueId = () => {
@@ -1678,27 +2176,35 @@ const generateUniqueId = () => {
 // 清空当前对话消息
 const clearMessages = async () => {
   console.log('clearMessages 被调用，activeConversationId:', activeConversationId.value);
-  
+
   // 如果没有活动对话ID，直接清空当前显示的消息
   if (!activeConversationId.value) {
     console.log('没有活动对话ID，直接清空消息数组');
     messages.value = [];
     return;
   }
-  
+
   try {
     console.log('调用后端清空对话API...');
     // 调用后端清空当前对话的消息
     await invoke('clear_ai_conversation', { conversation_id: activeConversationId.value });
-    
+
     console.log('后端API调用成功，重新加载消息...');
     // 重新加载消息以更新UI
     await loadMessages(activeConversationId.value);
     console.log('消息重新加载完成');
+    
+    // 清空后确保滚动状态正确 - 适配反向布局
+    await nextTick()
+    shouldAutoScroll.value = true
+    isAtBottom.value = true
   } catch (error) {
     console.error('清空对话失败:', error);
     // 即使后端调用失败，也尝试清空前端显示的消息
     messages.value = [];
+    // 确保滚动状态正确 - 适配反向布局
+    shouldAutoScroll.value = true
+    isAtBottom.value = true
   }
 }
 
@@ -1793,6 +2299,9 @@ onMounted(async () => {
   // 设置代码复制功能
   setupCodeCopyFeature()
 
+  // 应用代码块主题样式
+  applyCodeBlockTheme()
+
   // 加载分类、标签和笔记数据（用于保存笔记和引用笔记）
   await Promise.all([
     tipsStore.fetchAllCategories(),
@@ -1810,10 +2319,18 @@ onMounted(async () => {
     localStorage.setItem('ai-assistant-visited', 'true');
   }
 
-  // 滚动到最新消息
-  nextTick(() => {
-    scrollToBottom();
-  });
+  
+  // 确保初始状态滚动到底部 - 适配反向布局
+  await nextTick();
+  if (messagesContainer.value) {
+    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+    messagesContainer.value.scrollTop = 0;
+  }
+  
+  // 延迟执行强制滚动，确保DOM完全渲染
+  setTimeout(() => {
+    forceScrollToBottom();
+  }, 100);
 
   console.log('组件挂载完成，数据加载完毕');
 });
@@ -1823,11 +2340,59 @@ onBeforeUnmount(() => {
   localStorage.setItem('ai-show-note-panel', showNotePanel.value.toString())
   localStorage.setItem('ai-note-title', noteTitle.value)
   localStorage.setItem('ai-note-content', noteContent.value)
-  
+
+  // 清理滚动观察器
+  cleanupIntersectionObserver()
+
+  // 清理滚动定时器
+  if (scrollTimeout) {
+    clearTimeout(scrollTimeout)
+    scrollTimeout = null
+  }
+
   // 清理性能优化相关的缓存
   messageRenderCache.value.clear()
   formatMessageDebounced.value.forEach(timeout => clearTimeout(timeout))
   formatMessageDebounced.value.clear()
+
+  // 清理主题样式
+  const styleElement = document.getElementById('ai-prism-theme-styles')
+  if (styleElement) {
+    styleElement.remove()
+  }
+})
+
+// 监听主题变化，重新应用代码块样式
+let themeObserver: MutationObserver | null = null
+onMounted(() => {
+  // 观察文档元素的 data-theme 属性变化
+  themeObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+        console.log('检测到主题变化，重新应用代码块样式')
+        // 延迟应用样式，确保主题已完全切换
+        setTimeout(() => {
+          applyCodeBlockTheme()
+        }, 100)
+      }
+    })
+  })
+
+  // 开始观察文档元素
+  if (document.documentElement) {
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+  }
+})
+
+// 清理主题观察器
+onBeforeUnmount(() => {
+  if (themeObserver) {
+    themeObserver.disconnect()
+    themeObserver = null
+  }
 })
 
 
@@ -2075,10 +2640,10 @@ const saveNoteAsTip = async () => {
     // 保存到数据库
     const savedTip = await tipsStore.saveTip(newTip)
     console.log('保存笔记 - 保存结果:', savedTip)
-    
+
     if (savedTip) {
       console.log('保存笔记 - 保存成功，笔记ID:', savedTip.id)
-      
+
       // 显示成功提示
       showSaveSuccess.value = true
       setTimeout(() => {
@@ -2090,7 +2655,7 @@ const saveNoteAsTip = async () => {
       noteContent.value = ''
       isNotePreviewMode.value = false // 重置预览模式
       showNotePanel.value = false // 隐藏笔记面板
-      
+
       console.log('保存笔记 - 已清空输入内容并隐藏笔记面板')
     } else {
       console.error('保存笔记 - 保存失败，返回值为空')
@@ -2532,6 +3097,9 @@ const showNoteDetailModal = ref(false)
 const noteDetailModal = ref<HTMLDialogElement | null>(null)
 const currentNoteDetail = ref<any>(null)
 
+// 复制状态管理
+const copyingStates = ref<Record<string, 'copying' | 'success' | null>>({})
+
 // 显示笔记详情
 const showNoteDetail = (note: any) => {
   currentNoteDetail.value = note
@@ -2600,6 +3168,154 @@ const copyToClipboard = async (content: string) => {
   }
 }
 
+// 带反馈的复制到剪贴板
+const copyToClipboardWithFeedback = async (content: string, event: Event) => {
+  const target = event.target as HTMLElement
+  const button = target.closest('button')
+  if (!button) return
+  
+  // 通过消息索引和角色生成唯一键
+  const messageElement = button.closest('.chat')
+  const messageIndex = Array.from(messageElement?.parentElement?.children || []).indexOf(messageElement!)
+  const role = messageElement?.classList.contains('chat-end') ? 'user' : 'assistant'
+  const key = `${messageIndex}_${role}`
+  
+  try {
+    copyingStates.value[key] = 'copying'
+    await navigator.clipboard.writeText(content)
+    copyingStates.value[key] = 'success'
+    
+    // 2秒后重置状态
+    setTimeout(() => {
+      copyingStates.value[key] = null
+    }, 2000)
+  } catch (error) {
+    console.error('复制到剪贴板失败:', error)
+    copyingStates.value[key] = null
+  }
+}
+
+// 重发消息
+const resendMessage = async (originalMessage: any) => {
+  if (!originalMessage || !originalMessage.content) return
+  
+  // 创建新的用户消息
+  const newMessage = {
+    role: 'user',
+    content: originalMessage.content,
+    timestamp: Date.now(),
+    attachments: originalMessage.attachments || [],
+    referencedNotes: originalMessage.referencedNotes || []
+  }
+  
+  // 添加到消息列表
+  messages.value.push(newMessage)
+  
+  // 保存到数据库
+  let messageContent = originalMessage.content
+  if (newMessage.attachments.length > 0) {
+    const attachmentsJson = JSON.stringify(newMessage.attachments)
+    messageContent += `\n\n__ATTACHMENTS__:${attachmentsJson}`
+  }
+  if (newMessage.referencedNotes.length > 0) {
+    const notesJson = JSON.stringify(newMessage.referencedNotes)
+    messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
+  }
+  
+  await addAIMessage(activeConversationId.value, 'user', messageContent)
+  
+  // 滚动到底部
+  await nextTick()
+  forceScrollToBottom()
+  
+  // 发送AI请求
+  await sendAIRequest(originalMessage.content, newMessage.attachments || [])
+}
+
+// 发送AI请求（从原有sendMessage函数中提取的逻辑）
+const sendAIRequest = async (messageContent: string, attachments: any[] = []) => {
+  // 设置加载状态
+  isLoading.value = true
+
+  try {
+    // 开始流式输出准备
+    isStreaming.value = true
+    streamingContent.value = ''
+    currentStreamingId.value = generateUniqueId()
+
+    // 获取当前模型的max_tokens配置
+    let currentMaxTokens = maxTokens.value
+    if (!currentMaxTokens) {
+      try {
+        currentMaxTokens = await invoke('get_max_tokens_config', { modelId: selectedModel.value }) as number
+        if (!currentMaxTokens) {
+          currentMaxTokens = getDefaultMaxTokens(selectedModel.value)
+        }
+      } catch (error) {
+        console.warn('获取max_tokens配置失败，使用默认值:', error)
+        currentMaxTokens = getDefaultMaxTokens(selectedModel.value)
+      }
+    }
+
+    // 获取自定义模型名称
+    let customModelName = ''
+    try {
+      customModelName = await invoke('get_model_name_config', { modelId: selectedModel.value }) as string
+    } catch (error) {
+      console.warn('获取自定义模型名称失败:', error)
+    }
+
+    // 检查是否有图片附件
+    const imageAttachments = attachments.filter((att: any) => att.type.startsWith('image/'))
+    if (imageAttachments.length > 0) {
+      // 重新处理图片数据
+      const imageFileData = await Promise.all(
+        imageAttachments.map(async (att: any) => {
+          const response = await fetch(att.url)
+          const arrayBuffer = await response.arrayBuffer()
+          const uint8Array = new Uint8Array(arrayBuffer)
+          return [att.name, Array.from(uint8Array)] as [string, number[]]
+        })
+      )
+
+      await invoke('send_ai_message_with_images_stream', {
+        modelId: selectedModel.value,
+        message: messageContent,
+        imageFiles: imageFileData,
+        streamId: currentStreamingId.value,
+        maxTokens: currentMaxTokens
+      })
+    } else {
+      // 没有图片文件，使用普通API
+      const recentMessages = messages.value
+        .slice(-10)
+        .map((msg: any) => ({ role: msg.role, content: msg.content }))
+
+      // 如果有非图片附件，添加提示信息
+      let finalMessage = messageContent
+      if (attachments.length > 0) {
+        finalMessage += `\n\n[用户上传了${attachments.length}个文件: ${attachments.map(a => a.name).join(', ')}，但当前模型不支持文件处理]`
+      }
+
+      await invoke('send_ai_message_stream', {
+        modelId: selectedModel.value,
+        message: finalMessage,
+        streamId: currentStreamingId.value,
+        messages: recentMessages,
+        customModelName: customModelName,
+        maxTokens: currentMaxTokens,
+        roleId: selectedRole.value?.id || null
+      })
+    }
+  } catch (error) {
+    console.error('AI响应失败:', error)
+    isStreaming.value = false
+    streamingContent.value = ''
+    currentStreamingId.value = null
+    isLoading.value = false
+  }
+}
+
 // 笔记内容的markdown渲染
 const renderedNoteContent = computed(() => {
   if (!noteContent.value) return '<p class="text-base-content/50">暂无内容</p>'
@@ -2607,13 +3323,13 @@ const renderedNoteContent = computed(() => {
   try {
     // 创建 marked 实例并配置高亮
     const marked = new Marked()
-    
+
     // 使用 marked-highlight 扩展
     marked.use(markedHighlight({
       langPrefix: 'language-',
       highlight(code: string, lang: string) {
         const actualLang = lang || 'plaintext'
-        
+
         if (actualLang && isPrismLanguageAvailable(actualLang)) {
           try {
             return Prism.highlight(code, Prism.languages[actualLang], actualLang)
@@ -2622,7 +3338,7 @@ const renderedNoteContent = computed(() => {
             return escapeHtml(code)
           }
         }
-        
+
         return escapeHtml(code)
       }
     }))
@@ -2704,6 +3420,10 @@ const goToAISettings = () => {
   word-wrap: break-word;
   overflow-wrap: break-word;
   max-width: 100%;
+  /* 优化渲染性能 */
+  contain: layout style paint;
+  /* 避免布局抖动 */
+  transform: translateZ(0);
 }
 
 /* 深度选择器，使得Markdown内容样式正确 */
@@ -2773,9 +3493,90 @@ const goToAISettings = () => {
   /* 添加底部间距 */
 }
 
-/* 消息容器平滑滚动 */
+/* 消息容器优化滚动 - 反向布局 */
 .chat-container .flex-grow {
   scroll-behavior: smooth;
+  /* 使用 GPU 加速 */
+  transform: translateZ(0);
+  /* 优化滚动性能 */
+  will-change: scroll-position;
+  /* 反向布局：最新消息在顶部，历史消息向下滚动 */
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* 消息间距保持正常 */
+.chat-container .space-y-4 > * + * {
+  margin-top: 1rem;
+  margin-bottom: 0;
+}
+
+
+
+/* 确保按钮在聊天框内的正确定位 */
+.chat-container {
+  position: relative;
+}
+
+
+
+/* 底部哨兵元素样式 */
+.h-1.w-full {
+  pointer-events: none;
+  user-select: none;
+  /* 确保不影响布局 */
+  flex-shrink: 0;
+}
+
+/* 复制按钮动画效果 */
+.chat-footer .btn {
+  transition: all 0.2s ease;
+}
+
+.chat-footer .btn:hover {
+  transform: translateY(-1px);
+}
+
+.chat-footer .btn:disabled {
+  opacity: 0.7;
+}
+
+/* 复制成功状态样式 */
+.chat-footer .btn:disabled.copy-success {
+  opacity: 1 !important;
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #10b981 !important;
+  animation: copy-success-pulse 0.3s ease-out;
+}
+
+@keyframes copy-success-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.chat-footer .btn .text-success {
+  color: #10b981 !important;
+}
+
+.chat-footer .btn .animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 自定义右键菜单样式 */
@@ -2943,10 +3744,13 @@ const goToAISettings = () => {
 }
 
 @keyframes ai-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
     transform: scale(1);
   }
+
   50% {
     opacity: 0.8;
     transform: scale(1.02);
@@ -2954,6 +3758,7 @@ const goToAISettings = () => {
 }
 
 @keyframes pulse {
+
   0%,
   100% {
     opacity: 1;
@@ -3366,6 +4171,11 @@ const goToAISettings = () => {
   word-wrap: break-word;
   overflow-wrap: break-word;
   word-break: break-all;
+  /* 修复重影问题 */
+  text-shadow: none !important;
+  font-weight: normal !important;
+  text-decoration: none !important;
+  font-style: normal !important;
 }
 
 /* 暗色主题下的代码块样式 */
@@ -3395,6 +4205,11 @@ const goToAISettings = () => {
   background-color: hsl(var(--b3));
   color: hsl(var(--bc));
   border: 1px solid hsl(var(--b3));
+  /* 修复重影问题 */
+  text-shadow: none !important;
+  font-weight: normal !important;
+  text-decoration: none !important;
+  font-style: normal !important;
 }
 
 /* 暗色主题下的行内代码特殊优化 */
@@ -3440,7 +4255,8 @@ const goToAISettings = () => {
 
 /* 行内代码样式修复 */
 :deep(.prose) {
-  font-size: var(--base-font-size); /* 继承全局字体大小 */
+  font-size: var(--base-font-size);
+  /* 继承全局字体大小 */
 }
 
 /* 确保prose内的所有元素都能正确继承字体大小 */
@@ -3450,27 +4266,33 @@ const goToAISettings = () => {
 
 /* 为不同标题级别设置相对大小 */
 :deep(.prose h1) {
-  font-size: calc(var(--base-font-size) * 2.25); /* 相当于 text-4xl */
+  font-size: calc(var(--base-font-size) * 2.25);
+  /* 相当于 text-4xl */
 }
 
 :deep(.prose h2) {
-  font-size: calc(var(--base-font-size) * 1.875); /* 相当于 text-3xl */
+  font-size: calc(var(--base-font-size) * 1.875);
+  /* 相当于 text-3xl */
 }
 
 :deep(.prose h3) {
-  font-size: calc(var(--base-font-size) * 1.5); /* 相当于 text-2xl */
+  font-size: calc(var(--base-font-size) * 1.5);
+  /* 相当于 text-2xl */
 }
 
 :deep(.prose h4) {
-  font-size: calc(var(--base-font-size) * 1.25); /* 相当于 text-xl */
+  font-size: calc(var(--base-font-size) * 1.25);
+  /* 相当于 text-xl */
 }
 
 :deep(.prose h5) {
-  font-size: calc(var(--base-font-size) * 1.125); /* 相当于 text-lg */
+  font-size: calc(var(--base-font-size) * 1.125);
+  /* 相当于 text-lg */
 }
 
 :deep(.prose h6) {
-  font-size: var(--base-font-size); /* 相当于 text-base */
+  font-size: var(--base-font-size);
+  /* 相当于 text-base */
 }
 
 /* 编辑/预览按钮组样式 */
@@ -3509,5 +4331,4 @@ const goToAISettings = () => {
   background-color: hsl(var(--primary)) !important;
   color: hsl(var(--primary-content)) !important;
 }
-
 </style>

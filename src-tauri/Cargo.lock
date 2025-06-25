@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "mytips"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2831,6 +2831,7 @@ dependencies = [
  "lazy_static",
  "lru",
  "once_cell",
+ "open",
  "pbkdf2 0.12.2",
  "printpdf",
  "pulldown-cmark",

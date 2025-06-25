@@ -165,3 +165,28 @@ pub async fn add_ai_message(
 
     Ok(id)
 }
+
+// 清空对话中的所有消息（但保留对话本身）
+#[tauri::command(rename_all = "snake_case")]
+pub async fn clear_ai_conversation(conversation_id: String) -> Result<(), String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let now = Utc::now().timestamp_millis();
+
+    // 删除该对话的所有消息
+    db.conn
+        .execute(
+            "DELETE FROM ai_messages WHERE conversation_id = ?",
+            &[&conversation_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+    // 更新对话的更新时间
+    db.conn
+        .execute(
+            "UPDATE ai_conversations SET updated_at = ? WHERE id = ?",
+            &[&now.to_string(), &conversation_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
