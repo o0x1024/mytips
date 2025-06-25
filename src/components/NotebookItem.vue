@@ -218,28 +218,6 @@ function closeContextMenu() {
   showContextMenu.value = false
 }
 
-// 点击菜单项后关闭菜单
-function handleEdit() {
-  closeContextMenu()
-  emit('edit', props.notebook.id)
-}
-function handleAddChild() {
-  closeContextMenu()
-  emit('add-child', props.notebook.id)
-}
-function handleDelete() {
-  closeContextMenu()
-  emit('delete', props.notebook.id)
-}
-function handleEncrypt() {
-  closeContextMenu()
-  emit('encrypt', props.notebook.id)
-}
-function handleDecrypt() {
-  closeContextMenu()
-  emit('decrypt', props.notebook.id)
-}
-
 // 检查是否应该展开（当前节点被选中或子节点被选中）
 function shouldExpand(): boolean {
   if (props.selectedId === props.notebook.id) {

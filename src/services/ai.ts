@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 // 对话相关API
-export async function sendAIMessage(conversationId: string, message: string, model: string) {
+export async function sendAIMessage(_conversationId: string, message: string, model: string) {
   return await invoke('send_ai_message', { 
     modelId: model,
     message

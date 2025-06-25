@@ -396,7 +396,7 @@ const showButton = () => {
 }
 
 // 切换聊天窗口
-const toggleChat = async (event?: MouseEvent) => {
+const toggleChat = async (_event?: MouseEvent) => {
   // 如果刚刚进行了拖动操作，则不执行点击操作
   if (hasDragged.value) {
     return

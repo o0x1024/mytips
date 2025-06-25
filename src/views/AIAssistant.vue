@@ -148,7 +148,7 @@
                 <div class="chat-bubble bg-base-150 ai-thinking">
                   <div class="flex items-center gap-2">
                     <span class="loading loading-dots loading-sm"></span>
-                    <span class="text-sm opacity-70">正在思考中...</span>
+                    <!-- <span class="text-sm opacity-70">...</span> -->
                   </div>
                 </div>
               </div>
@@ -3160,13 +3160,13 @@ function getDefaultMaxTokens(modelId: string): number {
 }
 
 // 将内容复制到剪贴板
-const copyToClipboard = async (content: string) => {
-  try {
-    await navigator.clipboard.writeText(content)
-  } catch (error) {
-    console.error('复制到剪贴板失败:', error)
-  }
-}
+// const copyToClipboard = async (content: string) => {
+//   try {
+//     await navigator.clipboard.writeText(content)
+//   } catch (error) {
+//     console.error('复制到剪贴板失败:', error)
+//   }
+// }
 
 // 带反馈的复制到剪贴板
 const copyToClipboardWithFeedback = async (content: string, event: Event) => {
