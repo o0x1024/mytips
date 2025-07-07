@@ -1,0 +1,807 @@
+/* 暗色主题统一样式 */
+@layer utilities {
+  /* 基础文本颜色 - 针对所有暗色主题 */
+  [data-theme="dark"] *,
+  [data-theme="night"] *,
+  [data-theme="black"] *,
+  [data-theme="dracula"] *,
+  [data-theme="halloween"] *,
+  [data-theme="business"] *,
+  [data-theme="luxury"] *,
+  [data-theme="coffee"] *,
+  [data-theme="forest"] *,
+  [data-theme="synthwave"] * {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+  }
+
+  /* 文本大小和颜色统一设置 */
+  [data-theme="dark"] .text-xs,
+  [data-theme="night"] .text-xs,
+  [data-theme="black"] .text-xs,
+  [data-theme="dracula"] .text-xs,
+  [data-theme="halloween"] .text-xs,
+  [data-theme="business"] .text-xs,
+  [data-theme="luxury"] .text-xs,
+  [data-theme="coffee"] .text-xs,
+  [data-theme="forest"] .text-xs,
+  [data-theme="synthwave"] .text-xs {
+    color: rgb(209, 213, 219) !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] .text-sm,
+  [data-theme="night"] .text-sm,
+  [data-theme="black"] .text-sm,
+  [data-theme="dracula"] .text-sm,
+  [data-theme="halloween"] .text-sm,
+  [data-theme="business"] .text-sm,
+  [data-theme="luxury"] .text-sm,
+  [data-theme="coffee"] .text-sm,
+  [data-theme="forest"] .text-sm,
+  [data-theme="synthwave"] .text-sm {
+    color: rgb(209, 213, 219) !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] .text-base,
+  [data-theme="night"] .text-base,
+  [data-theme="black"] .text-base,
+  [data-theme="dracula"] .text-base,
+  [data-theme="halloween"] .text-base,
+  [data-theme="business"] .text-base,
+  [data-theme="luxury"] .text-base,
+  [data-theme="coffee"] .text-base,
+  [data-theme="forest"] .text-base,
+  [data-theme="synthwave"] .text-base {
+    color: rgb(229, 231, 235) !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] .text-lg,
+  [data-theme="night"] .text-lg,
+  [data-theme="black"] .text-lg,
+  [data-theme="dracula"] .text-lg,
+  [data-theme="halloween"] .text-lg,
+  [data-theme="business"] .text-lg,
+  [data-theme="luxury"] .text-lg,
+  [data-theme="coffee"] .text-lg,
+  [data-theme="forest"] .text-lg,
+  [data-theme="synthwave"] .text-lg {
+    color: rgb(243, 244, 246) !important;
+    opacity: 1 !important;
+  }
+
+  /* 标签和标题 */
+  [data-theme="dark"] .label-text,
+  [data-theme="night"] .label-text,
+  [data-theme="black"] .label-text,
+  [data-theme="dracula"] .label-text,
+  [data-theme="halloween"] .label-text,
+  [data-theme="business"] .label-text,
+  [data-theme="luxury"] .label-text,
+  [data-theme="coffee"] .label-text,
+  [data-theme="forest"] .label-text,
+  [data-theme="synthwave"] .label-text {
+    color: rgb(229, 231, 235) !important;
+    font-weight: 500 !important;
+    opacity: 1 !important;
+  }
+
+  /* 标题元素 */
+  [data-theme="dark"] h1,
+  [data-theme="night"] h1,
+  [data-theme="black"] h1,
+  [data-theme="dracula"] h1,
+  [data-theme="halloween"] h1,
+  [data-theme="business"] h1,
+  [data-theme="luxury"] h1,
+  [data-theme="coffee"] h1,
+  [data-theme="forest"] h1,
+  [data-theme="synthwave"] h1 {
+    color: rgb(255, 255, 255) !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] h2,
+  [data-theme="night"] h2,
+  [data-theme="black"] h2,
+  [data-theme="dracula"] h2,
+  [data-theme="halloween"] h2,
+  [data-theme="business"] h2,
+  [data-theme="luxury"] h2,
+  [data-theme="coffee"] h2,
+  [data-theme="forest"] h2,
+  [data-theme="synthwave"] h2 {
+    color: rgb(243, 244, 246) !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] h3,
+  [data-theme="night"] h3,
+  [data-theme="black"] h3,
+  [data-theme="dracula"] h3,
+  [data-theme="halloween"] h3,
+  [data-theme="business"] h3,
+  [data-theme="luxury"] h3,
+  [data-theme="coffee"] h3,
+  [data-theme="forest"] h3,
+  [data-theme="synthwave"] h3 {
+    color: rgb(229, 231, 235) !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+  }
+
+  [data-theme="dark"] h4,
+  [data-theme="night"] h4,
+  [data-theme="black"] h4,
+  [data-theme="dracula"] h4,
+  [data-theme="halloween"] h4,
+  [data-theme="business"] h4,
+  [data-theme="luxury"] h4,
+  [data-theme="coffee"] h4,
+  [data-theme="forest"] h4,
+  [data-theme="synthwave"] h4 {
+    color: rgb(209, 213, 219) !important;
+    font-weight: 600 !important;
+    opacity: 1 !important;
+  }
+
+  /* 段落文本 */
+  [data-theme="dark"] p,
+  [data-theme="night"] p,
+  [data-theme="black"] p,
+  [data-theme="dracula"] p,
+  [data-theme="halloween"] p,
+  [data-theme="business"] p,
+  [data-theme="luxury"] p,
+  [data-theme="coffee"] p,
+  [data-theme="forest"] p,
+  [data-theme="synthwave"] p {
+    color: rgb(209, 213, 219) !important;
+    opacity: 1 !important;
+  }
+
+  /* 通用span元素 */
+  [data-theme="dark"] span,
+  [data-theme="night"] span,
+  [data-theme="black"] span,
+  [data-theme="dracula"] span,
+  [data-theme="halloween"] span,
+  [data-theme="business"] span,
+  [data-theme="luxury"] span,
+  [data-theme="coffee"] span,
+  [data-theme="forest"] span,
+  [data-theme="synthwave"] span {
+    color: inherit !important;
+    opacity: 1 !important;
+  }
+
+  /* 按钮样式优化 */
+  [data-theme="dark"] .btn,
+  [data-theme="night"] .btn,
+  [data-theme="black"] .btn,
+  [data-theme="dracula"] .btn,
+  [data-theme="halloween"] .btn,
+  [data-theme="business"] .btn,
+  [data-theme="luxury"] .btn,
+  [data-theme="coffee"] .btn,
+  [data-theme="forest"] .btn,
+  [data-theme="synthwave"] .btn {
+    color: rgb(229, 231, 235) !important;
+    border-width: 1px !important;
+    font-weight: 500 !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  [data-theme="dark"] .btn:hover,
+  [data-theme="night"] .btn:hover,
+  [data-theme="black"] .btn:hover,
+  [data-theme="dracula"] .btn:hover,
+  [data-theme="halloween"] .btn:hover,
+  [data-theme="business"] .btn:hover,
+  [data-theme="luxury"] .btn:hover,
+  [data-theme="coffee"] .btn:hover,
+  [data-theme="forest"] .btn:hover,
+  [data-theme="synthwave"] .btn:hover {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: rgb(255, 255, 255) !important;
+  }
+
+  /* Outline按钮 */
+  [data-theme="dark"] .btn-outline,
+  [data-theme="night"] .btn-outline,
+  [data-theme="black"] .btn-outline,
+  [data-theme="dracula"] .btn-outline,
+  [data-theme="halloween"] .btn-outline,
+  [data-theme="business"] .btn-outline,
+  [data-theme="luxury"] .btn-outline,
+  [data-theme="coffee"] .btn-outline,
+  [data-theme="forest"] .btn-outline,
+  [data-theme="synthwave"] .btn-outline {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
+    color: rgb(229, 231, 235) !important;
+  }
+
+  [data-theme="dark"] .btn-outline:hover,
+  [data-theme="night"] .btn-outline:hover,
+  [data-theme="black"] .btn-outline:hover,
+  [data-theme="dracula"] .btn-outline:hover,
+  [data-theme="halloween"] .btn-outline:hover,
+  [data-theme="business"] .btn-outline:hover,
+  [data-theme="luxury"] .btn-outline:hover,
+  [data-theme="coffee"] .btn-outline:hover,
+  [data-theme="forest"] .btn-outline:hover,
+  [data-theme="synthwave"] .btn-outline:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    color: rgb(255, 255, 255) !important;
+  }
+
+  /* Ghost按钮 */
+  [data-theme="dark"] .btn-ghost,
+  [data-theme="night"] .btn-ghost,
+  [data-theme="black"] .btn-ghost,
+  [data-theme="dracula"] .btn-ghost,
+  [data-theme="halloween"] .btn-ghost,
+  [data-theme="business"] .btn-ghost,
+  [data-theme="luxury"] .btn-ghost,
+  [data-theme="coffee"] .btn-ghost,
+  [data-theme="forest"] .btn-ghost,
+  [data-theme="synthwave"] .btn-ghost {
+    color: rgb(229, 231, 235) !important;
+    background-color: transparent !important;
+  }
+
+  [data-theme="dark"] .btn-ghost:hover,
+  [data-theme="night"] .btn-ghost:hover,
+  [data-theme="black"] .btn-ghost:hover,
+  [data-theme="dracula"] .btn-ghost:hover,
+  [data-theme="halloween"] .btn-ghost:hover,
+  [data-theme="business"] .btn-ghost:hover,
+  [data-theme="luxury"] .btn-ghost:hover,
+  [data-theme="coffee"] .btn-ghost:hover,
+  [data-theme="forest"] .btn-ghost:hover,
+  [data-theme="synthwave"] .btn-ghost:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: rgb(255, 255, 255) !important;
+  }
+
+  /* 输入元素样式 */
+  [data-theme="dark"] .input,
+  [data-theme="night"] .input,
+  [data-theme="black"] .input,
+  [data-theme="dracula"] .input,
+  [data-theme="halloween"] .input,
+  [data-theme="business"] .input,
+  [data-theme="luxury"] .input,
+  [data-theme="coffee"] .input,
+  [data-theme="forest"] .input,
+  [data-theme="synthwave"] .input {
+    color: rgb(243, 244, 246) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  [data-theme="dark"] .input:focus,
+  [data-theme="night"] .input:focus,
+  [data-theme="black"] .input:focus,
+  [data-theme="dracula"] .input:focus,
+  [data-theme="halloween"] .input:focus,
+  [data-theme="business"] .input:focus,
+  [data-theme="luxury"] .input:focus,
+  [data-theme="coffee"] .input:focus,
+  [data-theme="forest"] .input:focus,
+  [data-theme="synthwave"] .input:focus {
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  [data-theme="dark"] .select,
+  [data-theme="night"] .select,
+  [data-theme="black"] .select,
+  [data-theme="dracula"] .select,
+  [data-theme="halloween"] .select,
+  [data-theme="business"] .select,
+  [data-theme="luxury"] .select,
+  [data-theme="coffee"] .select,
+  [data-theme="forest"] .select,
+  [data-theme="synthwave"] .select {
+    color: rgb(243, 244, 246) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  [data-theme="dark"] .textarea,
+  [data-theme="night"] .textarea,
+  [data-theme="black"] .textarea,
+  [data-theme="dracula"] .textarea,
+  [data-theme="halloween"] .textarea,
+  [data-theme="business"] .textarea,
+  [data-theme="luxury"] .textarea,
+  [data-theme="coffee"] .textarea,
+  [data-theme="forest"] .textarea,
+  [data-theme="synthwave"] .textarea {
+    color: rgb(243, 244, 246) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 卡片样式 */
+  [data-theme="dark"] .card,
+  [data-theme="night"] .card,
+  [data-theme="black"] .card,
+  [data-theme="dracula"] .card,
+  [data-theme="halloween"] .card,
+  [data-theme="business"] .card,
+  [data-theme="luxury"] .card,
+  [data-theme="coffee"] .card,
+  [data-theme="forest"] .card,
+  [data-theme="synthwave"] .card {
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    background-color: rgba(255, 255, 255, 0.03) !important;
+  }
+
+  /* 导航栏样式 */
+  [data-theme="dark"] .navbar,
+  [data-theme="night"] .navbar,
+  [data-theme="black"] .navbar,
+  [data-theme="dracula"] .navbar,
+  [data-theme="halloween"] .navbar,
+  [data-theme="business"] .navbar,
+  [data-theme="luxury"] .navbar,
+  [data-theme="coffee"] .navbar,
+  [data-theme="forest"] .navbar,
+  [data-theme="synthwave"] .navbar {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  /* 导航按钮 */
+  [data-theme="dark"] nav .btn,
+  [data-theme="night"] nav .btn,
+  [data-theme="black"] nav .btn,
+  [data-theme="dracula"] nav .btn,
+  [data-theme="halloween"] nav .btn,
+  [data-theme="business"] nav .btn,
+  [data-theme="luxury"] nav .btn,
+  [data-theme="coffee"] nav .btn,
+  [data-theme="forest"] nav .btn,
+  [data-theme="synthwave"] nav .btn {
+    color: rgb(209, 213, 219) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  [data-theme="dark"] nav .btn:hover,
+  [data-theme="night"] nav .btn:hover,
+  [data-theme="black"] nav .btn:hover,
+  [data-theme="dracula"] nav .btn:hover,
+  [data-theme="halloween"] nav .btn:hover,
+  [data-theme="business"] nav .btn:hover,
+  [data-theme="luxury"] nav .btn:hover,
+  [data-theme="coffee"] nav .btn:hover,
+  [data-theme="forest"] nav .btn:hover,
+  [data-theme="synthwave"] nav .btn:hover {
+    color: rgb(255, 255, 255) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Alert组件 */
+  [data-theme="dark"] .alert,
+  [data-theme="night"] .alert,
+  [data-theme="black"] .alert,
+  [data-theme="dracula"] .alert,
+  [data-theme="halloween"] .alert,
+  [data-theme="business"] .alert,
+  [data-theme="luxury"] .alert,
+  [data-theme="coffee"] .alert,
+  [data-theme="forest"] .alert,
+  [data-theme="synthwave"] .alert {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  [data-theme="dark"] .alert span,
+  [data-theme="night"] .alert span,
+  [data-theme="black"] .alert span,
+  [data-theme="dracula"] .alert span,
+  [data-theme="halloween"] .alert span,
+  [data-theme="business"] .alert span,
+  [data-theme="luxury"] .alert span,
+  [data-theme="coffee"] .alert span,
+  [data-theme="forest"] .alert span,
+  [data-theme="synthwave"] .alert span {
+    color: rgb(229, 231, 235) !important;
+  }
+
+  /* 表单控件 */
+  [data-theme="dark"] .toggle,
+  [data-theme="night"] .toggle,
+  [data-theme="black"] .toggle,
+  [data-theme="dracula"] .toggle,
+  [data-theme="halloween"] .toggle,
+  [data-theme="business"] .toggle,
+  [data-theme="luxury"] .toggle,
+  [data-theme="coffee"] .toggle,
+  [data-theme="forest"] .toggle,
+  [data-theme="synthwave"] .toggle {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+
+  [data-theme="dark"] .checkbox,
+  [data-theme="night"] .checkbox,
+  [data-theme="black"] .checkbox,
+  [data-theme="dracula"] .checkbox,
+  [data-theme="halloween"] .checkbox,
+  [data-theme="business"] .checkbox,
+  [data-theme="luxury"] .checkbox,
+  [data-theme="coffee"] .checkbox,
+  [data-theme="forest"] .checkbox,
+  [data-theme="synthwave"] .checkbox {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+
+  [data-theme="dark"] .radio,
+  [data-theme="night"] .radio,
+  [data-theme="black"] .radio,
+  [data-theme="dracula"] .radio,
+  [data-theme="halloween"] .radio,
+  [data-theme="business"] .radio,
+  [data-theme="luxury"] .radio,
+  [data-theme="coffee"] .radio,
+  [data-theme="forest"] .radio,
+  [data-theme="synthwave"] .radio {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+  }
+
+  /* Range滑块 */
+  [data-theme="dark"] .range,
+  [data-theme="night"] .range,
+  [data-theme="black"] .range,
+  [data-theme="dracula"] .range,
+  [data-theme="halloween"] .range,
+  [data-theme="business"] .range,
+  [data-theme="luxury"] .range,
+  [data-theme="coffee"] .range,
+  [data-theme="forest"] .range,
+  [data-theme="synthwave"] .range {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 分割线 */
+  [data-theme="dark"] .divider,
+  [data-theme="night"] .divider,
+  [data-theme="black"] .divider,
+  [data-theme="dracula"] .divider,
+  [data-theme="halloween"] .divider,
+  [data-theme="business"] .divider,
+  [data-theme="luxury"] .divider,
+  [data-theme="coffee"] .divider,
+  [data-theme="forest"] .divider,
+  [data-theme="synthwave"] .divider {
+    color: rgb(156, 163, 175) !important;
+  }
+
+  /* Join按钮组 */
+  [data-theme="dark"] .join .btn,
+  [data-theme="night"] .join .btn,
+  [data-theme="black"] .join .btn,
+  [data-theme="dracula"] .join .btn,
+  [data-theme="halloween"] .join .btn,
+  [data-theme="business"] .join .btn,
+  [data-theme="luxury"] .join .btn,
+  [data-theme="coffee"] .join .btn,
+  [data-theme="forest"] .join .btn,
+  [data-theme="synthwave"] .join .btn {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    color: rgb(209, 213, 219) !important;
+  }
+
+  /* 边框元素 */
+  [data-theme="dark"] .rounded-lg.border,
+  [data-theme="night"] .rounded-lg.border,
+  [data-theme="black"] .rounded-lg.border,
+  [data-theme="dracula"] .rounded-lg.border,
+  [data-theme="halloween"] .rounded-lg.border,
+  [data-theme="business"] .rounded-lg.border,
+  [data-theme="luxury"] .rounded-lg.border,
+  [data-theme="coffee"] .rounded-lg.border,
+  [data-theme="forest"] .rounded-lg.border,
+  [data-theme="synthwave"] .rounded-lg.border {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    background-color: rgba(255, 255, 255, 0.02) !important;
+  }
+
+  /* 加载指示器 */
+  [data-theme="dark"] .loading,
+  [data-theme="night"] .loading,
+  [data-theme="black"] .loading,
+  [data-theme="dracula"] .loading,
+  [data-theme="halloween"] .loading,
+  [data-theme="business"] .loading,
+  [data-theme="luxury"] .loading,
+  [data-theme="coffee"] .loading,
+  [data-theme="forest"] .loading,
+  [data-theme="synthwave"] .loading {
+    opacity: 0.8;
+  }
+
+  /* Badge徽章 */
+  [data-theme="dark"] .badge,
+  [data-theme="night"] .badge,
+  [data-theme="black"] .badge,
+  [data-theme="dracula"] .badge,
+  [data-theme="halloween"] .badge,
+  [data-theme="business"] .badge,
+  [data-theme="luxury"] .badge,
+  [data-theme="coffee"] .badge,
+  [data-theme="forest"] .badge,
+  [data-theme="synthwave"] .badge {
+    color: rgb(229, 231, 235) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* 链接样式 */
+  [data-theme="dark"] a,
+  [data-theme="night"] a,
+  [data-theme="black"] a,
+  [data-theme="dracula"] a,
+  [data-theme="halloween"] a,
+  [data-theme="business"] a,
+  [data-theme="luxury"] a,
+  [data-theme="coffee"] a,
+  [data-theme="forest"] a,
+  [data-theme="synthwave"] a {
+    color: rgb(147, 197, 253) !important;
+  }
+
+  [data-theme="dark"] a:hover,
+  [data-theme="night"] a:hover,
+  [data-theme="black"] a:hover,
+  [data-theme="dracula"] a:hover,
+  [data-theme="halloween"] a:hover,
+  [data-theme="business"] a:hover,
+  [data-theme="luxury"] a:hover,
+  [data-theme="coffee"] a:hover,
+  [data-theme="forest"] a:hover,
+  [data-theme="synthwave"] a:hover {
+    color: rgb(191, 219, 254) !important;
+  }
+
+  /* 表格样式 */
+  [data-theme="dark"] .table th,
+  [data-theme="night"] .table th,
+  [data-theme="black"] .table th,
+  [data-theme="dracula"] .table th,
+  [data-theme="halloween"] .table th,
+  [data-theme="business"] .table th,
+  [data-theme="luxury"] .table th,
+  [data-theme="coffee"] .table th,
+  [data-theme="forest"] .table th,
+  [data-theme="synthwave"] .table th {
+    color: rgb(243, 244, 246) !important;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  [data-theme="dark"] .table td,
+  [data-theme="night"] .table td,
+  [data-theme="black"] .table td,
+  [data-theme="dracula"] .table td,
+  [data-theme="halloween"] .table td,
+  [data-theme="business"] .table td,
+  [data-theme="luxury"] .table td,
+  [data-theme="coffee"] .table td,
+  [data-theme="forest"] .table td,
+  [data-theme="synthwave"] .table td {
+    color: rgb(209, 213, 219) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 代码块样式 */
+  [data-theme="dark"] code,
+  [data-theme="night"] code,
+  [data-theme="black"] code,
+  [data-theme="dracula"] code,
+  [data-theme="halloween"] code,
+  [data-theme="business"] code,
+  [data-theme="luxury"] code,
+  [data-theme="coffee"] code,
+  [data-theme="forest"] code,
+  [data-theme="synthwave"] code {
+    color: rgb(251, 191, 36) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    padding: 0.125rem 0.25rem !important;
+    border-radius: 0.25rem !important;
+    font-weight: 500 !important;
+  }
+
+  [data-theme="dark"] pre,
+  [data-theme="night"] pre,
+  [data-theme="black"] pre,
+  [data-theme="dracula"] pre,
+  [data-theme="halloween"] pre,
+  [data-theme="business"] pre,
+  [data-theme="luxury"] pre,
+  [data-theme="coffee"] pre,
+  [data-theme="forest"] pre,
+  [data-theme="synthwave"] pre {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 模态框样式 */
+  [data-theme="dark"] .modal-box,
+  [data-theme="night"] .modal-box,
+  [data-theme="black"] .modal-box,
+  [data-theme="dracula"] .modal-box,
+  [data-theme="halloween"] .modal-box,
+  [data-theme="business"] .modal-box,
+  [data-theme="luxury"] .modal-box,
+  [data-theme="coffee"] .modal-box,
+  [data-theme="forest"] .modal-box,
+  [data-theme="synthwave"] .modal-box {
+    background-color: rgba(31, 41, 55, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  }
+
+  /* Drawer抽屉样式 */
+  [data-theme="dark"] .drawer-side,
+  [data-theme="night"] .drawer-side,
+  [data-theme="black"] .drawer-side,
+  [data-theme="dracula"] .drawer-side,
+  [data-theme="halloween"] .drawer-side,
+  [data-theme="business"] .drawer-side,
+  [data-theme="luxury"] .drawer-side,
+  [data-theme="coffee"] .drawer-side,
+  [data-theme="forest"] .drawer-side,
+  [data-theme="synthwave"] .drawer-side {
+    background-color: rgba(255, 255, 255, 0.02) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* 特殊的非常暗的主题优化 */
+  [data-theme="black"] .text-xs,
+  [data-theme="night"] .text-xs,
+  [data-theme="synthwave"] .text-xs {
+    color: rgb(229, 231, 235) !important;
+  }
+
+  [data-theme="black"] .text-sm,
+  [data-theme="night"] .text-sm,
+  [data-theme="synthwave"] .text-sm {
+    color: rgb(229, 231, 235) !important;
+  }
+
+  [data-theme="black"] .text-base,
+  [data-theme="night"] .text-base,
+  [data-theme="synthwave"] .text-base {
+    color: rgb(243, 244, 246) !important;
+  }
+
+  [data-theme="black"] .label-text,
+  [data-theme="night"] .label-text,
+  [data-theme="synthwave"] .label-text {
+    color: rgb(243, 244, 246) !important;
+    font-weight: 600 !important;
+  }
+
+  /* Prose内容样式优化 */
+  [data-theme="dark"] .prose,
+  [data-theme="night"] .prose,
+  [data-theme="black"] .prose,
+  [data-theme="dracula"] .prose,
+  [data-theme="halloween"] .prose,
+  [data-theme="business"] .prose,
+  [data-theme="luxury"] .prose,
+  [data-theme="coffee"] .prose,
+  [data-theme="forest"] .prose,
+  [data-theme="synthwave"] .prose {
+    color: rgb(209, 213, 219) !important;
+  }
+
+  [data-theme="dark"] .prose h1,
+  [data-theme="night"] .prose h1,
+  [data-theme="black"] .prose h1,
+  [data-theme="dracula"] .prose h1,
+  [data-theme="halloween"] .prose h1,
+  [data-theme="business"] .prose h1,
+  [data-theme="luxury"] .prose h1,
+  [data-theme="coffee"] .prose h1,
+  [data-theme="forest"] .prose h1,
+  [data-theme="synthwave"] .prose h1 {
+    color: rgb(255, 255, 255) !important;
+  }
+
+  [data-theme="dark"] .prose h2,
+  [data-theme="night"] .prose h2,
+  [data-theme="black"] .prose h2,
+  [data-theme="dracula"] .prose h2,
+  [data-theme="halloween"] .prose h2,
+  [data-theme="business"] .prose h2,
+  [data-theme="luxury"] .prose h2,
+  [data-theme="coffee"] .prose h2,
+  [data-theme="forest"] .prose h2,
+  [data-theme="synthwave"] .prose h2 {
+    color: rgb(243, 244, 246) !important;
+  }
+
+  [data-theme="dark"] .prose h3,
+  [data-theme="night"] .prose h3,
+  [data-theme="black"] .prose h3,
+  [data-theme="dracula"] .prose h3,
+  [data-theme="halloween"] .prose h3,
+  [data-theme="business"] .prose h3,
+  [data-theme="luxury"] .prose h3,
+  [data-theme="coffee"] .prose h3,
+  [data-theme="forest"] .prose h3,
+  [data-theme="synthwave"] .prose h3 {
+    color: rgb(229, 231, 235) !important;
+  }
+
+  /* 下拉菜单样式 */
+  [data-theme="dark"] .dropdown-content,
+  [data-theme="night"] .dropdown-content,
+  [data-theme="black"] .dropdown-content,
+  [data-theme="dracula"] .dropdown-content,
+  [data-theme="halloween"] .dropdown-content,
+  [data-theme="business"] .dropdown-content,
+  [data-theme="luxury"] .dropdown-content,
+  [data-theme="coffee"] .dropdown-content,
+  [data-theme="forest"] .dropdown-content,
+  [data-theme="synthwave"] .dropdown-content {
+    background-color: rgba(31, 41, 55, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    backdrop-filter: blur(8px);
+  }
+
+  /* 面包屑样式 */
+  [data-theme="dark"] .breadcrumbs li,
+  [data-theme="night"] .breadcrumbs li,
+  [data-theme="black"] .breadcrumbs li,
+  [data-theme="dracula"] .breadcrumbs li,
+  [data-theme="halloween"] .breadcrumbs li,
+  [data-theme="business"] .breadcrumbs li,
+  [data-theme="luxury"] .breadcrumbs li,
+  [data-theme="coffee"] .breadcrumbs li,
+  [data-theme="forest"] .breadcrumbs li,
+  [data-theme="synthwave"] .breadcrumbs li {
+    color: rgb(209, 213, 219) !important;
+  }
+
+  /* Tab标签页样式 */
+  [data-theme="dark"] .tab,
+  [data-theme="night"] .tab,
+  [data-theme="black"] .tab,
+  [data-theme="dracula"] .tab,
+  [data-theme="halloween"] .tab,
+  [data-theme="business"] .tab,
+  [data-theme="luxury"] .tab,
+  [data-theme="coffee"] .tab,
+  [data-theme="forest"] .tab,
+  [data-theme="synthwave"] .tab {
+    color: rgb(209, 213, 219) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  [data-theme="dark"] .tab-active,
+  [data-theme="night"] .tab-active,
+  [data-theme="black"] .tab-active,
+  [data-theme="dracula"] .tab-active,
+  [data-theme="halloween"] .tab-active,
+  [data-theme="business"] .tab-active,
+  [data-theme="luxury"] .tab-active,
+  [data-theme="coffee"] .tab-active,
+  [data-theme="forest"] .tab-active,
+  [data-theme="synthwave"] .tab-active {
+    color: rgb(255, 255, 255) !important;
+    background-color: rgba(255, 255, 255, 0.1) !important;
+  }
+} 

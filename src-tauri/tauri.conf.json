@@ -1,0 +1,104 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MyTips",
+  "version": "1.0.5",
+  "identifier": "com.o0x1024.mytips",
+  "build": {
+    "beforeDevCommand": "yarn dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "yarn build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "width": 1400,
+        "height": 800,
+        "minWidth": 1400,
+        "minHeight": 800,
+        "title": "MyTips",
+        "center": true,
+        "resizable": true,
+        "label": "main",
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": [
+          "'self'"
+        ],
+        "img-src": [
+          "'self'",
+          "https://*",
+          "data:"
+        ],
+        "connect-src": [
+          "'self'",
+          "https://*"
+        ],
+        "script-src": [
+          "'self'"
+        ],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "dmg": {
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        },
+        "windowSize": {
+          "height": 1400,
+          "width": 800
+        }
+      },
+      "files": {},
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    },
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+    "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
+    "dialog": null,
+    "shell": {
+      "open": true
+    },
+    "global-shortcut": null,
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFRjc0MUIyN0M5Njk2NzEKUldSWTJMa0tvOEZ2bWJzbXJEVXJxYnBocXNoVjU1VDY2ZWRyRzVlS0d1T2wzR3hCVzFqeVd3QVAK",
+      "endpoints": [
+        "https://github.com/o0x1024/mytips/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

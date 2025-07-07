@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30  # 增加超时时间至30分钟
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: 'linux-x86_64'
+            rust_target: 'x86_64-unknown-linux-gnu'
+          - os: macos-latest
+            platform: 'darwin-x86_64'
+            rust_target: 'x86_64-apple-darwin'
+          - os: macos-14
+            platform: 'darwin-aarch64'
+            rust_target: 'aarch64-apple-darwin'
+          - os: windows-latest
+            platform: 'windows-x86_64'
+            rust_target: 'x86_64-pc-windows-msvc'
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.rust_target }}
+
+    - name: Install Rust dependencies for Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Build the application
+      run: yarn tauri build --target ${{ matrix.rust_target }}
+      env:
+        TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tauri-build-${{ matrix.platform }}
+        path: |
+          src-tauri/target/${{ matrix.rust_target }}/release/bundle/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 允许上传 Release 产物
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install dependencies
+      run: yarn install --frozen-lockfile
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: src-tauri/target/
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+    - name: Generate update manifest
+      id: generate_manifest
+      run: |
+        # 赋予执行权限
+        chmod +x scripts/generate-update-manifest.js
+        # 运行脚本
+        node scripts/generate-update-manifest.js
+      env:
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        RELEASE_NOTES: "See the release notes for details."
+        npm_package_version: ${{ steps.get_version.outputs.VERSION }}
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: 'Release ${{ github.ref_name }}'
+        body: |
+          Automated release for version ${{ github.ref_name }}.
+        draft: false
+        prerelease: false
+
+    - name: Upload Release Assets
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -x # 开启调试模式
+
+        # 定义根目录
+        TARGET_DIR="src-tauri/target"
+        VERSION="${{ steps.get_version.outputs.VERSION }}"
+
+        # 创建一个临时目录来整理所有待上传的文件
+        UPLOAD_DIR=$(mktemp -d)
+        
+        # 查找并移动 Linux 产物
+        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
+        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
+        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
+
+        # 查找并移动 macOS x64 产物
+        find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
+        find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz.sig" \;
+        find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
+
+        # 查找并移动 macOS aarch64 产物
+        find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz" \;
+        find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz.sig" \;
+        find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
+        
+        # 查找并移动 Windows 产物 (NSIS)
+        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.exe" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.exe" \;
+        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip" \;
+        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
+        
+        # 查找并移动清单文件
+        find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
+
+        # 显示所有待上传的文件
+        ls -l "$UPLOAD_DIR"
+
+        # 使用 gh cli 上传所有文件
+        gh release upload ${{ github.ref_name }} "$UPLOAD_DIR"/* 

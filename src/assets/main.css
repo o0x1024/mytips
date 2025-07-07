@@ -1,0 +1,142 @@
+@import './dark-theme.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@plugin "@tailwindcss/typography";
+
+/* 全局自定义样式 */
+@layer base {
+  :root {
+    --sidebar-width: 250px;
+    --list-width: 300px;
+    --sidebar-collapsed-width: 64px;
+    --base-font-size: 16px;
+  }
+  
+  html, body {
+    @apply scroll-smooth;
+    font-size: var(--base-font-size);
+  }
+  
+  /* 确保所有文本元素都继承根字体大小 */
+  body, p, span, div, button, input, textarea, select, h1, h2, h3, h4, h5, h6, 
+  label, li, td, th, a, blockquote, pre, code {
+    font-size: inherit;
+  }
+  
+  body {
+    @apply bg-base-100 text-neutral;
+  }
+  
+  /* 侧边栏折叠状态 */
+  html[data-sidebar-collapsed="true"] .sidebar-width {
+    width: var(--sidebar-collapsed-width) !important;
+  }
+  
+  /* 直接设置宽度，避免依赖父选择器 */
+  .w-16 {
+    width: 4rem !important; /* 64px */
+  }
+  
+  html[data-sidebar-collapsed="true"] .list-width {
+    width: var(--list-width) !important;
+    margin-left: 0;
+  }
+  
+  /* 侧边栏折叠时扩展列表区域 */
+  .expanded-list {
+    width: calc(var(--list-width) + 40px) !important;
+  }
+  
+  /* 自定义字体大小类 */
+  .text-size-custom {
+    font-size: var(--base-font-size);
+  }
+  
+  /* 字体大小预览 */
+  .sample-text {
+    font-size: var(--base-font-size);
+    line-height: 1.5;
+    transition: font-size 0.2s ease;
+  }
+  
+  /* 侧边栏折叠模式下的悬浮提示 */
+  .tooltip-right:before {
+    left: 105%;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 999;
+  }
+  
+  .tooltip-right:after {
+    z-index: 999 !important;
+  }
+  
+  /* 确保所有tooltip都在最顶层 */
+  .tooltip:before, 
+  .tooltip:after {
+    z-index: 9999 !important;
+  }
+  
+  /* 自定义tooltip样式，保证显示在最顶层 */
+  .tooltip-top-layer:before,
+  .tooltip-top-layer:after {
+    z-index: 10000 !important;
+  }
+  
+  /* 侧边弹出面板样式 */
+  .slide-panel {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-collapsed-width);
+    height: 100%;
+    width: 280px;
+    z-index: 50;
+    border-right: 1px solid var(--color-base-300, #ddd);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease-out;
+  }
+  
+  .slide-panel-enter-from,
+  .slide-panel-leave-to {
+    transform: translateX(-100%);
+  }
+  
+  .slide-panel-enter-to,
+  .slide-panel-leave-from {
+    transform: translateX(0);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply shadow-md hover:shadow-lg transition-shadow duration-300;
+  }
+  
+  .card {
+    @apply shadow-md hover:shadow-lg transition-shadow duration-300;
+  }
+  
+  /* 自适应组件样式 */
+  .sidebar-width {
+    width: var(--sidebar-width);
+  }
+  
+  .list-width {
+    width: var(--list-width);
+  }
+  
+  /* 徽章计数器样式 */
+  .badge-counter {
+    @apply badge badge-xs badge-primary absolute -top-1 -right-1;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 10px;
+  }
+} 
