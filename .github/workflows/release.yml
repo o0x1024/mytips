@@ -10,6 +10,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30  # 增加超时时间至30分钟
     strategy:
+      max-parallel: 2 # 一次最多并行运行 2 个构建任务
       matrix:
         include:
           - os: ubuntu-latest
