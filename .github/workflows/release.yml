@@ -13,9 +13,9 @@ jobs:
       max-parallel: 2 # 一次最多并行运行 2 个构建任务
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: 'linux-x86_64'
-            rust_target: 'x86_64-unknown-linux-gnu'
+        #   - os: ubuntu-latest
+        #     platform: 'linux-x86_64'
+        #     rust_target: 'x86_64-unknown-linux-gnu'
           - os: macos-latest
             platform: 'darwin-x86_64'
             rust_target: 'x86_64-apple-darwin'
@@ -52,7 +52,7 @@ jobs:
 
     - name: Build the application
       run: yarn tauri build --target ${{ matrix.rust_target }}
-      env:
+      env:awafswa
         TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
         TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
 
@@ -128,9 +128,9 @@ jobs:
         UPLOAD_DIR=$(mktemp -d)
         
         # 查找并移动 Linux 产物
-        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
-        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
-        find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
+        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
+        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
+        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
 
         # 查找并移动 macOS x64 产物
         find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
