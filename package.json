@@ -17,6 +17,7 @@
     "release:all": "yarn update:build:all && yarn update:deploy"
   },
   "dependencies": {
+    "@tanstack/vue-virtual": "^3.13.12",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-autostart": "~2",
     "@tauri-apps/plugin-clipboard-manager": "~2",

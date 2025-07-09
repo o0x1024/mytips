@@ -55,7 +55,7 @@
     </div>
 
     <!-- 笔记列表 -->
-    <div ref="noteListContainer" class="flex-1 overflow-y-auto p-2" @scroll="handleScroll">
+    <div ref="noteListContainer" class="flex-1 overflow-y-auto" @scroll="handleScroll">
       <!-- 加载状态 -->
       <div v-if="loading && filteredNotes.length === 0" class="flex justify-center items-center h-32">
         <span class="loading loading-spinner loading-md"></span>
@@ -69,48 +69,54 @@
         <p class="text-lg mb-2">没有找到笔记</p>
         <!-- <button class="btn btn-sm btn-primary" @click="$emit('new-note')">创建新笔记</button> -->
       </div>
-
-      <div  class="space-y-0">
-        <TransitionGroup 
-        >
-          <div 
-            v-for="(note, index) in filteredNotes" 
-            :key="note.id"
-            :data-index="index"
-            :data-note-id="note.id"
-            class="p-2 cursor-pointer hover:bg-base-200 transition-colors border-b border-dashed border-base-300 min-h-[60px] flex flex-col note-list-item"
-            :class="{'bg-primary/10': selectedNoteId === note.id}"
-            @click="selectNote(note)"
-            @contextmenu.prevent="openContextMenu($event, note)">
-            <div class="flex items-center justify-between">
-              <h3 class="font-medium">{{ note.title || '无标题' }}</h3>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-base-content/80">{{ formatDate(note.updated_at) }}</span>
-                <!-- 加密状态指示器 -->
-                <span v-if="isNoteEncrypted(note.id)" title="已加密" class="text-warning">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </span>
-                <span v-if="note.isPinned" title="已固定" class="text-warning">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                  </svg>
-                </span>
-              </div>
-            </div>
-            <p class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(note) }}</p>
-            <div v-if="note.tags && note.tags.length > 0" class="flex flex-wrap gap-1 mt-1">
-              <span 
-                v-for="tag in note.tags.slice(0, 3)" 
-                :key="tag.id" 
-                class="badge badge-sm border-base-300 text-base-content/80 bg-transparent">
-                {{ tag.name }}
+      
+      <div v-if="virtualizer" :style="{ height: `${totalSize}px`, width: '100%', position: 'relative' }">
+        <div 
+          v-for="virtualRow in virtualItems" 
+          :key="filteredNotes[virtualRow.index].id"
+          :data-index="virtualRow.index"
+          :ref="el => virtualizer.measureElement(el as Element)"
+          :style="{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: `${virtualRow.size}px`,
+            transform: `translateY(${virtualRow.start}px)`
+          }"
+          class="p-2 cursor-pointer hover:bg-base-200 transition-colors border-b border-dashed border-base-300 min-h-[60px] flex flex-col note-list-item"
+          :class="{'bg-primary/10': selectedNoteId === filteredNotes[virtualRow.index].id}"
+          @click="selectNote(filteredNotes[virtualRow.index])"
+          @contextmenu.prevent="openContextMenu($event, filteredNotes[virtualRow.index])">
+          
+          <div class="flex items-center justify-between">
+            <h3 class="font-medium">{{ filteredNotes[virtualRow.index].title || '无标题' }}</h3>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-base-content/80">{{ formatDate(filteredNotes[virtualRow.index].updated_at) }}</span>
+              <!-- 加密状态指示器 -->
+              <span v-if="isNoteEncrypted(filteredNotes[virtualRow.index].id)" title="已加密" class="text-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
               </span>
-              <span v-if="note.tags.length > 3" class="badge badge-sm">+{{ note.tags.length - 3 }}</span>
+              <span v-if="filteredNotes[virtualRow.index].isPinned" title="已固定" class="text-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+              </span>
             </div>
           </div>
-        </TransitionGroup>
+          <p class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(filteredNotes[virtualRow.index]) }}</p>
+          <div v-if="filteredNotes[virtualRow.index].tags && filteredNotes[virtualRow.index].tags.length > 0" class="flex flex-wrap gap-1 mt-1">
+            <span 
+              v-for="tag in filteredNotes[virtualRow.index].tags.slice(0, 3)" 
+              :key="tag.id" 
+              class="badge badge-sm border-base-300 text-base-content/80 bg-transparent">
+              {{ tag.name }}
+            </span>
+            <span v-if="filteredNotes[virtualRow.index].tags.length > 3" class="badge badge-sm">+{{ filteredNotes[virtualRow.index].tags.length - 3 }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- 列表底部的加载更多提示 -->
@@ -385,6 +391,7 @@ import { useTipsStore, TipSummary } from '../stores/tipsStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { showConfirm } from '../services/dialog'
 import { storeToRefs } from 'pinia'
+import { useVirtualizer, Virtualizer } from '@tanstack/vue-virtual'
 
 // 类型定义
 interface Note extends TipSummary {
@@ -528,6 +535,20 @@ watch(
 // 暴露给模板的计算属性
 const filteredNotes = computed(() => internalFilteredNotes.value)
 
+// 虚拟化
+const virtualizer = useVirtualizer(
+  computed(() => ({
+    count: filteredNotes.value.length,
+    getScrollElement: () => noteListContainer.value,
+    estimateSize: () => 75, // 更接近实际高度的预估值
+    overscan: 5,
+  }))
+)
+
+const virtualItems = computed(() => virtualizer.value.getVirtualItems())
+
+const totalSize = computed(() => virtualizer.value.getTotalSize())
+
 // 方法
 async function selectNote(note: Note) {
   if (note.is_encrypted) {
@@ -562,7 +583,10 @@ function openContextMenu(event: MouseEvent, note: Note) {
   event.stopPropagation() // 阻止事件冒泡
   
   // 先选中被右键点击的笔记
-  emit('select-note', note.id)
+  const noteToSelect = filteredNotes.value.find(n => n.id === note.id);
+  if (noteToSelect) {
+    emit('select-note', noteToSelect);
+  }
   
   // 使用页面坐标而不是客户端坐标
   let posX = event.pageX
@@ -775,7 +799,6 @@ const handleScroll = () => {
   const container = noteListContainer.value
   if (container) {
     const { scrollTop, scrollHeight, clientHeight } = container
-    // 当滚动到底部80%的位置时，加载更多
     if (scrollTop + clientHeight >= scrollHeight - 200 && !loading.value && hasMore.value) {
       tipsStore.fetchTips()
     }
@@ -790,13 +813,11 @@ onMounted(() => {
 // 添加onActivated钩子
 onActivated(() => {
   // 仅确保选中的笔记项可见，不重新加载数据
-  if (props.selectedNoteId) {
-    nextTick(() => {
-      const element = document.querySelector(`[data-note-id="${props.selectedNoteId}"]`)
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-      }
-    })
+  if (props.selectedNoteId && virtualizer.value) {
+    const selectedIndex = filteredNotes.value.findIndex(note => note.id === props.selectedNoteId)
+    if (selectedIndex !== -1) {
+      virtualizer.value.scrollToIndex(selectedIndex, { align: 'center' })
+    }
   }
 })
 
@@ -808,8 +829,8 @@ function isNoteEncrypted(noteId: string): boolean {
 </script>
 
 <style scoped>
-/* 列表项动画 */
-.note-list-enter-active,
+/* 由于虚拟化与TransitionGroup不兼容，移除相关动画样式 */
+/* .note-list-enter-active,
 .note-list-leave-active {
   transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.0);
   position: relative;
@@ -826,7 +847,7 @@ function isNoteEncrypted(noteId: string): boolean {
 }
 .note-list-move {
   transition: transform 0.5s ease;
-}
+} */
 
 /* 卡片项动画 */
 .note-card-enter-active,
@@ -851,6 +872,9 @@ function isNoteEncrypted(noteId: string): boolean {
 .note-list-item, .note-card-item {
   backface-visibility: hidden;
   will-change: opacity, transform;
+  padding-left: 8px; /* 增加一些左边距 */
+  padding-right: 8px; /* 增加一些右边距 */
+  box-sizing: border-box; /* 确保 padding 不会影响宽度 */
 }
 
 /* 多级分类菜单 hover 展示子菜单 */
@@ -903,7 +927,7 @@ function isNoteEncrypted(noteId: string): boolean {
   display: block !important;
 }
 
-.note-list-leave-active {
+/* .note-list-leave-active {
   transition: all 0.3s cubic-bezier(.55,0,.1,1);
   position: relative;
   z-index: 1;
@@ -917,7 +941,7 @@ function isNoteEncrypted(noteId: string): boolean {
 }
 .note-list-move {
   transition: transform 0.3s cubic-bezier(.55,0,.1,1);
-}
+} */
 
 /* NoteList特有的右键菜单样式 */
 .context-menu {
