@@ -56,7 +56,7 @@
         </span>
         
         <!-- 笔记数量指示器 -->
-        <span v-if="!isCollapsed" class="badge badge-sm ml-auto">{{ getTotalCount(notebook) }}</span>
+        <span v-if="!isCollapsed" class="badge badge-sm ml-auto">{{ notebook.count || 0 }}</span>
       </a>
       
       <!-- 操作菜单 -->
@@ -248,17 +248,6 @@ function checkChildrenSelected(children: NotebookType[], selectedId: string | nu
   }
   
   return false
-}
-
-// 递归统计所有子孙节点的笔记总数
-function getTotalCount(notebook: NotebookType): number {
-  let total = notebook.count || 0
-  if (notebook.children && notebook.children.length > 0) {
-    for (const child of notebook.children) {
-      total += getTotalCount(child)
-    }
-  }
-  return total
 }
 
 // 监听选中状态变化

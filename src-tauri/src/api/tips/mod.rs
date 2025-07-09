@@ -39,7 +39,7 @@ impl TryFrom<TipData> for Tip {
             tip_type,
             language: data.language,
             category_id: data.category_id,
-            created_at: now,
+            created_at: now, // 这里总是使用当前时间，导致导入时可能覆盖原始创建时间
             updated_at: now,
         })
     }
@@ -58,6 +58,19 @@ pub struct TipWithTags {
     pub updated_at: i64,
     pub tags: Vec<crate::db::Tag>,
     pub images: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TipSummary {
+    pub id: String,
+    pub title: String,
+    pub tip_type: String,
+    pub language: Option<String>,
+    pub category_id: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub tags: Vec<crate::db::Tag>,
+    pub is_encrypted: bool,
 }
 
 // 获取所有笔记
@@ -102,6 +115,35 @@ pub async fn get_all_tips() -> Result<Vec<TipWithTags>, String> {
     Ok(result)
 }
 
+// 获取所有笔记的摘要
+#[tauri::command]
+pub async fn get_all_tip_summaries() -> Result<Vec<TipSummary>, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let tips = db.get_all_tips().map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for tip in tips {
+        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tip_type_str: String = tip.tip_type.into();
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+
+        result.push(TipSummary {
+            id: tip.id,
+            title: tip.title,
+            tip_type: tip_type_str,
+            language: tip.language,
+            category_id: tip.category_id,
+            created_at: tip.created_at,
+            updated_at: tip.updated_at,
+            tags,
+            is_encrypted,
+        });
+    }
+
+    Ok(result)
+}
+
+
 // 获取单个笔记
 #[tauri::command]
 pub async fn get_tip(id: String) -> Result<TipWithTags, String> {
@@ -145,12 +187,38 @@ pub async fn get_tip(id: String) -> Result<TipWithTags, String> {
 #[tauri::command]
 pub async fn save_tip(tip_data: TipData) -> Result<TipWithTags, String> {
     let db = DbManager::init().map_err(|e| e.to_string())?;
-
-    // 转换为数据库模型
-    let tip = Tip::try_from(tip_data.clone()).map_err(|e| e.to_string())?;
+    
+    let now = Utc::now().timestamp_millis();
+    
+    // 检查是新建还是更新
+    let is_new = tip_data.id.is_none() || tip_data.id.as_ref().unwrap().is_empty();
+    
+    // 如果是更新现有笔记，先获取原始数据以保留创建时间
+    let created_at = if !is_new {
+        match db.get_tip(tip_data.id.as_ref().unwrap()) {
+            Ok(existing_tip) => existing_tip.created_at,
+            Err(_) => now // 如果获取失败，则使用当前时间
+        }
+    } else {
+        now // 新笔记使用当前时间作为创建时间
+    };
+    
+    // 转换为数据库模型，手动设置时间戳
+    let tip_type = TipType::try_from(tip_data.tip_type.clone()).map_err(|e| e.to_string())?;
+    
+    let tip = Tip {
+        id: tip_data.id.clone().unwrap_or_default(),
+        title: tip_data.title.clone(),
+        content: tip_data.content.clone(),
+        tip_type,
+        language: tip_data.language.clone(),
+        category_id: tip_data.category_id.clone(),
+        created_at, // 使用正确的创建时间
+        updated_at: now, // 更新时间总是当前时间
+    };
 
     // 保存笔记
-    let saved_tip = db.save_tip(tip).map_err(|e| e.to_string())?;
+    let saved_tip: Tip = db.save_tip(tip).map_err(|e| e.to_string())?;
 
     // 处理标签
     db.set_tip_tags(&saved_tip.id, &tip_data.tags)
@@ -219,6 +287,34 @@ pub async fn search_tips(query: String) -> Result<Vec<TipWithTags>, String> {
             updated_at: tip.updated_at,
             tags,
             images: None,
+        });
+    }
+
+    Ok(result)
+}
+
+// 搜索笔记并返回摘要
+#[tauri::command]
+pub async fn search_tips_summary(query: String) -> Result<Vec<TipSummary>, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let tips = db.search_tips(&query).map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for tip in tips {
+        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tip_type_str: String = tip.tip_type.into();
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+
+        result.push(TipSummary {
+            id: tip.id,
+            title: tip.title,
+            tip_type: tip_type_str,
+            language: tip.language,
+            category_id: tip.category_id,
+            created_at: tip.created_at,
+            updated_at: tip.updated_at,
+            tags,
+            is_encrypted,
         });
     }
 
@@ -441,4 +537,52 @@ pub async fn get_tips_by_category_recursive(category_id: String) -> Result<Vec<T
     }
 
     Ok(result)
+}
+
+#[tauri::command]
+pub async fn get_tips_paged(
+    page: i64,
+    page_size: i64,
+) -> Result<Vec<TipSummary>, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let tips = db
+        .get_tips_paged(page, page_size)
+        .map_err(|e| e.to_string())?;
+
+    let mut result = Vec::new();
+    for tip in tips {
+        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tip_type_str: String = tip.tip_type.into();
+
+        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+
+        result.push(TipSummary {
+            id: tip.id,
+            title: tip.title,
+            tip_type: tip_type_str,
+            language: tip.language,
+            category_id: tip.category_id,
+            created_at: tip.created_at,
+            updated_at: tip.updated_at,
+            tags,
+            is_encrypted,
+        });
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn get_tip_content(id: String) -> Result<String, String> {
+    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let tip = db.get_tip(&id).map_err(|e| e.to_string())?;
+
+    let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+    let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+
+    if is_encrypted && !is_unlocked {
+        return Ok("[This note is encrypted. Please unlock to view.]".to_string());
+    }
+
+    Ok(tip.content)
 }

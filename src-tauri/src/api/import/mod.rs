@@ -232,33 +232,82 @@ fn import_single_file_sync(
     // 处理图片引用并获取图片数据
     let (processed_content, image_data) = process_markdown_images(&content, file_path)?;
 
-    let tip = Tip {
-        id: tip_id.clone(),
-        title: title.clone(),
-        content: processed_content,
-        tip_type: TipType::Markdown,
-        language: None,
-        category_id: Some(notebook_id.to_string()),
-        created_at: now,
-        updated_at: now,
-    };
+    // 如果没有图片，直接保存笔记
+    if image_data.is_empty() {
+        let tip = Tip {
+            id: tip_id.clone(),
+            title: title.clone(),
+            content: processed_content,
+            tip_type: TipType::Markdown,
+            language: None,
+            category_id: Some(notebook_id.to_string()),
+            created_at: now,
+            updated_at: now,
+        };
 
-    // 保存笔记
-    db.save_tip(tip)?;
+        // 保存笔记
+        match db.save_tip(tip) {
+            Ok(_) => {
+                result.notes_imported += 1;
+                Ok(())
+            },
+            Err(e) => {
+                Err(anyhow!("保存笔记失败: {}", e))
+            }
+        }
+    } else {
+        // 有图片的情况，需要先保存笔记再保存图片
+        let tip = Tip {
+            id: tip_id.clone(),
+            title: title.clone(),
+            content: processed_content,
+            tip_type: TipType::Markdown,
+            language: None,
+            category_id: Some(notebook_id.to_string()),
+            created_at: now,
+            updated_at: now,
+        };
 
-    // 保存图片
-    for (image_id, base64_data) in image_data {
-        if let Err(e) = db.save_image(&tip_id, &image_id, &base64_data) {
-            result
-                .warnings
-                .push(format!("保存图片 {} 失败: {}", image_id, e));
-        } else {
-            result.images_processed += 1;
+        // 保存笔记
+        match db.save_tip(tip) {
+            Ok(saved_tip) => {
+                // 使用保存后返回的笔记ID来保存图片，确保外键约束
+                let actual_tip_id = saved_tip.id;
+                
+                // 确认笔记ID是否为空
+                if actual_tip_id.is_empty() {
+                    result.warnings.push(format!(
+                        "笔记ID为空，无法保存图片。文件: {}", 
+                        file_path.display()
+                    ));
+                    result.notes_imported += 1;
+                    return Ok(());
+                }
+                
+                // 保存图片
+                for (image_id, base64_data) in image_data {
+                    match db.save_image(&actual_tip_id, &image_id, &base64_data) {
+                        Ok(_) => {
+                            result.images_processed += 1;
+                        },
+                        Err(e) => {
+                            // 记录警告但不中断导入过程
+                            result.warnings.push(format!(
+                                "保存图片 {} 失败: {}。笔记ID: {}", 
+                                image_id, e, actual_tip_id
+                            ));
+                        }
+                    }
+                }
+
+                result.notes_imported += 1;
+                Ok(())
+            },
+            Err(e) => {
+                Err(anyhow!("保存笔记失败: {}", e))
+            }
         }
     }
-
-    result.notes_imported += 1;
-    Ok(())
 }
 
 // 处理Markdown中的图片引用

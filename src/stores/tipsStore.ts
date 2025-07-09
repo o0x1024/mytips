@@ -25,6 +25,21 @@ export interface Tip {
   updated_at: number
   tags: Tag[]
   images?: Record<string, string>
+  is_encrypted?: boolean
+}
+
+export interface TipSummary {
+  id: string
+  title: string
+  tip_type: string
+  language?: string
+  category_id?: string
+  created_at: number
+  updated_at: number
+  tags: Tag[]
+  is_encrypted: boolean
+  // 完整内容（可选）
+  content?: string
 }
 
 export interface TipData {
@@ -40,11 +55,14 @@ export interface TipData {
 // 定义存储
 export const useTipsStore = defineStore('tips', () => {
   // 状态
-  const tips = ref<Tip[]>([])
+  const tips = ref<TipSummary[]>([])
   const categories = ref<Category[]>([])
   const tags = ref<Tag[]>([])
   const isLoading = ref(false)
   const error = ref<string | null>(null)
+  const currentPage = ref(1)
+  const hasMore = ref(true)
+  const pageSize = 20 // 每页加载的数量
 
   // Getters
   const tipsByCategory = computed(() => (categoryId: string) => {
@@ -64,18 +82,95 @@ export const useTipsStore = defineStore('tips', () => {
   })
 
   // Actions
-  // 加载所有笔记
-  async function fetchAllTips() {
+  // 分页加载笔记
+  async function fetchTips(reset = false) {
+    if (isLoading.value || !hasMore.value) return
+    if (reset) {
+      currentPage.value = 1
+      tips.value = []
+      hasMore.value = true
+    }
+
     try {
       isLoading.value = true
       error.value = null
-      const result = await invoke<Tip[]>('get_all_tips')
-      tips.value = result || []
+      const result = await invoke<TipSummary[]>('get_tips_paged', {
+        page: currentPage.value,
+        pageSize: pageSize,
+      })
+      if (result.length > 0) {
+        tips.value.push(...result)
+        currentPage.value++
+      } else {
+        hasMore.value = false
+      }
     } catch (err) {
       error.value = (err as Error).message
       console.error('[TipsStore] 获取笔记失败:', err)
     } finally {
       isLoading.value = false
+    }
+  }
+
+  // 新增：一次性加载所有笔记的摘要信息
+  async function fetchAllTipSummaries(): Promise<TipSummary[]> {
+    if (isLoading.value) return tips.value;
+    try {
+      isLoading.value = true;
+      error.value = null;
+      const result = await invoke<TipSummary[]>('get_all_tip_summaries');
+      tips.value = result;
+      hasMore.value = false; // 表示已加载全部
+      return result;
+    } catch (err) {
+      error.value = (err as Error).message;
+      console.error('[TipsStore] 获取所有笔记摘要失败:', err);
+      return []; // 出错时返回空数组，避免使用旧数据
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // 一次性加载全部笔记（含完整内容）
+  async function fetchAllTips() {
+    try {
+      isLoading.value = true
+      error.value = null
+
+      const result = await invoke<Tip[]>('get_all_tips')
+
+      // 将完整 Tip 转换为 TipSummary，并保留 content 字段
+      tips.value = result.map(tip => ({
+        id: tip.id,
+        title: tip.title,
+        tip_type: tip.tip_type,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: tip.tags,
+        is_encrypted: tip.is_encrypted || false,
+        content: tip.content
+      }))
+
+      // 加载全部后不再分页
+      hasMore.value = false
+    } catch (err) {
+      error.value = (err as Error).message
+      console.error('[TipsStore] 获取全部笔记失败:', err)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  // 加载单个笔记的完整内容
+  async function fetchTipContent(id: string): Promise<string | null> {
+    try {
+      const content = await invoke<string>('get_tip_content', { id })
+      return content
+    } catch (err) {
+      console.error(`[TipsStore] 获取笔记内容失败 for id ${id}:`, err)
+      return null
     }
   }
 
@@ -86,12 +181,26 @@ export const useTipsStore = defineStore('tips', () => {
       error.value = null
       const tip = await invoke<Tip>('get_tip', { id })
       
+      // 转换为 TipSummary
+      const tipSummary: TipSummary = {
+        id: tip.id,
+        title: tip.title,
+        tip_type: tip.tip_type,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: tip.tags,
+        is_encrypted: tip.is_encrypted || false,
+        content: tip.content,
+      };
+
       // 更新本地存储中的笔记
       const index = tips.value.findIndex(t => t.id === id)
       if (index !== -1) {
-        tips.value[index] = tip
+        tips.value[index] = tipSummary;
       } else {
-        tips.value.push(tip)
+        tips.value.push(tipSummary);
       }
       
       return tip
@@ -112,14 +221,29 @@ export const useTipsStore = defineStore('tips', () => {
       
       const savedTip = await invoke<Tip>('save_tip', { tipData })
       
+      // 转换为 TipSummary
+      const tipSummary: TipSummary = {
+        id: savedTip.id,
+        title: savedTip.title,
+        tip_type: savedTip.tip_type,
+        language: savedTip.language,
+        category_id: savedTip.category_id,
+        created_at: savedTip.created_at,
+        updated_at: savedTip.updated_at,
+        tags: savedTip.tags,
+        is_encrypted: savedTip.is_encrypted || false,
+        content: savedTip.content,
+      };
+
       // 更新本地存储
       const index = tips.value.findIndex(tip => tip.id === savedTip.id)
       if (index !== -1) {
-        tips.value[index] = savedTip
+        tips.value[index] = tipSummary;
       } else {
-        tips.value.unshift(savedTip) // 新笔记添加到最前面
+        tips.value.unshift(tipSummary); // 新笔记添加到最前面
       }
       
+      // await fetchAllTipSummaries(); // 刷新列表
       return savedTip
     } catch (err) {
       error.value = (err as Error).message
@@ -284,44 +408,87 @@ export const useTipsStore = defineStore('tips', () => {
     try {
       isLoading.value = true
       error.value = null
+      // 调用新的后端命令 `search_tips` 来实现全文搜索
+      const result = await invoke<Tip[]>('search_tips', { query })
       
-      return await invoke<Tip[]>('search_tips', { query })
+      // 将返回的 Tip[] 转换为 TipSummary[]
+      tips.value = result.map(tip => ({
+        id: tip.id,
+        title: tip.title,
+        tip_type: tip.tip_type,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: tip.tags,
+        is_encrypted: tip.is_encrypted || false,
+        // 摘要不包含完整内容
+      }))
+
+      hasMore.value = false; // 搜索结果不分页
     } catch (err) {
       error.value = (err as Error).message
-      console.error('Failed to search tips:', err)
-      return []
+      console.error('[TipsStore] 搜索笔记失败:', err)
     } finally {
       isLoading.value = false
     }
   }
 
-  // 按分类获取笔记
+  // 按分类加载笔记
   async function fetchTipsByCategory(categoryId: string) {
     try {
       isLoading.value = true
       error.value = null
+      const result = await invoke<Tip[]>('get_tips_by_category', { categoryId })
       
-      return await invoke<Tip[]>('get_tips_by_category', { categoryId })
+      // 转换
+      tips.value = result.map(tip => ({
+        id: tip.id,
+        title: tip.title,
+        tip_type: tip.tip_type,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: tip.tags,
+        is_encrypted: tip.is_encrypted || false,
+        content: tip.content
+      }));
+
+      hasMore.value = false; // 不分页
     } catch (err) {
       error.value = (err as Error).message
-      console.error(`Failed to fetch tips for category ${categoryId}:`, err)
-      return []
+      console.error(`[TipsStore] 按分类获取笔记失败 for category ${categoryId}:`, err)
     } finally {
       isLoading.value = false
     }
   }
 
-  // 按标签获取笔记
+  // 按标签加载笔记
   async function fetchTipsByTag(tagId: string) {
     try {
       isLoading.value = true
       error.value = null
-      
-      return await invoke<Tip[]>('get_tips_by_tag', { tagId })
+      const result = await invoke<Tip[]>('get_tips_by_tag', { tagId })
+
+      // 转换
+      tips.value = result.map(tip => ({
+        id: tip.id,
+        title: tip.title,
+        tip_type: tip.tip_type,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: tip.tags,
+        is_encrypted: tip.is_encrypted || false,
+        content: tip.content
+      }));
+
+      hasMore.value = false; // 不分页
     } catch (err) {
       error.value = (err as Error).message
-      console.error(`Failed to fetch tips for tag ${tagId}:`, err)
-      return []
+      console.error(`[TipsStore] 按标签获取笔记失败 for tag ${tagId}:`, err)
     } finally {
       isLoading.value = false
     }
@@ -336,7 +503,7 @@ export const useTipsStore = defineStore('tips', () => {
       // 分步加载，确保每一步都成功
       await fetchAllCategories()
       await fetchAllTags()
-      await fetchAllTips()
+      await fetchTips()
       
     } catch (err) {
       error.value = (err as Error).message
@@ -353,6 +520,9 @@ export const useTipsStore = defineStore('tips', () => {
     tags,
     isLoading,
     error,
+    currentPage,
+    hasMore,
+    pageSize,
     
     // Getters
     tipsByCategory,
@@ -361,7 +531,7 @@ export const useTipsStore = defineStore('tips', () => {
     getCategoryById,
     
     // Actions
-    fetchAllTips,
+    fetchTips,
     fetchTip,
     saveTip,
     deleteTip,
@@ -374,6 +544,9 @@ export const useTipsStore = defineStore('tips', () => {
     searchTips,
     fetchTipsByCategory,
     fetchTipsByTag,
-    initializeData
+    initializeData,
+    fetchTipContent,
+    fetchAllTips,
+    fetchAllTipSummaries
   }
 }) 

@@ -54,8 +54,8 @@ pub struct Tip {
     pub tip_type: TipType,
     pub language: Option<String>,
     pub category_id: Option<String>,
-    pub created_at: i64, // 时间戳
-    pub updated_at: i64, // 时间戳
+    pub created_at: i64, // 毫秒级时间戳
+    pub updated_at: i64, // 毫秒级时间戳
 }
 
 // 分类模型
@@ -115,6 +115,9 @@ impl DbManager {
         }
 
         let conn = Connection::open(&db_path)?;
+        
+        // 启用外键约束
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
 
         // 创建表
         conn.execute(
@@ -243,6 +246,55 @@ impl DbManager {
             [],
         )?;
 
+        // 创建FTS5虚拟表用于全文搜索
+        conn.execute("DROP TRIGGER IF EXISTS tips_after_insert", [])?;
+        conn.execute("DROP TRIGGER IF EXISTS tips_after_delete", [])?;
+        conn.execute("DROP TRIGGER IF EXISTS tips_after_update", [])?;
+        conn.execute("DROP TABLE IF EXISTS tips_fts", [])?;
+        
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS tips_fts USING fts5(
+                tip_id UNINDEXED, 
+                title, 
+                content, 
+                tokenize = 'porter unicode61'
+            )",
+            [],
+        )?;
+
+        // 创建触发器，用于在原始表数据发生变化时同步更新FTS表
+        // 在插入后更新
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS tips_after_insert AFTER INSERT ON tips BEGIN
+                INSERT INTO tips_fts(tip_id, title, content) VALUES (new.id, new.title, new.content);
+            END;",
+            [],
+        )?;
+        // 在删除后更新
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS tips_after_delete AFTER DELETE ON tips BEGIN
+                DELETE FROM tips_fts WHERE tip_id = old.id;
+            END;",
+            [],
+        )?;
+        // 在更新后更新
+        conn.execute(
+            "CREATE TRIGGER IF NOT EXISTS tips_after_update AFTER UPDATE ON tips BEGIN
+                DELETE FROM tips_fts WHERE tip_id = old.id;
+                INSERT INTO tips_fts(tip_id, title, content) VALUES (new.id, new.title, new.content);
+            END;",
+            [],
+        )?;
+
+        // 检查FTS表是否为空，如果为空，则从主表同步数据
+        let fts_count: i64 = conn.query_row("SELECT COUNT(*) FROM tips_fts", [], |row| row.get(0))?;
+        if fts_count == 0 {
+            conn.execute(
+                "INSERT INTO tips_fts(tip_id, title, content) SELECT id, title, content FROM tips",
+                [],
+            )?;
+        }
+
         // 创建索引以提高查询性能
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_tips_category_id ON tips(category_id)",
@@ -268,26 +320,6 @@ impl DbManager {
                 Category {
                     id: Uuid::new_v4().to_string(),
                     name: "未分类".to_string(),
-                    parent_id: None,
-                },
-                Category {
-                    id: Uuid::new_v4().to_string(),
-                    name: "前端开发".to_string(),
-                    parent_id: None,
-                },
-                Category {
-                    id: Uuid::new_v4().to_string(),
-                    name: "后端开发".to_string(),
-                    parent_id: None,
-                },
-                Category {
-                    id: Uuid::new_v4().to_string(),
-                    name: "工具使用".to_string(),
-                    parent_id: None,
-                },
-                Category {
-                    id: Uuid::new_v4().to_string(),
-                    name: "AI提示词".to_string(),
                     parent_id: None,
                 },
             ];
@@ -335,6 +367,33 @@ impl DbManager {
         Ok(tips)
     }
 
+    // 分页获取笔记
+    pub fn get_tips_paged(&self, page: i64, page_size: i64) -> Result<Vec<Tip>> {
+        let offset = (page - 1) * page_size;
+        let mut stmt = self.conn.prepare("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2")?;
+        let tip_iter = stmt.query_map(params![page_size, offset], |row| {
+            let tip_type_str: String = row.get(3)?;
+            let tip_type = TipType::try_from(tip_type_str).unwrap_or(TipType::Text);
+
+            Ok(Tip {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                tip_type,
+                language: row.get(4)?,
+                category_id: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?;
+
+        let mut tips = Vec::new();
+        for tip in tip_iter {
+            tips.push(tip?);
+        }
+        Ok(tips)
+    }
+
     // 获取单个笔记
     pub fn get_tip(&self, id: &str) -> Result<Tip> {
         let mut stmt = self.conn.prepare("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips WHERE id = ?")?;
@@ -358,48 +417,49 @@ impl DbManager {
     }
 
     // 创建或更新笔记
-    pub fn save_tip(&self, tip: Tip) -> Result<Tip> {
-        let tip_id = if tip.id.is_empty() {
-            Uuid::new_v4().to_string()
-        } else {
-            tip.id.clone()
-        };
-
+    pub fn save_tip(&self, mut tip: Tip) -> Result<Tip> {
         let now = Utc::now().timestamp_millis();
+
+        if tip.id.is_empty() {
+            tip.id = Uuid::new_v4().to_string();
+            tip.created_at = now;
+            tip.updated_at = now;
+        } else {
+            // For existing tips or imports, ensure created_at is valid
+            if tip.created_at <= 0 {
+                tip.created_at = now;
+            }
+            // Always update updated_at for existing tips
+            tip.updated_at = now;
+        }
+
         let tip_type_str: String = tip.tip_type.into();
 
         self.conn.execute(
             "INSERT INTO tips (id, title, content, tip_type, language, category_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(id) DO UPDATE SET
-             title = excluded.title,
-             content = excluded.content,
-             tip_type = excluded.tip_type,
-             language = excluded.language,
-             category_id = excluded.category_id,
-             updated_at = excluded.updated_at",
+                title = excluded.title,
+                content = excluded.content,
+                tip_type = excluded.tip_type,
+                language = excluded.language,
+                category_id = excluded.category_id,
+                updated_at = excluded.updated_at",
             params![
-                tip_id,
-                tip.title,
-                tip.content,
-                tip_type_str,
-                tip.language,
-                tip.category_id,
+                &tip.id,
+                &tip.title,
+                &tip.content,
+                &tip_type_str,
+                &tip.language,
+                &tip.category_id,
                 tip.created_at,
-                now
+                tip.updated_at,
             ],
         )?;
 
-        Ok(Tip {
-            id: tip_id,
-            title: tip.title,
-            content: tip.content,
-            tip_type: tip.tip_type.clone(),
-            language: tip.language,
-            category_id: tip.category_id,
-            created_at: tip.created_at,
-            updated_at: now,
-        })
+        // Re-fetch to get the definitive state from the DB
+        let final_tip = self.get_tip(&tip.id)?;
+        Ok(final_tip)
     }
 
     // 删除笔记
@@ -642,16 +702,15 @@ impl DbManager {
 
     // 搜索笔记
     pub fn search_tips(&self, query: &str) -> Result<Vec<Tip>> {
-        let search_pattern = format!("%{}%", query);
-
         let mut stmt = self.conn.prepare(
-            "SELECT id, title, content, tip_type, language, category_id, created_at, updated_at
-             FROM tips 
-             WHERE title LIKE ? OR content LIKE ?
-             ORDER BY updated_at DESC",
+            "SELECT t.id, t.title, t.content, t.tip_type, t.language, t.category_id, t.created_at, t.updated_at
+             FROM tips t
+             JOIN tips_fts fts ON t.id = fts.tip_id
+             WHERE tips_fts MATCH ?
+             ORDER BY t.updated_at DESC",
         )?;
 
-        let tip_iter = stmt.query_map(params![search_pattern, search_pattern], |row| {
+        let tip_iter = stmt.query_map(params![query], |row| {
             let tip_type_str: String = row.get(3)?;
             let tip_type = TipType::try_from(tip_type_str).unwrap_or(TipType::Text);
 
@@ -762,15 +821,40 @@ impl DbManager {
     pub fn save_image(&self, tip_id: &str, image_id: &str, image_data: &str) -> Result<()> {
         let now = Utc::now().timestamp_millis();
 
-        self.conn.execute(
+        // 检查参数有效性
+        if tip_id.is_empty() {
+            return Err(anyhow!("笔记ID为空，无法保存图片"));
+        }
+
+        if image_id.is_empty() {
+            return Err(anyhow!("图片ID为空，无法保存图片"));
+        }
+
+        // 先检查tip_id是否存在，避免外键约束错误
+        let tip_exists: bool = match self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM tips WHERE id = ?)",
+            params![tip_id],
+            |row| row.get(0),
+        ) {
+            Ok(exists) => exists,
+            Err(e) => return Err(anyhow!("检查笔记ID是否存在时出错: {}", e)),
+        };
+
+        if !tip_exists {
+            return Err(anyhow!("笔记ID '{}' 不存在，无法保存图片", tip_id));
+        }
+
+        // 保存图片
+        match self.conn.execute(
             "INSERT INTO images (id, tip_id, image_data, created_at)
              VALUES (?, ?, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
              image_data = excluded.image_data",
             params![image_id, tip_id, image_data, now],
-        )?;
-
-        Ok(())
+        ) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("保存图片到数据库失败: {}", e)),
+        }
     }
 
     // 获取笔记的所有图片
@@ -861,7 +945,8 @@ impl DbManager {
         Ok(())
     }
 
-    // 获取所有剪贴板条目
+    // 获取所有剪贴板条目（已弃用，保留以备后用）
+    #[allow(dead_code)]
     pub fn get_all_clipboard_entries(&self) -> Result<Vec<ClipboardHistory>> {
         let mut stmt = self.conn.prepare("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC")?;
         let entry_iter = stmt.query_map([], |row| {
@@ -879,6 +964,69 @@ impl DbManager {
         }
 
         Ok(entries)
+    }
+
+    // 根据时间戳获取剪贴板条目
+    pub fn get_clipboard_entries_since(&self, since_timestamp: i64) -> Result<Vec<ClipboardHistory>> {
+        let mut stmt = self.conn.prepare("SELECT id, content, source, created_at FROM clipboard_history WHERE created_at >= ? ORDER BY created_at DESC")?;
+        let entry_iter = stmt.query_map(params![since_timestamp], |row| {
+            Ok(ClipboardHistory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        })?;
+
+        entry_iter.map(|e| e.map_err(Into::into)).collect()
+    }
+
+    // 分页获取剪贴板条目
+    pub fn get_clipboard_entries_paged(
+        &self,
+        page: i64,
+        page_size: i64,
+        query: Option<String>,
+    ) -> Result<Vec<ClipboardHistory>> {
+        let offset = (page - 1) * page_size;
+
+        let map_row = |row: &rusqlite::Row| {
+            Ok(ClipboardHistory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                created_at: row.get(3)?,
+            })
+        };
+
+        if let Some(q) = query {
+            let search_term = format!("%{}%", q);
+            let mut stmt = self.conn.prepare("SELECT id, content, source, created_at FROM clipboard_history WHERE content LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?")?;
+            let entries_iter = stmt.query_map(params![search_term, page_size, offset], map_row)?;
+            entries_iter.map(|e| Ok(e?)).collect()
+        } else {
+            let mut stmt = self.conn.prepare("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ? OFFSET ?")?;
+            let entries_iter = stmt.query_map(params![page_size, offset], map_row)?;
+            entries_iter.map(|e| Ok(e?)).collect()
+        }
+    }
+
+    // 获取剪贴板条目总数
+    pub fn get_clipboard_entries_count(&self, query: Option<String>) -> Result<i64> {
+        if let Some(q) = query {
+            let search_term = format!("%{}%", q);
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM clipboard_history WHERE content LIKE ?",
+                params![search_term],
+                |row| row.get(0),
+            ).map_err(Into::into)
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM clipboard_history",
+                [],
+                |row| row.get(0),
+            ).map_err(Into::into)
+        }
     }
 
     // 删除指定的剪贴板条目

@@ -543,10 +543,10 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                     recent_contents.push((current_text.clone(), Utc::now().timestamp()));
 
                     // 检查是否为敏感内容
-                    if settings.ignore_sensitive_content && is_sensitive_content(&current_text) {
-                        println!("检测到敏感内容，跳过添加");
-                        continue;
-                    }
+                    // if settings.ignore_sensitive_content && is_sensitive_content(&current_text) {
+                    //     println!("检测到敏感内容，跳过添加");
+                    //     continue;
+                    // }
 
                     // 获取当前活动窗口标题
                     let source = if settings.capture_source_info {

@@ -55,9 +55,9 @@
     </div>
 
     <!-- 笔记列表 -->
-    <div class="flex-1 overflow-y-auto p-2">
+    <div ref="noteListContainer" class="flex-1 overflow-y-auto p-2" @scroll="handleScroll">
       <!-- 加载状态 -->
-      <div v-if="loading" class="flex justify-center items-center h-32">
+      <div v-if="loading && filteredNotes.length === 0" class="flex justify-center items-center h-32">
         <span class="loading loading-spinner loading-md"></span>
       </div>
 
@@ -80,7 +80,7 @@
             :data-note-id="note.id"
             class="p-2 cursor-pointer hover:bg-base-200 transition-colors border-b border-dashed border-base-300 min-h-[60px] flex flex-col note-list-item"
             :class="{'bg-primary/10': selectedNoteId === note.id}"
-            @click="selectNote(note.id)"
+            @click="selectNote(note)"
             @contextmenu.prevent="openContextMenu($event, note)">
             <div class="flex items-center justify-between">
               <h3 class="font-medium">{{ note.title || '无标题' }}</h3>
@@ -111,6 +111,15 @@
             </div>
           </div>
         </TransitionGroup>
+      </div>
+
+      <!-- 列表底部的加载更多提示 -->
+      <div v-if="loading && filteredNotes.length > 0" class="flex justify-center items-center p-4">
+        <span class="loading loading-spinner loading-sm"></span>
+        <span class="ml-2 text-sm text-base-content/70">加载中...</span>
+      </div>
+      <div v-if="!hasMore && filteredNotes.length > 0" class="text-center p-4 text-sm text-base-content/50">
+        没有更多笔记了
       </div>
 
     </div>
@@ -371,41 +380,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, defineProps, defineEmits, nextTick, onBeforeUnmount, onActivated } from 'vue'
+import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, onActivated } from 'vue'
+import { useTipsStore, TipSummary } from '../stores/tipsStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { showConfirm } from '../services/dialog'
+import { storeToRefs } from 'pinia'
 
 // 类型定义
-interface Tag {
-  id: string;
-  name: string;
-}
-
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  created_at: number;
-  updated_at: number;
-  tags: Tag[];
-  isPinned?: boolean;
-  category_id?: string;
+interface Note extends TipSummary {
+  isPinned?: boolean
 }
 
 // 组件属性
 const props = defineProps({
-  notes: {
-    type: Array as () => Note[],
-    required: true
-  },
-  title: {
-    type: String,
-    default: ''
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  },
   selectedNoteId: {
     type: String,
     default: ''
@@ -427,6 +414,10 @@ const props = defineProps({
 // 组件事件
 const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'export-note', 'move-to-category', 'refresh', 'encrypt-note', 'decrypt-note'])
 
+// Store
+const tipsStore = useTipsStore()
+const { tips, isLoading: loading, hasMore } = storeToRefs(tipsStore)
+
 // 加密store
 const encryptionStore = useEncryptionStore()
 
@@ -434,6 +425,7 @@ const encryptionStore = useEncryptionStore()
 const searchQuery = ref('')
 const sortField = ref('updated')
 const sortOrder = ref('desc')
+const noteListContainer = ref<HTMLElement | null>(null)
 
 // 右键菜单状态
 const showContextMenu = ref(false)
@@ -471,28 +463,14 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', () => {}, true) // 清理可能残留的监听器
 })
 
-// 节流函数，用于防止频繁更新视图
-function throttle<T extends (...args: any[]) => any>(func: T, limit: number): (...args: Parameters<T>) => void {
-  let inThrottle = false
-  return function(this: any, ...args: Parameters<T>): void {
-    if (!inThrottle) {
-      func.apply(this, args)
-      inThrottle = true
-      setTimeout(() => {
-        inThrottle = false
-      }, limit)
-    }
-  }
-}
-
 // 使用计算属性的getter和setter来优化笔记列表的渲染
 const internalFilteredNotes = ref([] as Note[])
 
-// 笔记列表更新计算 - 使用防抖+缓存的方式优化性能
+// 笔记列表更新计算
 watch(
-  () => [props.notes, searchQuery.value, sortField.value, sortOrder.value],
-  throttle(() => {
-    let result = [...props.notes]
+  () => [tips.value, searchQuery.value, sortField.value, sortOrder.value],
+  () => {
+    let result: Note[] = [...tips.value].map(tip => ({ ...tip, isPinned: false }))
 
     // 本地搜索过滤（列表内搜索）
     if (searchQuery.value) {
@@ -500,7 +478,6 @@ watch(
       result = result.filter(note => {
         return (
           (note.title || '').toLowerCase().includes(query) ||
-          (note.content || '').toLowerCase().includes(query) ||
           (note.tags || []).some(tag => tag.name.toLowerCase().includes(query))
         )
       })
@@ -544,18 +521,35 @@ watch(
     nextTick(() => {
       internalFilteredNotes.value = result
     })
-  }, 50),
-  { immediate: true, deep: true }
+  },
+  { deep: true }
 )
 
 // 暴露给模板的计算属性
 const filteredNotes = computed(() => internalFilteredNotes.value)
 
 // 方法
-function selectNote(id: string) {
-  emit('select-note', id)
-}
+async function selectNote(note: Note) {
+  if (note.is_encrypted) {
+    const isUnlocked = encryptionStore.isItemUnlocked(note.id);
+    if (!isUnlocked) {
+      // 如果笔记已加密且未解锁，可以触发解锁流程
+      // 这里暂时只传递ID，具体解锁逻辑在父组件处理
+      emit('select-note', { id: note.id, content: '[此笔记已加密，请解锁后查看]' });
+      return;
+    }
+  }
 
+  // 获取完整内容
+  const content = await tipsStore.fetchTipContent(note.id);
+  
+  if (content !== null) {
+    emit('select-note', { ...note, content });
+  } else {
+    // 处理获取内容失败的情况
+    emit('select-note', { ...note, content: '错误：无法加载笔记内容。' });
+  }
+}
 
 function sortBy(field: string, order: 'asc' | 'desc') {
   sortField.value = field
@@ -653,26 +647,9 @@ async function deleteContextNote() {
 
   const noteToDelete = contextNote.value
   closeContextMenu()
-
-  // 使用新的对话框服务进行确认
-  const confirmed = await showConfirm(`确定要删除笔记"${noteToDelete.title || '无标题'}"吗？`, {
-    title: '删除笔记',
-    confirmText: '删除',
-    cancelText: '取消'
-  })
-
-  if (confirmed) {
-  // 先本地删除，触发动画
-  const idx = internalFilteredNotes.value.findIndex(n => n.id === noteToDelete.id)
-  if (idx !== -1) {
-    internalFilteredNotes.value.splice(idx, 1)
-  } else {
-    console.warn('警告：在本地列表中未找到要删除的笔记')
-  }
   
-  // 再通知父组件同步数据，传递右键笔记的 id
+  // 直接发送删除事件，不再显示确认对话框
   emit('delete-note', noteToDelete.id)
-  }
 }
 
 // 导出笔记
@@ -698,25 +675,13 @@ function exportContextNote(format: string) {
 }
 
 function getPreviewContent(note: Note): string {
-  if (!note.content) return '空笔记'
-  
-  // 如果是加密占位符内容，显示加密提示
-  if (note.content === "[此笔记已加密，请解锁后查看]") {
+  if (note.is_encrypted) {
     return '此笔记已加密，需要密码解锁'
   }
   
-  // 移除Markdown标记，限制长度
-  const plainText = note.content
-    .replace(/#{1,6}\s+/g, '') // 移除标题标记
-    .replace(/\*\*(.+?)\*\*/g, '$1') // 移除粗体
-    .replace(/\*(.+?)\*/g, '$1') // 移除斜体
-    .replace(/\[(.+?)\]\(.+?\)/g, '$1') // 移除链接，保留文本
-    .replace(/!\[.+?\]\(.+?\)/g, '[图片]') // 替换图片
-    .replace(/```[\s\S]+?```/g, '[代码块]') // 替换代码块
-    .replace(/`(.+?)`/g, '$1') // 移除内联代码
-    .replace(/\n/g, ' ') // 替换换行为空格
-  
-  return plainText.trim().slice(0, 150)
+  // 对于未加密的笔记，我们现在没有内容，可以显示摘要或通用提示
+  // 这里可以根据需要从后端获取摘要
+  return '点击查看内容'
 }
 
 function formatDate(dateString: number): string {
@@ -805,6 +770,23 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
+// 滚动加载
+const handleScroll = () => {
+  const container = noteListContainer.value
+  if (container) {
+    const { scrollTop, scrollHeight, clientHeight } = container
+    // 当滚动到底部80%的位置时，加载更多
+    if (scrollTop + clientHeight >= scrollHeight - 200 && !loading.value && hasMore.value) {
+      tipsStore.fetchTips()
+    }
+  }
+}
+
+// onMounted
+onMounted(() => {
+  tipsStore.fetchTips(true) // 初始加载第一页
+})
+
 // 添加onActivated钩子
 onActivated(() => {
   // 仅确保选中的笔记项可见，不重新加载数据
@@ -820,12 +802,7 @@ onActivated(() => {
 
 // 检查笔记是否加密
 function isNoteEncrypted(noteId: string): boolean {
-  const result = encryptionStore.isItemEncrypted(noteId)
-  // 添加调试信息，帮助排查问题
-  if (result) {
-    console.log(`笔记 ${noteId} 被检测为加密状态`)
-  }
-  return result
+  return encryptionStore.isItemEncrypted(noteId)
 }
 
 </script>

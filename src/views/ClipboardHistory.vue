@@ -37,6 +37,13 @@
           </svg>
           清空全部
         </button>
+        <button @click="openSummaryDialog" :disabled="history.length === 0 || summarizing" class="btn btn-secondary btn-sm">
+          <span v-if="summarizing" class="loading loading-spinner loading-xs mr-1"></span>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 14a1 1 0 011-1h10m4 0h2a1 1 0 001-1v-2a1 1 0 00-1-1h-2m-4 0H4a1 1 0 00-1 1v2a1 1 0 001 1h10" />
+          </svg>
+          {{ summarizing ? '总结中...' : 'AI总结' }}
+        </button>
       </div>
     </div>
 
@@ -69,11 +76,11 @@
         <!-- 搜索结果统计和分页信息 -->
         <div class="flex justify-between items-center mb-4">
           <div class="text-sm text-base-content/70">
-            <span v-if="searchQuery && filteredHistory.length > 0">
-              找到 {{ filteredHistory.length }} 条匹配结果
+            <span v-if="searchQuery && totalEntries > 0">
+              找到 {{ totalEntries }} 条匹配结果
             </span>
-            <span v-else-if="filteredHistory.length > 0">
-              共 {{ filteredHistory.length }} 条记录
+            <span v-else-if="totalEntries > 0">
+              共 {{ totalEntries }} 条记录
             </span>
           </div>
           <div v-if="totalPages > 1" class="text-sm text-base-content/70">
@@ -83,7 +90,7 @@
 
         <!-- 笔记列表 -->
         <div class="flex-1 overflow-y-auto pr-2">
-          <div v-if="filteredHistory.length === 0"
+          <div v-if="totalEntries === 0"
             class="flex flex-col items-center justify-center h-full text-base-content/50">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
@@ -94,7 +101,7 @@
             <p class="text-sm mt-2">{{ searchQuery ? '请尝试其他搜索关键词' : '复制文本到剪贴板将自动添加到此处' }}</p>
           </div>
           <div v-else class="space-y-3">
-            <div v-for="item in paginatedHistory" :key="item.id"
+            <div v-for="item in history" :key="item.id"
               class="card bg-base-200 cursor-pointer transition-colors duration-200 hover:bg-base-300 border-l-4"
               :class="{ 'border-primary': selectedIds.includes(item.id), 'border-transparent': !selectedIds.includes(item.id) }"
               @click="toggleSelection(item.id)">
@@ -274,6 +281,42 @@
       </div>
     </div>
     
+    <!-- AI总结天数输入对话框 -->
+    <div class="modal" :class="{ 'modal-open': showSummaryDialog }">
+      <div class="modal-box w-11/12 max-w-2xl">
+        <h3 class="font-bold text-lg">AI总结临时笔记</h3>
+        
+        <div class="form-control mt-4">
+          <label class="label">
+            <span class="label-text">最近天数</span>
+          </label>
+          <input 
+            type="number"
+            v-model.number="summaryDays"
+            class="input input-bordered w-full"
+            placeholder="例如：7"
+          />
+        </div>
+
+        <div class="form-control mt-4">
+          <label class="label">
+            <span class="label-text">总结提示词 (Prompt)</span>
+            <span class="label-text-alt">使用 {{ PROMPT_CONTENT_PLACEHOLDER }} 作为笔记内容占位符</span>
+          </label>
+          <textarea
+            v-model="summaryPrompt"
+            class="textarea textarea-bordered h-32 font-mono text-sm"
+            placeholder="请输入提示词..."
+          ></textarea>
+        </div>
+
+        <div class="modal-action">
+          <button class="btn" @click="showSummaryDialog = false">取消</button>
+          <button class="btn btn-primary" @click="summarizeNotes" :disabled="!summaryDays || summaryDays <= 0 || !summaryPrompt">确认</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 确认清空全部对话框 -->
     <div class="modal" :class="{ 'modal-open': showClearAllConfirm }">
       <div class="modal-box">
@@ -312,6 +355,10 @@ import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-css'
 import 'prismjs/components/prism-sql'
 import DOMPurify from 'dompurify'
+import { summarizeClipboardEntries } from '../services/ai'
+import { showAlert } from '../services/dialog'
+
+const PROMPT_CONTENT_PLACEHOLDER = '{{CONTENT}}'
 
 interface ClipboardHistory {
   id: number;
@@ -320,7 +367,13 @@ interface ClipboardHistory {
   source?: string;
 }
 
+interface ClipboardHistoryPage {
+  entries: ClipboardHistory[];
+  total: number;
+}
+
 const history = ref<ClipboardHistory[]>([]);
+const totalEntries = ref(0);
 const selectedIds = ref<number[]>([]);
 const router = useRouter();
 const showCopyNotification = ref(false);
@@ -329,21 +382,18 @@ const searchQuery = ref('');
 const searchTimeout = ref<number | null>(null);
 const showClearAllConfirm = ref(false);
 const previewItem = ref<ClipboardHistory | null>(null);
+const summarizing = ref(false)
+const showSummaryDialog = ref(false)
+const summaryDays = ref<number | null>(7)
+const summaryPrompt = ref('')
 
 // 分页相关状态
 const currentPage = ref(1);
-const pageSize = 20; // 每页显示20条
+const pageSize = 20;
 
 // 分页计算
 const totalPages = computed(() => {
-  return Math.ceil(filteredHistory.value.length / pageSize);
-});
-
-// 当前页显示的数据
-const paginatedHistory = computed(() => {
-  const start = (currentPage.value - 1) * pageSize;
-  const end = start + pageSize;
-  return filteredHistory.value.slice(start, end);
+  return Math.ceil(totalEntries.value / pageSize);
 });
 
 // 可见的页码按钮
@@ -392,6 +442,7 @@ const visiblePages = computed(() => {
 const goToPage = (page: number) => {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page;
+    fetchHistory();
     // 清空当前页的选中项，避免跨页选择问题
     selectedIds.value = [];
   }
@@ -400,6 +451,7 @@ const goToPage = (page: number) => {
 // 监听搜索变化，重置到第一页
 watch(searchQuery, () => {
   currentPage.value = 1;
+  handleSearch();
 });
 
 // 高亮显示搜索结果
@@ -425,7 +477,9 @@ let unlisten: (() => void) | null = null;
 async function setupEventListeners() {
   unlisten = await listen('new-clipboard-entry', async () => {
     console.log('New clipboard entry detected, refreshing history...');
-    await fetchHistory();
+    if (currentPage.value === 1) {
+      await fetchHistory();
+    }
   });
 }
 
@@ -439,8 +493,13 @@ function removeEventListeners() {
 
 const fetchHistory = async () => {
   try {
-    const result = await invoke<ClipboardHistory[]>('get_clipboard_history');
-    history.value = result;
+    const result = await invoke<ClipboardHistoryPage>('get_clipboard_history', {
+      page: currentPage.value,
+      pageSize: pageSize,
+      query: searchQuery.value || null,
+    });
+    history.value = result.entries;
+    totalEntries.value = result.total;
   } catch (error) {
     console.error('Failed to fetch clipboard history:', error);
   }
@@ -605,6 +664,42 @@ const clearAllEntries = async () => {
   }
 };
 
+// 打开AI总结对话框
+const openSummaryDialog = () => {
+  summaryDays.value = 7 // 重置为默认值
+  summaryPrompt.value = `请用简明扼要的方式总结以下临时笔记内容：\n\n---\n\n${PROMPT_CONTENT_PLACEHOLDER}`
+  showSummaryDialog.value = true
+}
+
+// AI总结最近N天的临时笔记
+async function summarizeNotes() {
+  if (!summaryDays.value || summaryDays.value <= 0) {
+    await showAlert('请输入有效的天数', { title: '错误' })
+    return
+  }
+  if (!summaryPrompt.value || !summaryPrompt.value.includes(PROMPT_CONTENT_PLACEHOLDER)) {
+    await showAlert(`提示词不能为空，且必须包含 ${PROMPT_CONTENT_PLACEHOLDER} 占位符`, { title: '错误' })
+    return
+  }
+
+  const days = summaryDays.value
+  showSummaryDialog.value = false
+
+  if (summarizing.value) return
+
+  try {
+    summarizing.value = true
+    const summary = await summarizeClipboardEntries(days, summaryPrompt.value)
+    await showAlert(summary, { title: `AI总结（最近${days}天）` })
+  } catch (error) {
+    console.error('AI summarization failed:', error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    await showAlert(`AI总结失败: ${errorMessage}`, { title: '错误' })
+  } finally {
+    summarizing.value = false
+  }
+}
+
 // 安全检查 Prism 语言是否可用
 function isPrismLanguageAvailable(lang: string): boolean {
   try {
@@ -713,10 +808,8 @@ const handleSearch = () => {
   if (searchTimeout.value) {
     clearTimeout(searchTimeout.value);
   }
-  
   searchTimeout.value = setTimeout(() => {
-    // 搜索逻辑已通过computed实现
-    searchTimeout.value = null;
+    fetchHistory();
   }, 300) as unknown as number;
 };
 
@@ -724,19 +817,6 @@ const handleSearch = () => {
 const clearSearch = () => {
   searchQuery.value = '';
 };
-
-// 根据搜索关键词过滤历史记录
-const filteredHistory = computed(() => {
-  if (!searchQuery.value) {
-    return history.value;
-  }
-  
-  const query = searchQuery.value.toLowerCase();
-  return history.value.filter(item => {
-    return item.content.toLowerCase().includes(query) || 
-           (item.source && item.source.toLowerCase().includes(query));
-  });
-});
 
 // 组件生命周期钩子
 onMounted(async () => {

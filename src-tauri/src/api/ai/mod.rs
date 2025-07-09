@@ -1357,3 +1357,51 @@ pub async fn test_custom_model_connection(
         }
     }
 }
+
+#[tauri::command]
+pub async fn summarize_clipboard_entries(
+    app: tauri::AppHandle,
+    days: i64,
+    prompt: String,
+) -> Result<String, String> {
+    if days <= 0 {
+        return Err("天数必须是正数".to_string());
+    }
+
+    let entries = {
+        let db_state = app
+            .try_state::<std::sync::Mutex<crate::db::DbManager>>()
+            .ok_or("数据库状态未初始化")?;
+        let db = db_state
+            .lock()
+            .map_err(|e| format!("锁定数据库失败: {}", e))?;
+
+        let now_sec = chrono::Utc::now().timestamp();
+        let since_sec = now_sec - days * 24 * 60 * 60;
+
+        db.get_clipboard_entries_since(since_sec)
+    }
+    .map_err(|e| e.to_string())?;
+
+    if entries.is_empty() {
+        return Err(format!("最近 {} 天内没有临时笔记内容", days));
+    }
+
+    let mut merged_content = entries
+        .iter()
+        .enumerate()
+        .map(|(idx, e)| format!("{}. {}", idx + 1, e.content))
+        .collect::<Vec<String>>()
+        .join("\n");
+
+    if merged_content.len() > 4000 {
+        merged_content.truncate(4000);
+        merged_content.push_str("\n...(内容已截断)");
+    }
+    
+    let final_prompt = prompt.replace("{{CONTENT}}", &merged_content);
+
+    let model_id = get_default_ai_model(app.clone()).await.unwrap_or_else(|_| "gemini".to_string());
+    
+    send_ai_message(app, model_id, final_prompt, None).await
+}

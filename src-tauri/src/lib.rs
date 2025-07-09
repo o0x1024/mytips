@@ -4,7 +4,7 @@ pub mod clipboard;
 pub mod db;
 use tauri::menu::Menu;
 use tauri::menu::MenuItem;
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
@@ -39,10 +39,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // 笔记相关API
             get_all_tips,
+            get_all_tip_summaries,
+            get_tips_paged,
+            get_tip_content,
             get_tip,
             save_tip,
             delete_tip,
             search_tips,
+            search_tips_summary,
             get_tips_by_category,
             get_tips_by_category_recursive,
             get_tips_by_tag,
@@ -154,6 +158,7 @@ pub fn run() {
             list_custom_model_configs,
             delete_custom_model_config,
             test_custom_model_connection,
+            summarize_clipboard_entries,
             // 数据库路径管理API
             get_current_database_path,
             get_database_info,
@@ -194,21 +199,37 @@ pub fn run() {
             let show_i = MenuItem::with_id(app, "show", "Show windows", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
+            // 创建一个函数用于显示主窗口
+            let show_main_window = |app: &tauri::AppHandle| {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    println!("Main window shown via tray click");
+                }
+            };
+
             TrayIconBuilder::new()
                 .menu(&menu)
-                // .menu_on_left_click(true)
+                .show_menu_on_left_click(false) // 左键点击不显示菜单
+                .on_tray_icon_event(move |tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        show_main_window(tray.app_handle());
+                    }
+                })
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);
                     }
-                    #[cfg(target_os = "macos")]
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
                             let _ = window.set_focus();
                         }
-                        app.show().unwrap();
                     }
                     _ => {
                         println!("menu item {:?} not handled", event.id);

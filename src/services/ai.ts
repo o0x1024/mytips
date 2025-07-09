@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core'
 
 // 对话相关API
 export async function sendAIMessage(_conversationId: string, message: string, model: string) {
-  return await invoke('send_ai_message', { 
+  return await invoke<string>('send_ai_message', { 
     modelId: model,
     message
   })
@@ -80,4 +80,9 @@ export async function getDefaultAIModel() {
 // 添加别名函数以兼容现有代码
 export async function listAIMessages(conversationId: string) {
   return await getAIConversationMessages(conversationId)
+} 
+
+// 总结剪贴板内容
+export async function summarizeClipboardEntries(days: number, prompt: string) {
+  return await invoke<string>('summarize_clipboard_entries', { days, prompt });
 } 

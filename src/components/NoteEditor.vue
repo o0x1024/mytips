@@ -477,12 +477,12 @@
             <!-- 悬浮目录 -->
             <div v-if="showToc && tocItems.length > 0" 
                  ref="tocContainer"
-                 class="toc-container fixed bg-base-100 rounded-lg p-4 max-w-xs z-50"
+                 class="toc-container fixed bg-base-100 rounded-lg p-4 max-w-xs"
                  :class="{ 'dragging': isDragging }"
                  :style="{ 
-                   left: tocPosition.x + 'px', 
+                   right: '20px', 
                    top: tocPosition.y + 'px',
-                   maxHeight: '400px'
+                   maxHeight: '70vh'
                  }"
                  @mousedown="startDrag"
                  @touchstart="startDrag">
@@ -505,16 +505,17 @@
               </div>
               
               <!-- 目录列表 -->
-              <div class="overflow-y-auto" style="max-height: 320px;">
-                <ul class="space-y-1">
+              <div class="overflow-y-auto overflow-x-hidden" style="max-height: 320px;">
+                <ul class="space-y-1 w-full">
                   <li v-for="(item, index) in tocItems" :key="index" 
                       :style="{ paddingLeft: (item.level - 1) * 12 + 'px' }"
-                      class="text-sm">
+                      class="text-sm overflow-hidden">
                     <a @click="scrollToHeading(item.id)" 
                        @mousedown.stop
                        @touchstart.stop
                        class="toc-item block py-1 px-2 text-base-content/80 cursor-pointer"
-                       :class="{ 'active': item.id === activeHeadingId }">
+                       :class="{ 'active': item.id === activeHeadingId }"
+                       :title="item.text">
                       {{ item.text }}
                     </a>
                   </li>
@@ -776,7 +777,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount, onUnmounted, onUpdated } from 'vue'
 import DOMPurify from 'dompurify'
 import { invoke } from '@tauri-apps/api/core'
 import TagSelector from './TagSelector.vue'
@@ -925,6 +926,7 @@ const isSplitMode = ref(true)
 const streamingContent = ref('')  // 用于存储流式输出的内容
 const isStreaming = ref(false)    // 是否正在流式输出
 const currentStreamingId = ref<string | null>(null)  // 当前流式输出的ID
+const imageObserver = ref<IntersectionObserver | null>(null)
 
 // 添加全屏模式状态
 const isFullscreen = ref(false)
@@ -963,17 +965,13 @@ const toolbarContainer = ref<HTMLElement | null>(null)
 const toolbarLeft = ref<HTMLElement | null>(null)
 const toolbarRight = ref<HTMLElement | null>(null)
 const moreToolsDropdown = ref<HTMLElement | null>(null)
-const hiddenItems = ref<Array<{
-  priority: number
-  action: () => void
-  content: string
-}>>([])
+const hiddenItems = ref<any[]>([])
 
 // 目录相关状态
 const showToc = ref(false)
 const tocItems = ref<Array<{ id: string, text: string, level: number }>>([])
 const activeHeadingId = ref<string>('')
-const tocPosition = ref({ x: 20, y: 100 })
+const tocPosition = ref({ x: window.innerWidth - 320, y: 80 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 const tocContainer = ref<HTMLElement | null>(null)
@@ -1516,6 +1514,7 @@ const renderedContent = computed(() => {
   try {
     // 首先替换本地图片引用
     let processedContent = localNote.value.content
+    const placeholderSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
     // 如果笔记中有图片，处理本地图片引用
     if (localNote.value.images) {
@@ -1529,7 +1528,7 @@ const renderedContent = computed(() => {
           const imageData = localNote.value.images[imageId]
           if (imageData && imageData.startsWith('data:image/') && imageData.includes('base64,')) {
             // 返回HTML图片标签，使用base64数据，添加响应式类名
-            return `<img src="${imageData}" alt="${alt || '图片'}" class="embedded-image responsive-image" loading="lazy" />`
+            return `<img src="${placeholderSrc}" data-src="${imageData}" alt="${alt || '图片'}" class="embedded-image responsive-image lazy-load-image" />`
           } else {
             console.log(`[渲染] ❌ 图片数据格式无效: ${imageId}, 数据开头: ${imageData?.substring(0, 50)}`)
             return `<div class="image-placeholder">图片格式错误 (${alt || imageId})</div>`
@@ -1597,6 +1596,11 @@ const renderedContent = computed(() => {
         enhanceCodeBlocks()
         console.log(`代码块增强完成，主题: ${currentTheme}`)
       }, 5)
+
+      // 设置图片懒加载
+      if (isPreviewMode.value || isSplitMode.value) {
+        setupImageLazyLoader()
+      }
     })
 
     return cleanHtml
@@ -2571,6 +2575,11 @@ onMounted(async () => {
 
   // 应用代码高亮主题
   setHighlightTheme(theme)
+
+  // 设置图片懒加载
+  if (isPreviewMode.value || isSplitMode.value) {
+    setupImageLazyLoader()
+  }
 
   // 加载保存的Markdown主题
   const savedMarkdownTheme = localStorage.getItem('mytips-markdown-theme')
@@ -3550,19 +3559,17 @@ function handleDrag(event: MouseEvent | TouchEvent) {
   
   event.preventDefault()
   
-  const clientX = 'touches' in event ? event.touches[0].clientX : event.clientX
   const clientY = 'touches' in event ? event.touches[0].clientY : event.clientY
   
+  // 只更新Y坐标，保持X坐标固定
   tocPosition.value = {
-    x: clientX - dragOffset.value.x,
+    x: tocPosition.value.x, // 保持X坐标不变
     y: clientY - dragOffset.value.y
   }
   
   // 确保目录不会拖拽到屏幕外
-  const maxX = window.innerWidth - 300
   const maxY = window.innerHeight - 400
   
-  tocPosition.value.x = Math.max(0, Math.min(tocPosition.value.x, maxX))
   tocPosition.value.y = Math.max(0, Math.min(tocPosition.value.y, maxY))
 }
 
@@ -4306,6 +4313,116 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
   }
 }, { immediate: false })
 
+function setupImageLazyLoader() {
+  // 如果已存在观察器，先断开连接
+  if (imageObserver.value) {
+    imageObserver.value.disconnect()
+  }
+
+  // 确保预览容器存在
+  if (!previewDiv.value) return
+
+  const observerOptions = {
+    root: previewDiv.value, // 以预览区为根
+    rootMargin: '0px 0px 200px 0px', // 预加载视口下方200px的图片
+    threshold: 0.01 // 元素可见度超过1%就触发
+  }
+
+  imageObserver.value = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target as HTMLImageElement
+        const src = img.dataset.src
+        if (src) {
+          img.src = src
+          img.classList.remove('lazy-load-image')
+          img.classList.add('image-loaded')
+          // 加载后停止观察
+          observer.unobserve(img)
+        }
+      }
+    })
+  }, observerOptions)
+
+  observeImages()
+}
+
+function observeImages() {
+  if (!imageObserver.value || !previewDiv.value) return
+
+  // 先断开旧的观察
+  imageObserver.value.disconnect()
+
+  // 寻找所有待加载的图片
+  const imagesToLoad = previewDiv.value.querySelectorAll('img.lazy-load-image')
+  imagesToLoad.forEach(img => {
+    imageObserver.value!.observe(img)
+  })
+}
+
+// 监听渲染内容的变化，以便在DOM更新后重新观察图片
+watch(renderedContent, () => {
+  if (isPreviewMode.value || isSplitMode.value) {
+    nextTick(() => {
+      observeImages()
+    })
+  }
+})
+
+// 监听外部note变化 - 优化版本
+watch(() => props.note, async (newNote, oldNote) => {
+  // 如果是初始化（oldNote为undefined）或者笔记ID发生变化（切换到不同的笔记），才完全重新设置localNote
+  if (!oldNote || oldNote.id !== newNote.id) {
+    // 深拷贝对象，保留图片数据
+    const images = newNote.images ? { ...newNote.images } : undefined;
+    localNote.value = { ...newNote, images };
+
+    // 检查笔记是否为已解锁的加密笔记
+    if (encryptionStore.isItemEncrypted(newNote.id) && encryptionStore.isItemUnlocked(newNote.id)) {
+      // 获取解密后的内容
+      const decryptedContent = await encryptionStore.getUnlockedNoteContent(newNote.id);
+      if (decryptedContent !== null) {
+        localNote.value.content = decryptedContent;
+      }
+    }
+
+    // 如果笔记有ID但没有images数据，异步加载图片（不阻塞界面）
+    if (newNote.id && !newNote.images) {
+      // 立即显示笔记内容，图片稍后异步加载
+      loadImagesAsync(newNote.id)
+    }
+  }
+  // 如果是同一个笔记的更新，只更新非编辑相关的字段（如category_id等）
+  else {
+    // 只更新非内容相关的字段，避免覆盖用户正在编辑的内容
+    if (newNote.category_id !== localNote.value.category_id) {
+      localNote.value.category_id = newNote.category_id;
+    }
+    if (newNote.tags && JSON.stringify(newNote.tags) !== JSON.stringify(localNote.value.tags)) {
+      localNote.value.tags = newNote.tags;
+    }
+    
+    // 重要：检查内容是否从加密状态变为解密状态
+    // 如果内容发生变化且笔记已解锁，则更新本地内容
+    // 或者如果当前显示的是占位符，而新内容不是占位符，也要更新
+    if (newNote.content !== localNote.value.content) {
+      const isCurrentPlaceholder = localNote.value.content === "[此笔记已加密，请解锁后查看]"
+      const isNewContentDecrypted = newNote.content !== "[此笔记已加密，请解锁后查看]" && 
+                                   !newNote.content.includes('"salt"') && 
+                                   !newNote.content.includes('"encrypted_data"')
+      
+      // 如果当前是占位符，新内容是解密后的内容，或者笔记已解锁，则更新
+      if (isCurrentPlaceholder && isNewContentDecrypted) {
+        console.log('检测到内容从占位符变为解密内容，更新本地内容')
+        localNote.value.content = newNote.content;
+      } else if (encryptionStore.isItemEncrypted(newNote.id) && encryptionStore.isItemUnlocked(newNote.id)) {
+        console.log('检测到已解锁笔记内容变化，更新本地内容')
+        localNote.value.content = newNote.content;
+      }
+    }
+  }
+}, { immediate: true, deep: true })
+
 </script>
 
 <style scoped>
@@ -4877,6 +4994,13 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
   border: 1px solid hsl(var(--bc) / 0.1);
   user-select: none;
   transition: all 0.2s ease;
+  right: 20px !important;
+  left: auto !important;
+  z-index: 1000;
+  width: 200px;
+  position: fixed !important;
+  background-color: var(--fallback-b1, oklch(var(--b1))) !important;
+  opacity: 0.95;
 }
 
 .toc-container:hover {
@@ -4894,6 +5018,10 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
 .toc-item {
   transition: all 0.15s ease;
   border-radius: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .toc-item:hover {

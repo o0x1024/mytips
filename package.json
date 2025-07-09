@@ -1,7 +1,7 @@
 {
   "name": "mytips",
   "private": true,
-  "version": "1.0.5",
+  "version": "1.0.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -35,7 +35,8 @@
     "pinia": "^2.1.7",
     "prismjs": "^1.30.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.2.5"
+    "vue-router": "^4.2.5",
+    "vue3-toastify": "^0.2.8"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.16",

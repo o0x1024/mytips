@@ -2,18 +2,33 @@ use crate::clipboard::ClipboardSettings;
 use crate::db::{ClipboardHistory, DbManager, Tip, TipType};
 use arboard::Clipboard;
 use chrono::Utc;
+use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, State};
 use uuid::Uuid;
 
+#[derive(Serialize)]
+pub struct ClipboardHistoryPage {
+    entries: Vec<ClipboardHistory>,
+    total: i64,
+}
+
 #[tauri::command]
 pub fn get_clipboard_history(
     db: State<Mutex<DbManager>>,
-) -> Result<Vec<crate::db::ClipboardHistory>, String> {
+    page: i64,
+    page_size: i64,
+    query: Option<String>,
+) -> Result<ClipboardHistoryPage, String> {
     let db_guard = db.lock().unwrap();
-    db_guard
-        .get_all_clipboard_entries()
-        .map_err(|e| e.to_string())
+    let entries = db_guard
+        .get_clipboard_entries_paged(page, page_size, query.clone())
+        .map_err(|e| e.to_string())?;
+    let total = db_guard
+        .get_clipboard_entries_count(query)
+        .map_err(|e| e.to_string())?;
+
+    Ok(ClipboardHistoryPage { entries, total })
 }
 
 #[tauri::command]

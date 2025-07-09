@@ -530,7 +530,7 @@
                         <div class="flex-1 min-w-0">
                           <div class="font-medium text-sm truncate">{{ note.title }}</div>
                           <div class="text-xs text-base-content/70 line-clamp-2 mt-1">
-                            {{ note.content.substring(0, 100) }}{{ note.content.length > 100 ? '...' : '' }}
+                            {{ (note.content || '').substring(0, 100) }}{{ (note.content || '').length > 100 ? '...' : '' }}
                           </div>
                           <div class="flex items-center gap-2 mt-1">
                             <span class="text-xs text-base-content/50">{{ note.tip_type }}</span>
@@ -1341,11 +1341,11 @@ async function sendMessage(resendMessage?: any) {
         const noteTitle = ref.substring(1) // 移除#号
         const note = tipsStore.tips.find(tip => tip.title === noteTitle)
         if (note) {
-          notesContent += `\n\n--- 笔记：${note.title} ---\n${note.content}\n--- 笔记内容结束 ---\n`
+          notesContent += `\n\n--- 笔记：${note.title} ---\n${note.content || ''}\n--- 笔记内容结束 ---\n`
           referencedNotes.push({
             id: note.id,
             title: note.title,
-            content: note.content,
+            content: note.content || '',
             tip_type: note.tip_type
           })
         }
@@ -3051,8 +3051,7 @@ watch(noteSearchQuery, (newQuery) => {
   if (newQuery.trim()) {
     // 搜索匹配的笔记
     const searchResults = tipsStore.tips.filter(note =>
-      note.title.toLowerCase().includes(newQuery.toLowerCase()) ||
-      note.content.toLowerCase().includes(newQuery.toLowerCase())
+      (note.content || '').toLowerCase().includes(newQuery.toLowerCase())
     )
 
     // 按时间排序并限制为10篇

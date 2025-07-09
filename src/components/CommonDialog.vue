@@ -1,58 +1,22 @@
 <template>
-  <dialog ref="dialogRef" class="modal">
-    <div class="modal-box">
-      <!-- 图标和标题 -->
-      <div class="flex items-center gap-3 mb-4">
-        <!-- 确认对话框图标 -->
-        <div v-if="type === 'confirm'" class="flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        
-        <!-- 提示对话框图标 -->
-        <div v-else class="flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        
-        <h3 class="font-bold text-lg">{{ title }}</h3>
-      </div>
-      
-      <!-- 消息内容 -->
-      <div class="py-4">
-        <p class="text-base-content" v-html="formattedMessage"></p>
-      </div>
-      
-      <!-- 按钮区域 -->
+  <div class="modal" :class="{ 'modal-open': visible }">
+    <div class="modal-box prose">
+      <h3 v-if="title" class="font-bold text-lg">{{ title }}</h3>
+      <div class="py-4" v-html="renderedMessage"></div>
       <div class="modal-action">
-        <!-- 确认对话框的按钮 -->
-        <template v-if="type === 'confirm'">
-          <button class="btn btn-ghost" @click="handleCancel">
-            {{ cancelText }}
-          </button>
-          <button class="btn btn-primary" @click="handleConfirm">
-            {{ confirmText }}
-          </button>
-        </template>
-        
-        <!-- 提示对话框的按钮 -->
-        <template v-else>
-          <button class="btn btn-primary" @click="handleConfirm">
-            {{ confirmText }}
-          </button>
-        </template>
+        <button v-if="type === 'confirm'" class="btn" @click="onCancel">{{ cancelText }}</button>
+        <button class="btn btn-primary" @click="onConfirm">{{ confirmText }}</button>
       </div>
     </div>
-    
-    <!-- 点击背景关闭 -->
-    <div class="modal-backdrop" @click="handleCancel"></div>
-  </dialog>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
+import { Marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import DOMPurify from 'dompurify'
+import Prism from 'prismjs'
 
 interface Props {
   type?: 'confirm' | 'alert'
@@ -69,52 +33,48 @@ const props = withDefaults(defineProps<Props>(), {
   cancelText: '取消'
 })
 
-const emit = defineEmits<{
-  confirm: []
-  cancel: []
-}>()
+const emit = defineEmits(['confirm', 'cancel'])
 
-const dialogRef = ref<HTMLDialogElement>()
+const visible = ref(false)
 
-// 格式化消息，支持换行
-const formattedMessage = computed(() => {
-  return props.message.replace(/\n/g, '<br>')
-})
-
-// 计算默认标题
-const title = computed(() => {
-  if (props.title) return props.title
-  return props.type === 'confirm' ? '确认操作' : '提示'
-})
-
-// 显示对话框
-const show = async () => {
-  await nextTick()
-  dialogRef.value?.showModal()
+const show = () => {
+  visible.value = true
 }
 
-// 隐藏对话框
 const hide = () => {
-  dialogRef.value?.close()
+  visible.value = false
 }
 
-// 处理确认
-const handleConfirm = () => {
+defineExpose({ show, hide })
+
+const onConfirm = () => {
   emit('confirm')
   hide()
 }
 
-// 处理取消
-const handleCancel = () => {
+const onCancel = () => {
   emit('cancel')
   hide()
 }
 
-// 暴露方法给父组件
-defineExpose({
-  show,
-  hide
-})
+const renderedMessage = computed(() => {
+  try {
+    const marked = new Marked(
+      markedHighlight({
+        langPrefix: 'language-',
+        highlight(code, lang) {
+          const language = Prism.languages[lang] || Prism.languages.plaintext;
+          return Prism.highlight(code, language, lang);
+        }
+      })
+    );
+    const dirty = marked.parse(props.message) as string;
+    return DOMPurify.sanitize(dirty);
+  } catch (e) {
+    console.error("Markdown parsing error:", e);
+    return props.message;
+  }
+});
 </script>
 
 <style scoped>
@@ -132,5 +92,30 @@ defineExpose({
 /* 按钮间距 */
 .modal-action {
   gap: 0.5rem;
+}
+
+:deep(.prose code) {
+  background-color: rgba(125, 125, 125, 0.15);
+  padding: 0.1em 0.3em;
+  border-radius: 6px;
+  color: #f87171; /* A bright color for visibility in both light and dark modes */
+}
+
+:deep(.prose pre) {
+  background-color: #f4f4f4;
+  padding: 1em;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+[data-theme="dark"] :deep(.prose pre),
+[data-theme="night"] :deep(.prose pre) {
+   background-color: #2d2d2d;
+}
+
+[data-theme="dark"] :deep(.prose code),
+[data-theme="night"] :deep(.prose code) {
+  color: #f87171; /* More vibrant red for dark themes */
+  background-color: rgba(255, 255, 255, 0.1);
 }
 </style> 

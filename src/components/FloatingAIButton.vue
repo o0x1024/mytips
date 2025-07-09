@@ -1136,6 +1136,8 @@ onMounted(async () => {
     
     // 监听流式输出事件
     await listen('ai-stream-chunk', handleStreamChunk)
+    // 新增：监听 Alt+S 全局快捷键
+    window.addEventListener('keydown', handleGlobalShortcut)
   }
 })
 
@@ -1146,6 +1148,8 @@ onUnmounted(() => {
     document.removeEventListener('mouseup', handleMouseUp)
     document.removeEventListener('mousemove', onResize)
     document.removeEventListener('mouseup', stopResize)
+    // 新增：移除 Alt+S 全局快捷键监听
+    window.removeEventListener('keydown', handleGlobalShortcut)
   }
   
   // 清理主题观察器
@@ -1165,6 +1169,16 @@ onUnmounted(() => {
     cancelGeneration()
   }
 })
+
+// 全局快捷键 Alt+S 打开浮动聊天框
+const handleGlobalShortcut = (event: KeyboardEvent) => {
+  // 仅在按下 Shift+S 时触发
+  if (event.shiftKey && event.key.toLowerCase() === 's') {
+    event.preventDefault()
+    // 切换聊天窗口（打开或关闭）
+    toggleChat()
+  }
+}
 </script>
 
 <template>
