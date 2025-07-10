@@ -886,21 +886,10 @@
 import { ref, onMounted, nextTick, computed, watch, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { showConfirm, showAlert } from '../services/dialog'
+import { getAIConfig } from '../services/aiService'
 
 import 'highlight.js/styles/github.css'
 import { useTipsStore } from '../stores/tipsStore'
-import {
-  listAIConversations,
-  deleteAIConversation,
-  createAIConversation,
-  addAIMessage,
-  updateAIConversationTitle,
-  listAIRoles,
-  createAIRole,
-  updateAIRole,
-  deleteAIRole,
-  listAIMessages
-} from '../services/ai'
 import { invoke } from '@tauri-apps/api/core'
 import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
@@ -968,6 +957,7 @@ const isLoadingMessages = ref(false)
 // 持久化状态
 const selectedModel = ref(localStorage.getItem('ai-selected-model') || 'gemini')
 const hasApiKey = ref(true)
+const aiConfigs = ref<Record<string, any>>({})
 const userInput = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
@@ -1079,7 +1069,7 @@ async function loadConversations() {
   isLoadingConversations.value = true
   try {
     console.log('开始加载对话列表...')
-    const result = await listAIConversations()
+    const result = await invoke('list_ai_conversations')
 
     conversations.value = Array.isArray(result) ? result : []
     console.log(`加载到 ${conversations.value.length} 个对话`)
@@ -1116,7 +1106,7 @@ async function loadMessages(conversationId: string) {
   isLoadingMessages.value = true
   try {
     console.log(`加载对话 ${conversationId} 的消息...`)
-    const result = await listAIMessages(conversationId)
+    const result = await invoke('list_ai_messages', { conversationId: conversationId })
     const rawMessages = Array.isArray(result) ? result : []
 
     // 解析消息中的附件信息
@@ -1189,7 +1179,7 @@ async function loadMessages(conversationId: string) {
 // 新建对话
 async function createNewConversation() {
   const model = selectedModel.value
-  const newId = await createAIConversation(model) as string
+  const newId = await invoke('create_ai_conversation', { model, title: '无标题对话' }) as string
   await loadConversations()
   activeConversationId.value = newId
   await loadMessages(String(newId))
@@ -1216,7 +1206,7 @@ async function switchConversation(conversationId: string) {
 
 // 删除对话
 async function deleteConversation(conversationId: string) {
-  await deleteAIConversation(conversationId)
+  await invoke('delete_ai_conversation', { conversationId })
   await loadConversations()
 }
 
@@ -1243,7 +1233,7 @@ const setupStreamListeners = async () => {
           finalContent += `\n\n__ROLE_NAME__:${selectedRole.value.name}`
         }
 
-        await addAIMessage(activeConversationId.value, 'assistant', finalContent)
+        await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContent })
 
         // 重新加载消息列表
         await loadMessages(activeConversationId.value)
@@ -1401,7 +1391,7 @@ async function sendMessage(resendMessage?: any) {
       messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
     }
 
-    await addAIMessage(activeConversationId.value, 'user', messageContent)
+    await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
 
     userInput.value = ''
     clearAllFiles() // 清空已上传的文件
@@ -1442,10 +1432,13 @@ async function sendMessage(resendMessage?: any) {
 
     // 获取自定义模型名称
     let customModelName = ''
-    try {
-      customModelName = await invoke('get_model_name_config', { modelId: selectedModel.value }) as string
-    } catch (error) {
-      console.warn('获取自定义模型名称失败:', error)
+    if (selectedModel.value.startsWith('custom_')) {
+      const config = aiConfigs.value[selectedModel.value]
+      if (config && config.model_name) {
+        customModelName = config.model_name
+      } else {
+        console.warn(`未找到自定义模型 ${selectedModel.value} 的配置`)
+      }
     }
 
     // 检查是否有图片文件
@@ -1454,31 +1447,25 @@ async function sendMessage(resendMessage?: any) {
       console.log(`发送包含${imageFileData.length}张图片的消息`)
 
       await invoke('send_ai_message_with_images_stream', {
-        modelId: selectedModel.value,
-        message: messageToSend,
+        providerId: selectedModel.value,
+        textMessage: messageToSend,
         imageFiles: imageFileData,
         streamId: currentStreamingId.value,
-        maxTokens: currentMaxTokens
+        conversationId: activeConversationId.value,
+        roleId: selectedRole.value?.id || null
       })
     } else {
       // 没有图片文件，使用普通API
-      const recentMessages = messages.value
-        .slice(-10)
-        .map((msg: any) => ({ role: msg.role, content: msg.content }))
-
-      // 如果有非图片附件，添加提示信息
       let finalMessage = messageToSend
       if (attachments.length > 0) {
         finalMessage += `\n\n[用户上传了${attachments.length}个文件: ${attachments.map(a => a.name).join(', ')}，但当前模型不支持文件处理]`
       }
 
       await invoke('send_ai_message_stream', {
-        modelId: selectedModel.value,
+        providerId: selectedModel.value,
         message: finalMessage,
         streamId: currentStreamingId.value,
-        messages: recentMessages,
-        customModelName: customModelName,
-        maxTokens: currentMaxTokens,
+        conversationId: activeConversationId.value,
         roleId: selectedRole.value?.id || null
       })
     }
@@ -1509,18 +1496,18 @@ const checkApiKey = async () => {
     return
   }
 
-  // 对于自定义模型，允许空的 API 密钥
+  // 对于自定义模型，允许空的 API 密钥（或在自己的端点中处理）
   if (selectedModel.value.startsWith('custom_')) {
     hasApiKey.value = true
     return
   }
 
-  try {
-    hasApiKey.value = await invoke('has_api_key', { modelId: selectedModel.value })
-  } catch (error) {
-    console.error('检查API密钥失败:', error)
-    hasApiKey.value = false
-  }
+  // For built-in models, check our loaded config.
+  const providerId = selectedModel.value
+  const config = aiConfigs.value[providerId]
+  hasApiKey.value = !!(config && config.api_key && config.api_key.trim() !== '')
+
+  console.log(`检查 ${providerId} API Key: ${hasApiKey.value}`)
 }
 
 // 监听消息变化，自动滚动到底部
@@ -2279,11 +2266,19 @@ async function openConversationsList() {
 onMounted(async () => {
   console.log('组件挂载，开始加载数据...');
 
+  try {
+    const configData = await getAIConfig();
+    if (configData) {
+      aiConfigs.value = configData.providers;
+    }
+    console.log('AI配置加载成功:', aiConfigs.value);
+  } catch (error) {
+    console.error('加载AI配置失败:', error);
+  }
+
   // 加载自定义模型
   await loadCustomModels();
 
-  // 加载模型配置
-  // await loadModelSuggestions();
 
   // 设置流式输出监听
   await setupStreamListeners();
@@ -2307,7 +2302,7 @@ onMounted(async () => {
   await Promise.all([
     tipsStore.fetchAllCategories(),
     tipsStore.fetchAllTags(),
-    tipsStore.fetchAllTips() // 加载所有笔记数据
+    tipsStore.fetchAllTipSummaries() // 加载所有笔记数据
   ]);
 
   console.log('加载的笔记数量:', tipsStore.tips.length);
@@ -2427,13 +2422,13 @@ const cancelGeneration = async () => {
 
   try {
     // 通知后端取消生成
-    await invoke('cancel_ai_generation', {
+    await invoke('cancel_ai_stream', {
       streamId: currentStreamingId.value
     });
 
     // 如果已经有一些内容，将其添加为完整消息
     if (streamingContent.value.trim()) {
-      await addAIMessage(activeConversationId.value, 'assistant', streamingContent.value + ' [已取消]')
+      await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: streamingContent.value + ' [已取消]' })
       await loadMessages(activeConversationId.value)
     }
 
@@ -2465,7 +2460,7 @@ const closeEditTitleModal = () => {
 // 保存编辑后的标题
 const saveEditedTitle = async () => {
   if (editingTitle.value.trim() && editingConversationId.value) {
-    await updateAIConversationTitle(editingConversationId.value, editingTitle.value.trim())
+    await invoke('update_ai_conversation_title', { conversationId: editingConversationId.value, newTitle: editingTitle.value.trim() })
     await loadConversations()
     closeEditTitleModal()
   }
@@ -2808,7 +2803,7 @@ const closeRoleManager = () => {
 const loadRoles = async () => {
   isLoadingRoles.value = true
   try {
-    const result = await listAIRoles()
+    const result = await invoke('list_ai_roles')
     roles.value = Array.isArray(result) ? result : []
   } catch (error) {
     console.error('加载角色列表失败:', error)
@@ -2846,10 +2841,10 @@ const saveRole = async () => {
   try {
     if (editingRole.value) {
       // 更新角色
-      await updateAIRole(editingRole.value.id, newRoleName.value.trim(), newRoleDescription.value.trim())
+      await invoke('update_ai_role', { roleId: editingRole.value.id, name: newRoleName.value.trim(), description: newRoleDescription.value.trim() })
     } else {
       // 创建新角色
-      await createAIRole(newRoleName.value.trim(), newRoleDescription.value.trim())
+      await invoke('create_ai_role', { name: newRoleName.value.trim(), description: newRoleDescription.value.trim() })
     }
 
     await loadRoles()
@@ -2868,7 +2863,7 @@ const confirmDeleteRole = async (roleId: string) => {
   
   if (confirmed) {
     try {
-      await deleteAIRole(roleId)
+      await invoke('delete_ai_role', { roleId })
       await loadRoles()
     } catch (error) {
       console.error('删除角色失败:', error)
@@ -3228,7 +3223,7 @@ const resendMessage = async (originalMessage: any) => {
     messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
   }
   
-  await addAIMessage(activeConversationId.value, 'user', messageContent)
+  await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
   
   // 滚动到底部
   await nextTick()
@@ -3265,10 +3260,13 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
 
     // 获取自定义模型名称
     let customModelName = ''
-    try {
-      customModelName = await invoke('get_model_name_config', { modelId: selectedModel.value }) as string
-    } catch (error) {
-      console.warn('获取自定义模型名称失败:', error)
+    if (selectedModel.value.startsWith('custom_')) {
+      const config = aiConfigs.value[selectedModel.value]
+      if (config && config.model_name) {
+        customModelName = config.model_name
+      } else {
+        console.warn(`未找到自定义模型 ${selectedModel.value} 的配置`)
+      }
     }
 
     // 检查是否有图片附件
@@ -3285,18 +3283,15 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
       )
 
       await invoke('send_ai_message_with_images_stream', {
-        modelId: selectedModel.value,
-        message: messageContent,
+        providerId: selectedModel.value,
+        textMessage: messageContent,
         imageFiles: imageFileData,
         streamId: currentStreamingId.value,
-        maxTokens: currentMaxTokens
+        conversationId: activeConversationId.value,
+        roleId: selectedRole.value?.id || null
       })
     } else {
       // 没有图片文件，使用普通API
-      const recentMessages = messages.value
-        .slice(-10)
-        .map((msg: any) => ({ role: msg.role, content: msg.content }))
-
       // 如果有非图片附件，添加提示信息
       let finalMessage = messageContent
       if (attachments.length > 0) {
@@ -3304,12 +3299,10 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
       }
 
       await invoke('send_ai_message_stream', {
-        modelId: selectedModel.value,
+        providerId: selectedModel.value,
         message: finalMessage,
         streamId: currentStreamingId.value,
-        messages: recentMessages,
-        customModelName: customModelName,
-        maxTokens: currentMaxTokens,
+        conversationId: activeConversationId.value,
         roleId: selectedRole.value?.id || null
       })
     }

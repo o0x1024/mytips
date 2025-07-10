@@ -1,20 +1,27 @@
 use crate::api::settings::get_client_with_proxy;
-use futures::Stream;
+use base64::{engine::general_purpose, Engine as _};
+use futures::{Stream, StreamExt, FutureExt};
 use genai::{
     adapter::AdapterKind,
-    chat::{ChatMessage, ChatRequest},
+    chat::{ChatMessage, ChatRequest, ContentPart, ImageSource, MessageContent, StreamChunk},
     resolver::{AuthData, Endpoint, ServiceTargetResolver},
     Client, ModelIden, ServiceTarget,
 };
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
+use serde::{Deserialize, Serialize};
 
-// 导入豆包模块的函数
-use crate::api::ai::doubao::{doubao_chat_with_images, doubao_stream_chat_with_images};
-
-// 导入grok模块的函数
-use crate::api::ai::grok::{grok_chat_with_images, grok_stream_chat_with_images};
+// 自定义模型配置
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomModel {
+    pub model_id: String,
+    pub model_name: String,
+    pub endpoint: String,
+    pub api_key: String,
+    pub adapter_type: String, // "openai", "gemini", etc.
+    pub custom_headers: Option<std::collections::HashMap<String, String>>,
+}
 
 // 创建GenAI客户端并添加认证
 pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Client, String> {
@@ -45,29 +52,35 @@ pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Clie
         std::env::remove_var("HTTPS_PROXY");
     }
 
-    // 根据模型类型设置适配器类型
-    let adapter_kind = match model_id {
-        "chatgpt" => AdapterKind::OpenAI,
-        "gemini" => AdapterKind::Gemini,
-        "deepseek" => AdapterKind::DeepSeek,
-        "claude" => AdapterKind::Anthropic,
-        "doubao" => AdapterKind::OpenAI, // 豆包使用OpenAI兼容格式
-        "grok" => AdapterKind::OpenAI,   // Grok使用OpenAI兼容格式
-        // 为自定义模型设置OpenAI格式的认证（默认行为）
-        "custom" | _ => AdapterKind::OpenAI,
-    };
+    // 为不同的闭包准备单独的 api_key 克隆，避免多次移动
+    let api_key_for_resolver = api_key.clone();
 
-    println!("使用适配器类型: {:?}", adapter_kind);
+    // 创建 ServiceTargetResolver
+    let service_target_resolver = ServiceTargetResolver::from_resolver_async_fn(
+        move |mut service_target: ServiceTarget| {
+            let key = api_key_for_resolver.clone();
+            async move {
+                let model_name = service_target.model.model_name.to_string();
+                if model_name.starts_with("doubao") {
+                    service_target.endpoint = Endpoint::from_static(
+                        "https://ark.cn-beijing.volces.com/api/v3/",
+                    );
+                    service_target.auth = AuthData::from_single(key);
+                } else if model_name.starts_with("grok") {
+                    service_target.endpoint = Endpoint::from_static("https://api.x.ai/v1");
+                    service_target.auth = AuthData::from_single(key);
+                }
+                Ok::<_, genai::resolver::Error>(service_target)
+            }
+            .boxed()
+        },
+    );
 
-    // 创建带有认证的客户端构建器
-    let client_builder = Client::builder().with_auth_resolver_fn(move |_| {
-        // 直接返回API密钥
-        let key = api_key.clone();
-        Ok(Some(AuthData::from_single(key)))
-    });
-    // client_builder.with_config(ClientConfig::default().with_adapter_kind(adapter_kind));
-    // 构建客户端
-    let client = client_builder.build();
+    // 创建带有认证和自定义解析器的客户端构建器
+    let client = Client::builder()
+        .with_service_target_resolver(service_target_resolver)
+        .with_auth_resolver_fn(move |_| Ok(Some(AuthData::from_single(api_key.clone()))))
+        .build();
 
     Ok(client)
 }
@@ -87,9 +100,9 @@ pub fn get_model_name(model_id: &str, custom_model_name: Option<&str>) -> String
         "claude" => "claude-3.5-sonnet".to_string(),
         "qwen" => "qwen-max".to_string(), // 千问暂时不支持，可能需要自定义实现
         "doubao" => "doubao-1.5-pro-32k".to_string(), // 豆包默认模型
-        "grok" => "grok-beta".to_string(), // Grok默认模型
+        "grok" => "grok-lpu".to_string(),      // Grok默认模型
         "custom" => "gpt-3.5-turbo".to_string(), // 自定义默认使用OpenAI格式
-        _ => "gpt-3.5-turbo".to_string(),
+        _ => model_id.to_string(),
     }
 }
 
@@ -177,7 +190,7 @@ pub async fn stream_message_from_ai(
                     }
                 } else {
                     // 将错误作为正常消息返回，这样前端可以直接显示
-                    let error_msg = format_ai_error("无法从响应中提取内容");
+                    let error_msg = format_ai_error("无法获取AI响应内容");
                     let _ = tx.send(Ok(error_msg)).await;
                 }
             }
@@ -477,33 +490,47 @@ pub async fn send_message_with_images_to_ai(
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
 ) -> Result<String, String> {
-    match model_id {
-        "doubao" => {
-            // 豆包支持视觉理解
-            doubao_chat_with_images(api_key, text_message, image_files, custom_model_name).await
-        }
-        "grok" => {
-            // Grok目前不支持图片，但为将来做准备
-            grok_chat_with_images(api_key, text_message, image_files, custom_model_name).await
-        }
-        "gemini" => {
-            // Gemini支持图片，但需要特殊处理
-            // 这里暂时返回提示信息，后续可以实现
-            Ok("Gemini图片支持功能正在开发中，请稍后再试。".to_string())
-        }
-        "chatgpt" => {
-            // ChatGPT-4V支持图片，但需要特殊处理
-            // 这里暂时返回提示信息，后续可以实现
-            Ok("ChatGPT图片支持功能正在开发中，请稍后再试。".to_string())
-        }
-        _ => {
-            // 其他模型不支持图片
-            Ok(format!(
-                "{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}",
-                get_model_display_name(model_id),
-                text_message
-            ))
-        }
+    let client = create_genai_client(api_key, model_id).await?;
+
+    let model_name = get_model_name(model_id, custom_model_name);
+
+    // 构建消息内容
+    let mut content_parts: Vec<ContentPart> = Vec::new();
+
+    // 添加图片部分
+    for (filename, file_data) in image_files {
+        let mime_type = match filename.split('.').last() {
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("gif") => "image/gif",
+            Some("webp") => "image/webp",
+            _ => "application/octet-stream", // 默认
+        };
+        content_parts.push(ContentPart::Image {
+            content_type: mime_type.into(),
+            source: ImageSource::Base64(general_purpose::STANDARD.encode(&file_data).into()),
+        });
+    }
+
+    // 添加文本部分
+    content_parts.push(ContentPart::Text(text_message.into()));
+
+    let message = ChatMessage {
+        role: genai::chat::ChatRole::User,
+        content: MessageContent::Parts(content_parts),
+        options: Default::default(),
+    };
+
+    let chat_req = ChatRequest::new(vec![message]);
+
+    let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
+        Ok(res) => res,
+        Err(e) => return Err(format!("AI请求失败: {}", e)),
+    };
+
+    match chat_res.content_text_as_str() {
+        Some(content) => Ok(content.to_string()),
+        None => Err("无法获取AI响应内容".to_string()),
     }
 }
 
@@ -515,50 +542,66 @@ pub async fn stream_message_with_images_from_ai(
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
 ) -> Result<TextStream, String> {
-    match model_id {
-        "doubao" => {
-            // 豆包支持视觉理解的流式输出
-            doubao_stream_chat_with_images(api_key, text_message, image_files, custom_model_name)
-                .await
-        }
-        "grok" => {
-            // Grok目前不支持图片，但为将来做准备
-            grok_stream_chat_with_images(api_key, text_message, image_files, custom_model_name)
-                .await
-        }
-        "gemini" => {
-            // Gemini支持图片，但需要特殊处理
-            // 这里暂时返回提示信息流
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let _ = tx
-                .send(Ok("Gemini图片支持功能正在开发中，请稍后再试。".to_string()))
-                .await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            Ok(Box::pin(stream) as TextStream)
-        }
-        "chatgpt" => {
-            // ChatGPT-4V支持图片，但需要特殊处理
-            // 这里暂时返回提示信息流
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let _ = tx
-                .send(Ok("ChatGPT图片支持功能正在开发中，请稍后再试。".to_string()))
-                .await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            Ok(Box::pin(stream) as TextStream)
-        }
-        _ => {
-            // 其他模型不支持图片，返回提示信息流
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let message = format!(
-                "{}模型暂不支持图片输入，已忽略上传的图片。\n\n{}",
-                get_model_display_name(model_id),
-                text_message
-            );
-            let _ = tx.send(Ok(message)).await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            Ok(Box::pin(stream) as TextStream)
-        }
+    let client = create_genai_client(api_key, model_id).await?;
+
+    let model_name = get_model_name(model_id, custom_model_name);
+
+    // 构建消息内容
+    let mut content_parts: Vec<ContentPart> = Vec::new();
+
+    // 添加图片部分
+    for (filename, file_data) in image_files {
+        let mime_type = match filename.split('.').last() {
+            Some("png") => "image/png",
+            Some("jpg") | Some("jpeg") => "image/jpeg",
+            Some("gif") => "image/gif",
+            Some("webp") => "image/webp",
+            _ => "application/octet-stream", // 默认
+        };
+        content_parts.push(ContentPart::Image {
+            content_type: mime_type.into(),
+            source: ImageSource::Base64(general_purpose::STANDARD.encode(&file_data).into()),
+        });
     }
+
+    // 添加文本部分
+    content_parts.push(ContentPart::Text(text_message.into()));
+
+    let message = ChatMessage {
+        role: genai::chat::ChatRole::User,
+        content: MessageContent::Parts(content_parts),
+        options: Default::default(),
+    };
+
+    let chat_req = ChatRequest::new(vec![message]);
+
+    let chat_stream_response = client
+        .exec_chat_stream(&model_name, chat_req, None)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let (tx, rx) = mpsc::channel(100);
+
+    tokio::spawn(async move {
+        let mut stream = chat_stream_response.stream;
+        while let Some(event) = stream.next().await {
+            match event {
+                Ok(genai::chat::ChatStreamEvent::Chunk(chunk)) => {
+                    if tx.send(Ok(chunk.content)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(e.to_string())).await;
+                    break;
+                }
+                _ => {} // 其他事件如ToolCall, End等暂时忽略
+            }
+        }
+    });
+
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    Ok(Box::pin(stream) as TextStream)
 }
 
 // 获取模型显示名称的辅助函数

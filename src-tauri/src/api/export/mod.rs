@@ -1,3 +1,5 @@
+use crate::db::DbManager;
+use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
 // 导出为Markdown
@@ -5,24 +7,24 @@ use tauri_plugin_dialog::DialogExt;
 pub async fn export_as_markdown(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
+    db_manager: State<'_, DbManager>,
 ) -> Result<String, String> {
-    use crate::db::DbManager;
     use std::fs;
 
     // 获取笔记
-    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
     let tips = if let Some(ids) = note_ids {
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = db.get_tip(&id) {
+            if let Ok(tip) = crate::db::get_tip(&conn, &id) {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        db.get_all_tips().map_err(|e| e.to_string())?
+        crate::db::get_all_tips(&conn).map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -69,13 +71,13 @@ pub async fn export_as_markdown(
 
         // 添加分类信息（如果有）
         if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = db.get_category_by_id(category_id) {
+            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id) {
                 content.push_str(&format!("**分类**: {}\n\n", category.name));
             }
         }
 
         // 添加标签信息
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = crate::db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         if !tags.is_empty() {
             content.push_str("**标签**: ");
             for (i, tag) in tags.iter().enumerate() {
@@ -195,24 +197,24 @@ pub async fn restore_database(app: tauri::AppHandle) -> Result<String, String> {
 pub async fn export_as_html(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
+    db_manager: State<'_, DbManager>,
 ) -> Result<String, String> {
-    use crate::db::DbManager;
     use std::fs;
 
     // 获取笔记
-    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
     let tips = if let Some(ids) = note_ids {
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = db.get_tip(&id) {
+            if let Ok(tip) = crate::db::get_tip(&conn, &id) {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        db.get_all_tips().map_err(|e| e.to_string())?
+        crate::db::get_all_tips(&conn).map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -255,7 +257,7 @@ pub async fn export_as_html(
         };
 
         // 获取标签信息
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = crate::db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tags_str = tags
             .iter()
             .map(|tag| tag.name.as_str())
@@ -264,7 +266,7 @@ pub async fn export_as_html(
 
         // 获取分类信息
         let category_name = if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = db.get_category_by_id(category_id) {
+            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id) {
                 category.name
             } else {
                 "未分类".to_string()
@@ -384,26 +386,26 @@ pub async fn export_as_html(
 pub async fn export_as_pdf(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
+    db_manager: State<'_, DbManager>,
 ) -> Result<String, String> {
-    use crate::db::DbManager;
     use std::fs;
     use std::io::Write;
 
 
     // 获取笔记
-    let db = DbManager::init().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
     let tips = if let Some(ids) = note_ids {
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = db.get_tip(&id) {
+            if let Ok(tip) = crate::db::get_tip(&conn, &id) {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        db.get_all_tips().map_err(|e| e.to_string())?
+        crate::db::get_all_tips(&conn).map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -445,7 +447,7 @@ pub async fn export_as_pdf(
         };
 
         // 获取标签信息
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = crate::db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tags_str = tags
             .iter()
             .map(|tag| tag.name.as_str())
@@ -454,7 +456,7 @@ pub async fn export_as_pdf(
 
         // 获取分类信息
         let category_name = if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = db.get_category_by_id(category_id) {
+            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id) {
                 category.name
             } else {
                 "未分类".to_string()

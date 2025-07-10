@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{Manager, State};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ShortcutConfig {
@@ -18,49 +18,46 @@ impl Default for ShortcutConfig {
 
 /// 获取全局快捷键配置
 #[tauri::command]
-pub fn get_global_shortcut_config(app: AppHandle) -> Result<ShortcutConfig, String> {
-    let db_state = app
-        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
-        .ok_or("数据库状态未初始化")?;
+pub fn get_global_shortcut_config(
+    db_manager: State<'_, crate::db::DbManager>,
+) -> Result<ShortcutConfig, String> {
+    let conn = db_manager
+        .get_conn()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
-    let db = db_state
-        .lock()
-        .map_err(|e| format!("锁定数据库失败: {}", e))?;
-
-    match db.get_setting("global_shortcut") {
+    match crate::db::get_setting(&conn, "global_shortcut") {
         Ok(Some(config_str)) => match serde_json::from_str::<ShortcutConfig>(&config_str) {
             Ok(config) => Ok(config),
             Err(e) => {
-                eprintln!("解析全局快捷键配置失败: {}", e);
+                eprintln!("Failed to parse global shortcut config: {}", e);
                 Ok(ShortcutConfig::default())
             }
         },
         Ok(None) => Ok(ShortcutConfig::default()),
         Err(e) => {
-            eprintln!("获取全局快捷键配置失败: {}", e);
-            Err(format!("获取全局快捷键配置失败: {}", e))
+            eprintln!("Failed to get global shortcut config: {}", e);
+            Err(format!("Failed to get global shortcut config: {}", e))
         }
     }
 }
 
 /// 更新全局快捷键配置
 #[tauri::command]
-pub fn update_global_shortcut(app: AppHandle, config: ShortcutConfig) -> Result<(), String> {
-    let db_state = app
-        .try_state::<std::sync::Mutex<crate::db::DbManager>>()
-        .ok_or("数据库状态未初始化")?;
-
-    let db = db_state
-        .lock()
-        .map_err(|e| format!("锁定数据库失败: {}", e))?;
+pub fn update_global_shortcut(
+    db_manager: State<'_, crate::db::DbManager>,
+    config: ShortcutConfig,
+) -> Result<(), String> {
+    let conn = db_manager
+        .get_conn()
+        .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
     let config_str = match serde_json::to_string(&config) {
         Ok(s) => s,
-        Err(e) => return Err(format!("序列化快捷键配置失败: {}", e)),
+        Err(e) => return Err(format!("Failed to serialize shortcut config: {}", e)),
     };
 
-    match db.save_setting("global_shortcut", &config_str) {
+    match crate::db::save_setting(&conn, "global_shortcut", &config_str) {
         Ok(_) => Ok(()),
-        Err(e) => Err(format!("保存全局快捷键配置失败: {}", e)),
+        Err(e) => Err(format!("Failed to save global shortcut config: {}", e)),
     }
 }

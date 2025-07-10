@@ -285,10 +285,22 @@
     <div class="modal" :class="{ 'modal-open': showSummaryDialog }">
       <div class="modal-box w-11/12 max-w-2xl">
         <h3 class="font-bold text-lg">AI总结临时笔记</h3>
-        
+
         <div class="form-control mt-4">
           <label class="label">
-            <span class="label-text">最近天数</span>
+            <span class="label-text">选择AI模型</span>
+          </label>
+          <select v-model="selectedAiModel" class="select select-bordered w-full">
+            <option disabled value="">请选择一个模型</option>
+            <option v-for="model in availableModels" :key="model.id" :value="model.id">
+              {{ model.name }}
+            </option>
+          </select>
+        </div>
+
+        <div class="form-control mt-4">
+          <label class="label">
+            <span class="label-text">总结最近天数</span>
           </label>
           <input 
             type="number"
@@ -300,19 +312,19 @@
 
         <div class="form-control mt-4">
           <label class="label">
-            <span class="label-text">总结提示词 (Prompt)</span>
-            <span class="label-text-alt">使用 {{ PROMPT_CONTENT_PLACEHOLDER }} 作为笔记内容占位符</span>
+            <span class="label-text">自定义提示词 (可选)</span>
+             <span class="label-text-alt">使用 {{ PROMPT_CONTENT_PLACEHOLDER }} 作为内容占位符</span>
           </label>
           <textarea
             v-model="summaryPrompt"
-            class="textarea textarea-bordered h-32 font-mono text-sm"
-            placeholder="请输入提示词..."
+            class="textarea textarea-bordered h-24"
+            :placeholder="DEFAULT_SUMMARIZE_PROMPT"
           ></textarea>
         </div>
 
         <div class="modal-action">
           <button class="btn" @click="showSummaryDialog = false">取消</button>
-          <button class="btn btn-primary" @click="summarizeNotes" :disabled="!summaryDays || summaryDays <= 0 || !summaryPrompt">确认</button>
+          <button class="btn btn-primary" @click="summarizeNotes" :disabled="!summaryDays || summaryDays <= 0 || !selectedAiModel">确认</button>
         </div>
       </div>
     </div>
@@ -355,10 +367,11 @@ import 'prismjs/components/prism-bash'
 import 'prismjs/components/prism-css'
 import 'prismjs/components/prism-sql'
 import DOMPurify from 'dompurify'
-import { summarizeClipboardEntries } from '../services/ai'
 import { showAlert } from '../services/dialog'
+import { getAIConfig } from '../services/aiService'
 
 const PROMPT_CONTENT_PLACEHOLDER = '{{CONTENT}}'
+const DEFAULT_SUMMARIZE_PROMPT = '请你扮演一个信息总结专家，擅长从多个独立的文本片段中提取核心要点，并整合成一段通顺、精炼的摘要。我会提供给你一个JSON格式的文本列表，每个文本都有一个唯一的ID。请你仔细阅读所有文本内容，然后生成一个不超过200字的摘要，总结这些文本共同讨论的主题或表达的核心信息。你的回答应该直接是摘要内容，不要包含任何额外的解释或客套话。这是你需要处理的文本列表：\n\n```json\n{{CONTENT}}\n```'
 
 interface ClipboardHistory {
   id: number;
@@ -385,7 +398,9 @@ const previewItem = ref<ClipboardHistory | null>(null);
 const summarizing = ref(false)
 const showSummaryDialog = ref(false)
 const summaryDays = ref<number | null>(7)
-const summaryPrompt = ref('')
+const availableModels = ref<{ id: string, name: string }[]>([]);
+const selectedAiModel = ref('');
+const summaryPrompt = ref('{{CONTENT}}');
 
 // 分页相关状态
 const currentPage = ref(1);
@@ -665,11 +680,34 @@ const clearAllEntries = async () => {
 };
 
 // 打开AI总结对话框
-const openSummaryDialog = () => {
+const openSummaryDialog = async () => {
   summaryDays.value = 7 // 重置为默认值
-  summaryPrompt.value = `请用简明扼要的方式总结以下临时笔记内容：\n\n---\n\n${PROMPT_CONTENT_PLACEHOLDER}`
+  summaryPrompt.value = '\n\n{{CONTENT}}'; // 清空自定义提示词
+  await loadAvailableModels();
+  if (availableModels.value.length > 0) {
+    selectedAiModel.value = availableModels.value[0].id;
+  }
   showSummaryDialog.value = true
 }
+
+// 加载可用的AI模型
+const loadAvailableModels = async () => {
+  try {
+    const configs = await getAIConfig();
+    if (configs && configs.providers) {
+      availableModels.value = Object.entries(configs.providers)
+        .filter(([, provider]) => provider.api_key) // 只显示配置了API Key的服务
+        .map(([id, provider]) => ({
+          id: id,
+          name: provider.name || id,
+        }));
+    }
+  } catch (error) {
+    console.error('加载AI模型失败:', error);
+    availableModels.value = [];
+  }
+};
+
 
 // AI总结最近N天的临时笔记
 async function summarizeNotes() {
@@ -677,8 +715,8 @@ async function summarizeNotes() {
     await showAlert('请输入有效的天数', { title: '错误' })
     return
   }
-  if (!summaryPrompt.value || !summaryPrompt.value.includes(PROMPT_CONTENT_PLACEHOLDER)) {
-    await showAlert(`提示词不能为空，且必须包含 ${PROMPT_CONTENT_PLACEHOLDER} 占位符`, { title: '错误' })
+  if (!selectedAiModel.value) {
+    await showAlert('请选择一个AI模型', { title: '错误' })
     return
   }
 
@@ -689,8 +727,19 @@ async function summarizeNotes() {
 
   try {
     summarizing.value = true
-    const summary = await summarizeClipboardEntries(days, summaryPrompt.value)
-    await showAlert(summary, { title: `AI总结（最近${days}天）` })
+    const entryIds = await invoke('get_clipboard_ids_for_last_days', { days });
+    if (!Array.isArray(entryIds) || entryIds.length === 0) {
+      await showAlert(`最近${days}天内没有找到临时笔记。`, { title: '提示' });
+      return;
+    }
+
+    const result = await invoke('summarize_clipboard_entries', {
+      providerId: selectedAiModel.value,
+      entryIds: entryIds,
+      prompt: summaryPrompt.value || null, // 如果为空则发送null
+    }) as { reply: string };
+
+    await showAlert(result.reply, { title: `AI总结（最近${days}天）` })
   } catch (error) {
     console.error('AI summarization failed:', error)
     const errorMessage = error instanceof Error ? error.message : String(error)

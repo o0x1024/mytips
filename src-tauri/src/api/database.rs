@@ -33,9 +33,7 @@ pub async fn get_current_database_path() -> Result<String, String> {
 
 // 获取数据库信息
 #[command]
-pub async fn get_database_info(
-    db_state: State<'_, std::sync::Mutex<DbManager>>,
-) -> Result<DatabaseInfo, String> {
+pub async fn get_database_info(db_manager: State<'_, DbManager>) -> Result<DatabaseInfo, String> {
     let db_path = get_current_db_path().map_err(|e| format!("获取数据库路径失败: {}", e))?;
     
     // 获取文件大小
@@ -62,18 +60,16 @@ pub async fn get_database_info(
     };
 
     // 获取笔记和分类数量
-    let db = db_state.lock().map_err(|e| format!("数据库锁定失败: {}", e))?;
-    
-    let note_count = db.conn
-        .query_row("SELECT COUNT(*) FROM tips", [], |row| {
-            Ok(row.get::<_, i64>(0)?)
-        })
+    let conn = db_manager
+        .get_conn()
+        .map_err(|e| format!("获取数据库连接失败: {}", e))?;
+
+    let note_count = conn
+        .query_row("SELECT COUNT(*) FROM tips", [], |row| row.get(0))
         .unwrap_or(0);
 
-    let category_count = db.conn
-        .query_row("SELECT COUNT(*) FROM categories", [], |row| {
-            Ok(row.get::<_, i64>(0)?)
-        })
+    let category_count = conn
+        .query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))
         .unwrap_or(0);
 
     Ok(DatabaseInfo {

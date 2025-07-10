@@ -722,203 +722,145 @@
                   <span class="label-text">全局AI默认模型</span>
                 </label>
                 <select v-model="defaultAIModel" class="select select-bordered w-full" @change="saveDefaultAIModel">
+                  <option value="openai">OpenAI ChatGPT</option>
                   <option value="gemini">Gemini</option>
-                  <option value="chatgpt">OpenAI ChatGPT</option>
+                  <option value="anthropic">Anthropic Claude</option>
                   <option value="deepseek">DeepSeek</option>
-                  <option value="qwen">通义千问</option>
-                  <option value="claude">Anthropic Claude</option>
+                  <option value="ali">通义千问</option>
                   <option value="doubao">字节豆包</option>
-                  <option value="grok">xAI Grok</option>
-                  <option value="custom">自定义API</option>
-                </select>
-                <p class="text-xs text-base-content/80 mt-1">设置后，AI相关功能将默认使用该模型</p>
-              </div>
-
-              <div class="divider">API配置</div>
-
-              <!-- 模型选择器 -->
-              <div class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">配置模型</span>
-                </label>
-                <select v-model="selectedConfigModel" class="select select-bordered w-full" @change="loadApiConfig">
-                  <option disabled value="">选择要配置的AI模型</option>
-                  <option v-for="model in availableModels" :key="model.id" :value="model.id">
-                    {{ model.name }}
-                  </option>
+                  <option value="xai">xAI Grok</option>
+                  <option value="custom">自定义模型</option>
                 </select>
               </div>
-
-              <!-- API密钥配置 -->
-              <div v-if="selectedConfigModel" class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">API密钥</span>
-                </label>
-                <div class="relative">
-                  <input 
-                    :type="showApiKey ? 'text' : 'password'" 
-                    v-model="apiConfig.apiKey" 
-                    placeholder="输入您的API密钥"
-                    class="input input-bordered w-full pr-10" 
-                  />
-                  <button @click="showApiKey = !showApiKey" type="button"
-                    class="absolute inset-y-0 right-0 flex items-center px-3">
-                    <svg v-if="showApiKey" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                      stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                      stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </button>
-                </div>
-                <p class="text-xs text-base-content/80 mt-1">API密钥仅存储在本地，不会上传到任何服务器</p>
+              
+              <div class="tabs tabs-boxed mb-4">
+                <a 
+                  v-for="(provider, id) in aiProviders" 
+                  :key="id"
+                  class="tab" 
+                  :class="{ 'tab-active': selectedConfigModel === id }"
+                  @click="selectedConfigModel = id"
+                >
+                  {{ provider.name }}
+                </a>
               </div>
-
-              <!-- 自定义模型名称 -->
-              <div v-if="selectedConfigModel" class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">自定义模型名称 <span class="text-sm opacity-70">(可选)</span></span>
-                  <button class="btn btn-xs btn-outline" @click="openModelConfigModal(selectedConfigModel)"
-                    :disabled="!selectedConfigModel">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
-                      stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
-                    </svg>
-                    配置模型
-                  </button>
-                </label>
-
-                <!-- 可搜索的模型名称选择器 -->
-                <div class="relative">
-                  <input type="text" v-model="apiConfig.customModelName" :placeholder="getDefaultModelName(selectedConfigModel)"
-                    class="input input-bordered w-full" @focus="showModelSuggestions = true" @input="filterModelSuggestions"
-                    @blur="hideModelSuggestions" autocomplete="off" />
-
-                  <!-- 模型建议下拉框 -->
-                  <div v-if="showModelSuggestions && filteredModelSuggestions.length > 0"
-                    class="absolute z-10 w-full bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto mt-1">
-                    <div v-for="suggestion in filteredModelSuggestions" :key="suggestion.name"
-                      class="px-3 py-2 hover:bg-base-200 cursor-pointer border-b border-base-200 last:border-b-0"
-                      @mousedown.prevent="selectModelSuggestion(suggestion.name)">
-                      <div class="font-medium">{{ suggestion.name }}</div>
-                      <div class="text-sm text-base-content/70">{{ suggestion.description }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <p class="text-xs text-base-content/80 mt-1">不同的API提供商可能使用不同的模型名称，您可以在此自定义或从建议中选择</p>
-              </div>
-
-              <!-- Max Tokens 配置 -->
-              <div v-if="selectedConfigModel" class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">最大输出长度 (Max Tokens)</span>
-                  <span class="label-text-alt">{{ apiConfig.maxTokens || getDefaultMaxTokens(selectedConfigModel) }}</span>
-                </label>
-                <div class="flex gap-3 items-center">
-                  <input type="range" v-model.number="apiConfig.maxTokens" :min="getMinMaxTokens(selectedConfigModel)"
-                    :max="getMaxMaxTokens(selectedConfigModel)" :step="100" class="range range-primary flex-1" />
-                  <input type="number" v-model.number="apiConfig.maxTokens" :min="getMinMaxTokens(selectedConfigModel)"
-                    :max="getMaxMaxTokens(selectedConfigModel)" :step="100" class="input input-bordered w-20 text-center" />
-                </div>
-                <div class="flex justify-between text-xs text-base-content/70 mt-1">
-                  <span>{{ getMinMaxTokens(selectedConfigModel) }}</span>
-                  <span>默认: {{ getDefaultMaxTokens(selectedConfigModel) }}</span>
-                  <span>{{ getMaxMaxTokens(selectedConfigModel) }}</span>
-                </div>
-                <p class="text-xs text-base-content/80 mt-1">控制AI响应的最大长度，越高生成内容越长，但响应时间和成本也会增加</p>
-              </div>
-
-              <!-- 自定义API端点 -->
-              <div v-if="selectedConfigModel === 'custom'" class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">API端点</span>
-                </label>
-                <input type="text" v-model="apiConfig.apiEndpoint" placeholder="例如: https://api.example.com/v1/chat/completions"
-                  class="input input-bordered w-full" />
-              </div>
-
-              <!-- 保存按钮 -->
-              <div v-if="selectedConfigModel" class="form-control mt-6">
-                <button class="btn btn-primary" @click="saveApiConfig" :disabled="isSavingApiConfig">
-                  <span v-if="isSavingApiConfig">
-                    <span class="loading loading-spinner loading-xs mr-2"></span>
-                    保存中...
-                  </span>
-                  <span v-else>保存API配置</span>
-                </button>
-              </div>
-
-              <!-- API连接测试 -->
-              <div v-if="selectedConfigModel && apiConfig.apiKey" class="form-control mt-4">
-                <button class="btn btn-outline" @click="testApiConnection" :disabled="isTestingApi">
-                  <span v-if="isTestingApi">
-                    <span class="loading loading-spinner loading-xs mr-2"></span>
-                    测试中...
-                  </span>
-                  <span v-else>测试API连接</span>
-                </button>
-              </div>
-
-              <div class="divider">自定义模型配置</div>
-
-              <!-- 自定义模型列表 -->
-              <div class="form-control mb-4">
-                <label class="label">
-                  <span class="label-text">已配置的自定义模型</span>
-                  <button class="btn btn-sm btn-primary" @click="openCustomModelModal">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    添加自定义模型
-                  </button>
-                </label>
+              
+              <div v-if="selectedConfigModel" class="border rounded-lg p-4 mb-4">
+                <h3 class="font-bold mb-2">{{ aiProviders[selectedConfigModel]?.name }} 配置</h3>
                 
-                <div v-if="customModels.length === 0" class="text-center py-8 text-base-content/60">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                  </svg>
-                  <p>暂无自定义模型配置</p>
-                  <p class="text-sm">点击上方按钮添加您的第一个自定义模型</p>
+                <div class="form-control mb-2">
+                  <label class="label">
+                    <span class="label-text">API密钥</span>
+                  </label>
+                  <input 
+                    type="password" 
+                    v-model="aiProviders[selectedConfigModel].api_key" 
+                    placeholder="输入API密钥" 
+                    class="input input-bordered w-full"
+                  />
                 </div>
-
-                <div v-else class="space-y-3">
-                  <div v-for="model in customModels" :key="model.id" 
-                       class="card bg-base-200 border border-base-300">
-                    <div class="card-body p-4">
-                      <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                          <h4 class="font-semibold">{{ model.name }}</h4>
-                          <p class="text-sm text-base-content/70 mb-2">{{ model.endpoint }}</p>
-                          <div class="flex gap-2 text-xs">
-                            <span class="badge badge-outline">{{ model.adapter_type || 'openai' }}</span>
-                            <span class="badge badge-outline">{{ model.model_name }}</span>
-                          </div>
-                        </div>
-                        <div class="flex gap-2">
-                          <button class="btn btn-sm btn-ghost" @click="editCustomModel(model.id)" title="编辑">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                          </button>
-                          <button class="btn btn-sm btn-ghost text-error" @click="deleteCustomModel(model.id)" title="删除">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                
+                <div class="form-control mb-2" v-if="selectedConfigModel === 'openai' || selectedConfigModel === 'custom'">
+                  <label class="label">
+                    <span class="label-text">API端点</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    v-model="aiProviders[selectedConfigModel].api_base" 
+                    placeholder="API端点URL" 
+                    class="input input-bordered w-full"
+                  />
+                </div>
+                
+                <div class="form-control mb-2" v-if="selectedConfigModel === 'openai'">
+                  <label class="label">
+                    <span class="label-text">组织ID (可选)</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    v-model="aiProviders[selectedConfigModel].organization" 
+                    placeholder="组织ID" 
+                    class="input input-bordered w-full"
+                  />
+                </div>
+                
+                <div class="form-control mb-2" v-if="selectedConfigModel === 'custom'">
+                  <label class="label">
+                    <span class="label-text">模型名称</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    v-model="aiProviders[selectedConfigModel].default_model" 
+                    placeholder="模型名称" 
+                    class="input input-bordered w-full"
+                  />
+                </div>
+                
+                <div class="form-control mb-4" v-else>
+                  <label class="label">
+                    <span class="label-text">默认模型</span>
+                  </label>
+                  <select 
+                    v-model="aiProviders[selectedConfigModel].default_model" 
+                    class="select select-bordered w-full"
+                  >
+                    <option 
+                      v-for="model in aiProviders[selectedConfigModel].models" 
+                      :key="model.name" 
+                      :value="model.name"
+                    >
+                      {{ model.name }}
+                    </option>
+                  </select>
+                </div>
+                
+                <div class="flex justify-between">
+                  <button 
+                    class="btn btn-primary" 
+                    :disabled="isTestingApi" 
+                    @click="() => testApiConnection(selectedConfigModel)"
+                  >
+                    <span v-if="isTestingApi">测试中...</span>
+                    <span v-else>测试连接</span>
+                  </button>
+                  
+                  <button 
+                    class="btn btn-accent" 
+                    :disabled="isSavingApiConfig" 
+                    @click="saveAIProviderConfig"
+                  >
+                    <span v-if="isSavingApiConfig">保存中...</span>
+                    <span v-else>保存配置</span>
+                  </button>
                 </div>
               </div>
+              
+              <div class="divider">使用统计</div>
+              
+              <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
+                <div class="stat">
+                  <div class="stat-title">对话总数</div>
+                  <div class="stat-value">{{ aiStats.conversations }}</div>
+                </div>
+                
+                <div class="stat">
+                  <div class="stat-title">消息总数</div>
+                  <div class="stat-value">{{ aiStats.messages }}</div>
+                </div>
+                
+                <div class="stat">
+                  <div class="stat-title">Token总数</div>
+                  <div class="stat-value">{{ aiStats.tokens.total }}</div>
+                  <div class="stat-desc">输入: {{ aiStats.tokens.input }} / 输出: {{ aiStats.tokens.output }}</div>
+                </div>
+              </div>
+              
+              <button class="btn btn-sm btn-ghost mt-2" @click="refreshAIStats">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                刷新统计
+              </button>
             </div>
           </div>
 
@@ -1299,7 +1241,13 @@ import { useUpdateStore } from '../stores/updateStore'
 import UpdateDialog from '../components/UpdateDialog.vue'
 import { enable, isEnabled, disable } from '@tauri-apps/plugin-autostart';
 import { useRouter } from 'vue-router'
-import { showConfirm } from '../services/dialog'
+import { showConfirm, showAlert } from '../services/dialog'
+import {
+  AIProvider, AIModel, TestConnectionRequest, TestConnectionResponse,
+  getChatModels, getEmbeddingModels, getDefaultAIModel, setDefaultAIModel,
+  testAIConnection, saveAIConfig, getAIConfig, getAIUsageStats, reloadAIServices,
+  getAIServiceStatus, defaultProviders
+} from '../services/aiService'
 
 const uiStore = useUIStore()
 const updateStore = useUpdateStore()
@@ -1818,17 +1766,66 @@ watch(proxySettings, async () => {
 const defaultAIModel = ref('chatgpt')
 async function saveDefaultAIModel() {
   try {
-    await invoke('save_default_ai_model', { modelId: defaultAIModel.value })
+    const providerId = defaultAIModel.value;
+    const providerConfig = aiProviders.value[providerId];
+    
+    if (!providerConfig) {
+      console.error(`Provider config not found for: ${providerId}`);
+      message(`未找到提供商配置: ${providerId}`, { title: '错误' });
+      return;
+    }
+
+    const providerForBackend = providerMapping[providerId];
+    const modelName = providerConfig.default_model;
+    
+    if (!providerForBackend || !modelName) {
+        console.error('Provider or model name is missing for the selected default AI model.');
+        message('提供商或模型名称丢失', { title: '错误' });
+        return;
+    }
+    
+    // 调用后端将全局默认模型存入数据库
+    await invoke('set_default_ai_model', {
+      modelType: 'chat',
+      provider: providerForBackend,
+      modelName: modelName
+    });
+    
+    // 同时保存到localStorage，用于快速加载
+    localStorage.setItem('defaultAIModel', providerId);
+    
+    message('默认AI模型已保存', { title: '成功' });
+
   } catch (error) {
-    console.error('保存默认AI模型失败:', error)
+    console.error('保存默认AI模型失败:', error);
+    message('保存默认AI模型失败: ' + error, { title: '错误' });
   }
 }
 
 // 加载默认AI模型
 async function loadDefaultAIModel() {
   try {
-    const model = await invoke('get_default_ai_model')
-    if (model && typeof model === 'string') {
+    // 先尝试从新API获取默认模型
+    try {
+      const defaultModel = await invoke('get_default_ai_model', { modelType: 'chat' }) as any
+      if (defaultModel && defaultModel.provider && defaultModel.name) {
+        // 找到对应的本地模型ID
+        for (const [id, provider] of Object.entries(providerMapping)) {
+          if (provider === defaultModel.provider) {
+            defaultAIModel.value = id
+            break
+          }
+        }
+        console.log('从API加载了默认AI模型:', defaultAIModel.value)
+        return
+      }
+    } catch (error) {
+      console.warn('从API获取默认AI模型失败，尝试使用localStorage:', error)
+    }
+
+    // 回退到localStorage
+    const model = localStorage.getItem('defaultAIModel')
+    if (model) {
       defaultAIModel.value = model
     }
   } catch (error) {
@@ -1864,7 +1861,7 @@ async function migrateConfigToDatabase() {
 }
 
 // 新增模型配置管理功能
-const selectedConfigModel = ref('')
+const selectedConfigModel = ref('openai')
 const showApiKey = ref(false)
 const apiConfig = ref({
   apiKey: '',
@@ -1892,6 +1889,33 @@ const availableModels = [
   { id: 'doubao', name: '字节豆包' },
   { id: 'grok', name: 'xAI Grok' },
 ]
+
+// 新增AI模型和提供商映射关系
+const providerMapping: Record<string, string> = {
+  'chatgpt': 'openai',
+  'gemini': 'gemini',
+  'deepseek': 'deepseek',
+  'qwen': 'ali',
+  'claude': 'anthropic',
+  'doubao': 'doubao',
+  'grok': 'xai',
+  'custom': 'custom'
+}
+
+// 新增AI配置状态
+const aiProviders = ref<Record<string, AIProvider>>(structuredClone(defaultProviders))
+const aiModels = ref<AIModel[]>([])
+const isLoadingModels = ref(false)
+const aiStats = ref({
+  conversations: 0,
+  messages: 0,
+  tokens: {
+    input: 0,
+    output: 0,
+    total: 0
+  },
+  providers: {}
+})
 
 // 默认的各AI模型的常用模型名称数据
 const defaultModelSuggestions = {
@@ -2009,30 +2033,33 @@ async function loadApiConfig(): Promise<void> {
   if (!selectedConfigModel.value) return
   
   try {
-    // 获取API密钥
-    const result = await invoke('get_api_key', { modelId: selectedConfigModel.value })
-    apiConfig.value.apiKey = result as string
+    // 1. 获取API密钥 (来自后端)
+    const result = await invoke('get_api_key', { service: selectedConfigModel.value })
+    apiConfig.value.apiKey = (result as string) || ''
 
-    // 获取自定义模型名称
-    const modelNameResult = await invoke('get_model_name_config', { modelId: selectedConfigModel.value })
-    apiConfig.value.customModelName = modelNameResult as string
-
-    // 获取max_tokens配置
-    try {
-      const maxTokensResult = await invoke('get_max_tokens_config', { modelId: selectedConfigModel.value })
-      apiConfig.value.maxTokens = maxTokensResult as number || getDefaultMaxTokens(selectedConfigModel.value)
-    } catch (error) {
-      console.warn('获取max_tokens配置失败，使用默认值:', error)
+    // 2. 获取其他配置 (来自localStorage)
+    const storedConfig = localStorage.getItem(`ai-config-${selectedConfigModel.value}`)
+    if (storedConfig) {
+      const config = JSON.parse(storedConfig)
+      apiConfig.value.customModelName = config.customModelName || ''
+      apiConfig.value.maxTokens = config.maxTokens || getDefaultMaxTokens(selectedConfigModel.value)
+    } else {
+      // 如果没有存储，使用默认值
+      apiConfig.value.customModelName = ''
       apiConfig.value.maxTokens = getDefaultMaxTokens(selectedConfigModel.value)
     }
-
-    // 如果是自定义模型，获取端点
+    
+    // 3. 如果是自定义模型，获取端点 (来自后端)
     if (selectedConfigModel.value === 'custom') {
       const endpoint = await invoke('get_api_endpoint')
-      apiConfig.value.apiEndpoint = endpoint as string
+      apiConfig.value.apiEndpoint = (endpoint as string) || ''
+    } else {
+      apiConfig.value.apiEndpoint = ''
     }
+
   } catch (error) {
     console.error('获取API配置失败:', error)
+    // 出错时重置为默认值
     apiConfig.value.apiKey = ''
     apiConfig.value.customModelName = ''
     apiConfig.value.apiEndpoint = ''
@@ -2048,25 +2075,43 @@ async function saveApiConfig(): Promise<void> {
   
   isSavingApiConfig.value = true
   try {
+    // 1. 保存API密钥 (到后端)
     await invoke('save_api_key', {
-      modelId: selectedConfigModel.value,
+      service: selectedConfigModel.value,
       apiKey: apiConfig.value.apiKey
     })
 
-    // 保存自定义模型名称
-    await invoke('save_model_name', {
-      modelId: selectedConfigModel.value,
-      modelName: apiConfig.value.customModelName
-    })
-
-    // 保存max_tokens配置
-    await invoke('save_max_tokens_config', {
-      modelId: selectedConfigModel.value,
+    // 2. 保存其他配置 (到localStorage)
+    const configToStore = {
+      customModelName: apiConfig.value.customModelName,
       maxTokens: parseInt(apiConfig.value.maxTokens.toString(), 10)
-    })
+    }
+    localStorage.setItem(`ai-config-${selectedConfigModel.value}`, JSON.stringify(configToStore))
 
+    // 3. 如果是自定义模型，保存端点 (到后端)
     if (selectedConfigModel.value === 'custom' && apiConfig.value.apiEndpoint) {
       await invoke('save_api_endpoint', { endpoint: apiConfig.value.apiEndpoint })
+    }
+
+    // 4. 如果当前是默认模型，更新默认模型设置
+    if (selectedConfigModel.value === defaultAIModel.value) {
+      await saveDefaultAIModel()
+    }
+
+    // 5. 尝试更新新的AI提供商配置
+    try {
+      const provider = providerMapping[selectedConfigModel.value]
+      if (provider && aiProviders.value[provider]) {
+        aiProviders.value[provider].api_key = apiConfig.value.apiKey
+        if (selectedConfigModel.value === 'custom') {
+          aiProviders.value[provider].api_base = apiConfig.value.apiEndpoint
+        }
+        
+        // 保存提供商配置
+        await saveAIProviderConfig()
+      }
+    } catch (error) {
+      console.warn('更新AI提供商配置失败:', error)
     }
 
     message('API配置保存成功', { title: '成功' })
@@ -2078,21 +2123,50 @@ async function saveApiConfig(): Promise<void> {
   }
 }
 
-async function testApiConnection(): Promise<void> {
-  if (!selectedConfigModel.value || !apiConfig.value.apiKey) return
+async function testApiConnection(providerId: string): Promise<void> {
+  if (!aiProviders.value[providerId]) return
+  
+  const provider = aiProviders.value[providerId]
+  
+  // 对于非自定义模型，至少需要API Key
+  if (providerId !== 'custom' && !provider.api_key) {
+    message('请输入API密钥后再测试', { title: '提示' })
+    return
+  }
+  
+  // 对于自定义模型，至少需要Endpoint和Model Name
+  if (providerId === 'custom' && (!provider.api_base || !provider.default_model)) {
+    message('请输入API端点和模型标识符后再测试', { title: '提示' })
+    return
+  }
+  
+  const request: TestConnectionRequest = {
+    provider: provider.provider,
+    api_key: provider.api_key,
+    api_base: provider.api_base,
+    model: provider.default_model
+  }
   
   isTestingApi.value = true
   try {
-    await invoke('test_ai_api_connection', {
-      modelId: selectedConfigModel.value,
-      apiKey: apiConfig.value.apiKey,
-      modelName: apiConfig.value.customModelName || getDefaultModelName(selectedConfigModel.value),
-      endpoint: apiConfig.value.apiEndpoint
-    })
-    message('API连接测试成功', { title: '测试结果' })
+    const response = await testAIConnection(request)
+    
+    if (response.success) {
+      message(response.message, { title: '连接成功' })
+      
+      // 如果返回了模型列表，更新提供商的模型列表
+      if (response.models && response.models.length > 0) {
+        provider.models = response.models.map(name => ({
+          name,
+          provider: providerId
+        }))
+      }
+    } else {
+      message(response.message, { title: '连接失败' })
+    }
   } catch (error) {
-    console.error('API测试失败:', error)
-    message('API连接测试失败: ' + error, { title: '测试结果' })
+    console.error('API连接测试失败:', error)
+    message('API连接测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingApi.value = false
   }
@@ -2729,6 +2803,118 @@ async function resetToDefaultDatabase(): Promise<void> {
     message('重置数据库位置失败: ' + error, { title: '错误' })
   } finally {
     isChangingDatabase.value = false
+  }
+}
+
+// 加载AI提供商配置
+async function loadAIProvidersConfig() {
+  isLoadingModels.value = true
+  try {
+    // 一次性获取所有AI提供商的配置
+    const config = await getAIConfig();
+    if (config && config.providers) {
+      // 合并数据库中的配置和前端的默认配置
+      for (const providerId in defaultProviders) {
+        if (config.providers[providerId]) {
+          aiProviders.value[providerId] = {
+            ...defaultProviders[providerId],
+            ...config.providers[providerId],
+          };
+        }
+      }
+    }
+
+    // 加载聊天模型列表
+    const models = await getChatModels()
+    aiModels.value = models
+    
+    // 加载默认AI模型
+    const defaultModel = await getDefaultAIModel('chat')
+    if (defaultModel) {
+      // 从返回的 provider 'openai' 找到对应的本地id 'chatgpt'
+      for (const key in providerMapping) {
+        if (providerMapping[key] === defaultModel.provider) {
+          defaultAIModel.value = key;
+          break;
+        }
+      }
+    }
+    
+    // 获取服务状态 (可以考虑也合并到get_ai_config中)
+    const statuses = await getAIServiceStatus()
+    for (const status of statuses) {
+      if (aiProviders.value[status.provider]) {
+        aiProviders.value[status.provider].enabled = status.is_available
+      }
+    }
+  } catch (error) {
+    console.error('加载AI配置失败:', error)
+    message('加载AI配置失败: ' + error, { title: '错误' })
+  } finally {
+    isLoadingModels.value = false
+  }
+}
+
+// 刷新AI使用统计
+async function refreshAIStats() {
+  try {
+    const stats = await getAIUsageStats()
+    aiStats.value = stats
+  } catch (error) {
+    console.error('获取AI使用统计失败:', error)
+    message('获取AI使用统计失败: ' + error, { title: '错误' })
+  }
+}
+
+// 初始化时加载AI配置
+onMounted(async () => {
+  // 获取代理设置
+  try {
+    const settings = await invoke('get_proxy_settings')
+    if (settings) {
+      proxySettings.value = settings as ProxySettings
+    }
+  } catch (error) {
+    console.error('获取代理设置失败:', error)
+  }
+
+  // 加载默认AI模型
+  await loadDefaultAIModel()
+
+  // 加载AI提供商配置
+  await loadAIProvidersConfig()
+  
+  // 加载AI使用统计
+  await refreshAIStats()
+  
+  // 加载自定义模型列表
+  await loadCustomModels()
+
+  // 检查是否启用了自动启动
+  try {
+    const enabled = await isEnabled()
+    autoStartEnabled.value = enabled
+  } catch (error) {
+    console.error('检查自动启动状态失败:', error)
+  }
+})
+
+// 保存AI配置
+async function saveAIProviderConfig() {
+  isSavingApiConfig.value = true
+  try {
+    // 保存所有提供商配置
+    await saveAIConfig(aiProviders.value)
+    
+    message('AI配置已保存', { title: '成功' })
+    
+    // 重新加载AI服务
+    await reloadAIServices()
+  } catch (error) {
+    console.error('保存AI配置失败:', error)
+    message('保存AI配置失败: ' + error, { title: '错误' })
+  } finally {
+    isSavingApiConfig.value = false
   }
 }
 </script>

@@ -9,7 +9,19 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_autostart::ManagerExt;
 // 直接导入api模块提供的所有公共API
+use api::ai::conversations::{
+    add_ai_message, clear_ai_conversation, create_ai_conversation, delete_ai_conversation,
+    list_ai_conversations, list_ai_messages, update_ai_conversation_title,
+};
+use api::ai::roles::{create_ai_role, delete_ai_role, get_ai_role, list_ai_roles, update_ai_role};
+use api::ai::service::{
+    test_ai_connection, get_ai_chat_models, get_ai_embedding_models, 
+    get_default_ai_model, set_default_ai_model, save_ai_config, get_ai_config,
+    get_ai_usage_stats, reload_ai_services, get_ai_service_status,
+};
 use api::*;
+use api::cancel_ai_stream;
+use api::clipboard_api::get_clipboard_ids_for_last_days;
 
 use db::DbManager;
 
@@ -20,7 +32,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(std::sync::Mutex::new(db_manager))
+        .manage(db_manager) // 直接管理DbManager，因为r2d2::Pool是线程安全的
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
             Some(vec!["--flag1", "--flag2"]),
@@ -68,25 +80,13 @@ pub fn run() {
             import_from_directory,
             import_markdown_file,
             get_import_preview,
+            get_clipboard_ids_for_last_days,
             // AI相关API
             send_ai_message,
             send_ai_message_stream,
             send_ai_message_with_images,
             send_ai_message_with_images_stream,
-            cancel_ai_generation,
-            get_ai_api_keys,
-            save_api_key,
-            get_api_key,
-            has_api_key,
-            save_api_endpoint,
-            get_api_endpoint,
-            save_model_name,
-            get_model_name_config,
-            save_max_tokens_config,
-            get_max_tokens_config,
             migrate_config_to_database,
-            save_default_ai_model,
-            get_default_ai_model,
             // AI对话数据库相关API
             list_ai_conversations,
             list_ai_messages,
@@ -101,6 +101,19 @@ pub fn run() {
             update_ai_role,
             delete_ai_role,
             get_ai_role,
+            // 新增：AI流控制API
+            cancel_ai_stream,
+            // AI服务管理相关API
+            test_ai_connection,
+            get_ai_chat_models,
+            get_ai_embedding_models,
+            get_default_ai_model,
+            set_default_ai_model,
+            save_ai_config,
+            get_ai_config,
+            get_ai_usage_stats,
+            reload_ai_services,
+            get_ai_service_status,
             // 设置相关API
             save_proxy_settings,
             get_proxy_settings,
@@ -173,9 +186,9 @@ pub fn run() {
 
             // 清除会话级别的解锁状态
             {
-                let db_state = app.state::<std::sync::Mutex<DbManager>>();
-                let db = db_state.lock().unwrap();
-                if let Err(e) = db.clear_session_unlocks() {
+                let db_state = app.state::<DbManager>();
+                let conn = db_state.get_conn().expect("Failed to get connection for session clear");
+                if let Err(e) = db::clear_session_unlocks(&conn) {
                     eprintln!("清除会话解锁状态失败: {}", e);
                 }
             }
@@ -246,43 +259,44 @@ pub fn run() {
 
                 // 从数据库获取快捷键配置
                 let shortcut_config = {
-                    let db_state = app.state::<std::sync::Mutex<DbManager>>();
-                    let db = db_state.lock().unwrap();
-                    match db.get_setting("global_shortcut") {
-                        Ok(Some(config_str)) => {
-                            match serde_json::from_str::<crate::api::shortcuts::ShortcutConfig>(&config_str) {
-                                Ok(config) => config,
-                                Err(_) => crate::api::shortcuts::ShortcutConfig::default(),
-                            }
-                        },
-                        _ => crate::api::shortcuts::ShortcutConfig::default(),
-                    }
+                    let db_state = app.state::<DbManager>();
+                    let conn = db_state.get_conn().expect("Failed to get shortcut config connection");
+                    db::get_setting(&conn, "global_shortcut").unwrap_or(None)
                 };
+
+                let shortcut_str = shortcut_config.unwrap_or_else(|| "Option+Space".to_string());
+
+                let handle = app.handle().clone();
+
+                // 解析快捷键字符串
+                let shortcut_parts: Vec<&str> = shortcut_str.split('+').collect();
 
                 // 构建修饰键
                 let mut modifiers = Modifiers::empty();
-                for modifier in &shortcut_config.modifiers {
-                    match modifier.as_str() {
-                        "meta" => {
-                            // 在Windows下，meta键对应Control键
-                            #[cfg(target_os = "windows")]
-                            { modifiers |= Modifiers::CONTROL; }
-                            // 在macOS下，meta键对应Command键
-                            #[cfg(target_os = "macos")]
-                            { modifiers |= Modifiers::META; }
-                            // 在Linux下，meta键对应Super键，但通常使用Control
-                            #[cfg(target_os = "linux")]
-                            { modifiers |= Modifiers::CONTROL; }
-                        },
-                        "shift" => modifiers |= Modifiers::SHIFT,
-                        "alt" => modifiers |= Modifiers::ALT,
-                        "control" => modifiers |= Modifiers::CONTROL,
-                        _ => {}
+                if shortcut_parts.len() > 1 {
+                    for modifier in &shortcut_parts[..shortcut_parts.len() - 1] {
+                        match modifier.to_lowercase().as_str() {
+                            "option" => {
+                                // 在Windows下，meta键对应Control键
+                                #[cfg(target_os = "windows")]
+                                { modifiers |= Modifiers::CONTROL; }
+                                // 在macOS下，meta键对应Command键
+                                #[cfg(target_os = "macos")]
+                                { modifiers |= Modifiers::META; }
+                                // 在Linux下，meta键对应Super键，但通常使用Control
+                                #[cfg(target_os = "linux")]
+                                { modifiers |= Modifiers::CONTROL; }
+                            },
+                            "shift" => modifiers |= Modifiers::SHIFT,
+                            "alt" => modifiers |= Modifiers::ALT,
+                            "control" => modifiers |= Modifiers::CONTROL,
+                            _ => {}
+                        }
                     }
                 }
 
                 // 构建按键码
-                let key_code = match shortcut_config.key.to_lowercase().as_str() {
+                let key_code = match shortcut_parts.last().unwrap_or(&"C").to_lowercase().as_str() {
                     "a" => Code::KeyA, "b" => Code::KeyB, "c" => Code::KeyC, "d" => Code::KeyD,
                     "e" => Code::KeyE, "f" => Code::KeyF, "g" => Code::KeyG, "h" => Code::KeyH,
                     "i" => Code::KeyI, "j" => Code::KeyJ, "k" => Code::KeyK, "l" => Code::KeyL,
@@ -293,6 +307,7 @@ pub fn run() {
                     "1" => Code::Digit1, "2" => Code::Digit2, "3" => Code::Digit3, "4" => Code::Digit4,
                     "5" => Code::Digit5, "6" => Code::Digit6, "7" => Code::Digit7, "8" => Code::Digit8,
                     "9" => Code::Digit9, "0" => Code::Digit0,
+                    "space" => Code::Space,
                     _ => Code::KeyC, // 默认使用C键
                 };
 

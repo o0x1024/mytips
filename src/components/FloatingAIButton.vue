@@ -2,8 +2,7 @@
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { saveDefaultAIModel, getDefaultAIModel, createAIConversation, addAIMessage, listAIConversations, getAIConversationMessages, clearAIConversation } from '../services/ai'
-import {  Marked } from 'marked'
+import { Marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
 import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
@@ -73,7 +72,7 @@ const availableModels = ref([
 const chatWindowPosition = computed(() => {
   return {
     left: `${Math.min(position.value.x, windowWidth.value - chatWindowSize.value.width - 20)}px`,
-    top: `${Math.min(position.value.y - chatWindowSize.value.height, windowHeight.value - chatWindowSize.value.height - 50)}px`,
+    top: `${Math.min(position.value.y, windowHeight.value - chatWindowSize.value.height - 50)}px`,
     width: `${chatWindowSize.value.width}px`,
     height: `${chatWindowSize.value.height}px`
   }
@@ -92,14 +91,12 @@ const getModelName = (modelId: string) => {
 }
 
 // 加载默认AI模型
-const loadDefaultModel = async () => {
-  try {
-    const defaultModel = await getDefaultAIModel()
-    if (defaultModel && typeof defaultModel === 'string') {
-      selectedModel.value = defaultModel
+const loadDefaultModel = () => {
+  if (isBrowser) {
+    const savedModel = localStorage.getItem('floating-ai-model')
+    if (savedModel && availableModels.value.some(m => m.id === savedModel)) {
+      selectedModel.value = savedModel
     }
-  } catch (error) {
-    console.error('获取默认AI模型失败:', error)
   }
 }
 
@@ -107,7 +104,7 @@ const loadDefaultModel = async () => {
 const getOrCreateFloatingConversation = async () => {
   try {
     // 检查是否有现有的浮动聊天框对话
-    const conversations = await listAIConversations() as Array<{id: string, title: string, model: string}>
+    const conversations = await invoke('list_ai_conversations') as Array<{id: string, title: string, model: string}>
     const floatingConv = conversations.find(c => c.title === '浮动聊天框')
     
     if (floatingConv) {
@@ -115,7 +112,7 @@ const getOrCreateFloatingConversation = async () => {
       console.log('FloatingAI: 找到现有浮动聊天框对话:', floatingConv.id)
     } else {
       // 创建新的浮动聊天框对话
-      const newConvId = await createAIConversation(selectedModel.value, '浮动聊天框') as string
+      const newConvId = await invoke('create_ai_conversation', { model: selectedModel.value, title: '浮动聊天框' }) as string
       floatingConversationId.value = newConvId
       console.log('FloatingAI: 创建新的浮动聊天框对话:', newConvId)
     }
@@ -131,7 +128,7 @@ const loadChatHistory = async () => {
   
   isLoadingHistory.value = true
   try {
-    const messages = await getAIConversationMessages(floatingConversationId.value) as Array<{
+    const messages = await invoke('list_ai_messages', { conversationId: floatingConversationId.value }) as Array<{
       id: string,
       role: string, 
       content: string,
@@ -163,7 +160,11 @@ const saveMessageToDatabase = async (role: string, content: string) => {
   
   if (floatingConversationId.value) {
     try {
-      await addAIMessage(floatingConversationId.value, role, content)
+      await invoke('add_ai_message', { 
+        conversationId: floatingConversationId.value, 
+        role, 
+        content 
+      })
     } catch (error) {
       console.error('FloatingAI: 保存消息到数据库失败:', error)
     }
@@ -264,12 +265,10 @@ const sendMessage = async () => {
   try {
     // 调用流式AI API
     await invoke('send_ai_message_stream', {
-      modelId: selectedModel.value,
+      providerId: selectedModel.value,
       message: message,
       streamId: currentStreamingId.value,
-      messages: null,
-      customModelName: null,
-      maxTokens: null,
+      conversationId: floatingConversationId.value,
       roleId: null
     })
   } catch (error) {
@@ -423,10 +422,8 @@ const toggleChat = async (_event?: MouseEvent) => {
 const changeModel = async (modelId: string) => {
   selectedModel.value = modelId
   // 保存为默认模型
-  try {
-    await saveDefaultAIModel(modelId)
-  } catch (error) {
-    console.error('保存默认AI模型失败:', error)
+  if(isBrowser) {
+    localStorage.setItem('floating-ai-model', modelId)
   }
   // 清空聊天记录（但不从数据库删除）
   chatMessages.value = []
@@ -441,7 +438,7 @@ const cancelGeneration = async () => {
     
     try {
       // 调用后端取消API
-      await invoke('cancel_ai_generation', { streamId: currentStreamingId.value })
+      await invoke('cancel_ai_stream', { streamId: currentStreamingId.value })
     } catch (error) {
       console.error('取消生成失败:', error)
     }
@@ -496,7 +493,7 @@ const clearAllMessages = async () => {
   // 清空数据库中的消息
   if (floatingConversationId.value) {
     try {
-      await clearAIConversation(floatingConversationId.value)
+      await invoke('clear_ai_conversation', { conversationId: floatingConversationId.value })
       console.log('已清空浮动聊天框的数据库记录')
     } catch (error) {
       console.error('清空数据库消息失败:', error)
@@ -1115,7 +1112,7 @@ let themeObserver: MutationObserver | null = null
 onMounted(async () => {
   if (isBrowser) {
     window.addEventListener('resize', handleResize)
-    await loadDefaultModel()
+    loadDefaultModel()
     setupCodeCopyFeature()
     
     // 应用代码块主题样式

@@ -1,8 +1,10 @@
-use crate::db::{DbManager, Tip, TipType};
+use crate::db::{self, DbManager, Tip, TipType};
 use anyhow::Result;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use tauri::State;
+use uuid::Uuid;
 
 // 前端传递的笔记数据
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -75,21 +77,21 @@ pub struct TipSummary {
 
 // 获取所有笔记
 #[tauri::command]
-pub async fn get_all_tips() -> Result<Vec<TipWithTags>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.get_all_tips().map_err(|e| e.to_string())?;
+pub async fn get_all_tips(db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_all_tips(&conn).map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
 
         // 获取笔记的图片
-        let images = get_images_for_tip(&db, &tip.id)?;
+        let images = get_images_for_tip(&conn, &tip.id)?;
 
         // 检查加密状态
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
+        let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").unwrap_or(false);
         
         // 如果笔记已加密但未解锁，返回占位符内容
         let content = if is_encrypted && !is_unlocked {
@@ -117,15 +119,15 @@ pub async fn get_all_tips() -> Result<Vec<TipWithTags>, String> {
 
 // 获取所有笔记的摘要
 #[tauri::command]
-pub async fn get_all_tip_summaries() -> Result<Vec<TipSummary>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.get_all_tips().map_err(|e| e.to_string())?;
+pub async fn get_all_tip_summaries(db_manager: State<'_, DbManager>) -> Result<Vec<TipSummary>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_all_tips(&conn).map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
 
         result.push(TipSummary {
             id: tip.id,
@@ -146,19 +148,19 @@ pub async fn get_all_tip_summaries() -> Result<Vec<TipSummary>, String> {
 
 // 获取单个笔记
 #[tauri::command]
-pub async fn get_tip(id: String) -> Result<TipWithTags, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tip = db.get_tip(&id).map_err(|e| e.to_string())?;
-    let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+pub async fn get_tip(id: String, db_manager: State<'_, DbManager>) -> Result<TipWithTags, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tip = db::get_tip(&conn, &id).map_err(|e| e.to_string())?;
+    let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
 
     // 获取笔记的图片
-    let images = get_images_for_tip(&db, &tip.id)?;
+    let images = get_images_for_tip(&conn, &tip.id)?;
 
     let tip_type_str: String = tip.tip_type.into();
 
     // 检查加密状态
-    let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-    let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
+    let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
+    let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").unwrap_or(false);
     
     // 如果笔记已加密但未解锁，返回占位符内容
     let content = if is_encrypted && !is_unlocked {
@@ -185,47 +187,47 @@ pub async fn get_tip(id: String) -> Result<TipWithTags, String> {
 
 // 保存笔记
 #[tauri::command]
-pub async fn save_tip(tip_data: TipData) -> Result<TipWithTags, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
+pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Result<TipWithTags, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
     
     let now = Utc::now().timestamp_millis();
     
-    // 检查是新建还是更新
     let is_new = tip_data.id.is_none() || tip_data.id.as_ref().unwrap().is_empty();
-    
-    // 如果是更新现有笔记，先获取原始数据以保留创建时间
-    let created_at = if !is_new {
-        match db.get_tip(tip_data.id.as_ref().unwrap()) {
-            Ok(existing_tip) => existing_tip.created_at,
-            Err(_) => now // 如果获取失败，则使用当前时间
-        }
+
+    let id = if is_new {
+        Uuid::new_v4().to_string()
     } else {
-        now // 新笔记使用当前时间作为创建时间
+        tip_data.id.clone().unwrap()
     };
     
-    // 转换为数据库模型，手动设置时间戳
+    let created_at = if !is_new {
+        match db::get_tip(&conn, &id) {
+            Ok(existing_tip) => existing_tip.created_at,
+            Err(_) => now
+        }
+    } else {
+        now
+    };
+    
     let tip_type = TipType::try_from(tip_data.tip_type.clone()).map_err(|e| e.to_string())?;
     
     let tip = Tip {
-        id: tip_data.id.clone().unwrap_or_default(),
+        id,
         title: tip_data.title.clone(),
         content: tip_data.content.clone(),
         tip_type,
         language: tip_data.language.clone(),
         category_id: tip_data.category_id.clone(),
-        created_at, // 使用正确的创建时间
-        updated_at: now, // 更新时间总是当前时间
+        created_at,
+        updated_at: now,
     };
 
-    // 保存笔记
-    let saved_tip: Tip = db.save_tip(tip).map_err(|e| e.to_string())?;
+    let saved_tip: Tip = db::save_tip(&conn, tip).map_err(|e| e.to_string())?;
 
-    // 处理标签
-    db.set_tip_tags(&saved_tip.id, &tip_data.tags)
+    db::set_tip_tags(&conn, &saved_tip.id, &tip_data.tags)
         .map_err(|e| e.to_string())?;
 
-    // 获取保存后的标签
-    let tags = db.get_tip_tags(&saved_tip.id).map_err(|e| e.to_string())?;
+    let tags = db::get_tip_tags(&conn, &saved_tip.id).map_err(|e| e.to_string())?;
 
     let tip_type_str: String = saved_tip.tip_type.into();
 
@@ -247,64 +249,48 @@ pub async fn save_tip(tip_data: TipData) -> Result<TipWithTags, String> {
 
 // 删除笔记
 #[tauri::command]
-pub async fn delete_tip(id: String) -> Result<(), String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    db.delete_tip(&id).map_err(|e| e.to_string())?;
-
-    Ok(())
+pub async fn delete_tip(id: String, db_manager: State<'_, DbManager>) -> Result<(), String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    db::delete_tip(&conn, &id).map_err(|e| e.to_string())
 }
 
 // 搜索笔记
 #[tauri::command]
-pub async fn search_tips(query: String) -> Result<Vec<TipWithTags>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.search_tips(&query).map_err(|e| e.to_string())?;
+pub async fn search_tips(query: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::search_tips(&conn, &query).map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-
-        // 检查加密状态
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
-        
-        // 如果笔记已加密但未解锁，返回占位符内容
-        let content = if is_encrypted && !is_unlocked {
-            "[此笔记已加密，请解锁后查看]".to_string()
-        } else {
-            tip.content
-        };
-
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content,
+            content: tip.content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
             created_at: tip.created_at,
             updated_at: tip.updated_at,
             tags,
-            images: None,
+            images: None, // Simplified for now
         });
     }
-
     Ok(result)
 }
 
-// 搜索笔记并返回摘要
+// 搜索笔记摘要
 #[tauri::command]
-pub async fn search_tips_summary(query: String) -> Result<Vec<TipSummary>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.search_tips(&query).map_err(|e| e.to_string())?;
+pub async fn search_tips_summary(query: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipSummary>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::search_tips(&conn, &query).map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
         result.push(TipSummary {
             id: tip.id,
             title: tip.title,
@@ -317,38 +303,23 @@ pub async fn search_tips_summary(query: String) -> Result<Vec<TipSummary>, Strin
             is_encrypted,
         });
     }
-
     Ok(result)
 }
 
 // 按分类获取笔记
 #[tauri::command]
-pub async fn get_tips_by_category(category_id: String) -> Result<Vec<TipWithTags>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db
-        .get_tips_by_category(&category_id)
-        .map_err(|e| e.to_string())?;
-
+pub async fn get_tips_by_category(category_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_category(&conn, &category_id).map_err(|e| e.to_string())?;
+    
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-
-        // 检查加密状态
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
-        
-        // 如果笔记已加密但未解锁，返回占位符内容
-        let content = if is_encrypted && !is_unlocked {
-            "[此笔记已加密，请解锁后查看]".to_string()
-        } else {
-            tip.content
-        };
-
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content,
+            content: tip.content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -358,36 +329,23 @@ pub async fn get_tips_by_category(category_id: String) -> Result<Vec<TipWithTags
             images: None,
         });
     }
-
     Ok(result)
 }
 
 // 按标签获取笔记
 #[tauri::command]
-pub async fn get_tips_by_tag(tag_id: String) -> Result<Vec<TipWithTags>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.get_tips_by_tag(&tag_id).map_err(|e| e.to_string())?;
-
+pub async fn get_tips_by_tag(tag_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_tag(&conn, &tag_id).map_err(|e| e.to_string())?;
+    
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-
-        // 检查加密状态
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
-        
-        // 如果笔记已加密但未解锁，返回占位符内容
-        let content = if is_encrypted && !is_unlocked {
-            "[此笔记已加密，请解锁后查看]".to_string()
-        } else {
-            tip.content
-        };
-
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content,
+            content: tip.content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
@@ -397,23 +355,15 @@ pub async fn get_tips_by_tag(tag_id: String) -> Result<Vec<TipWithTags>, String>
             images: None,
         });
     }
-
     Ok(result)
 }
 
 // 实现保存图片的API
 #[tauri::command]
-pub async fn save_tip_image(image_data: ImageData) -> Result<String, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-
-    // 保存图片到数据库
-    db.save_image(
-        &image_data.tip_id,
-        &image_data.image_id,
-        &image_data.image_data,
-    )
-    .map_err(|e| e.to_string())?;
-
+pub async fn save_tip_image(image_data: ImageData, db_manager: State<'_, DbManager>) -> Result<String, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    db::save_image(&conn, &image_data.tip_id, &image_data.image_id, &image_data.image_data)
+        .map_err(|e| e.to_string())?;
     Ok(image_data.image_id)
 }
 
@@ -423,45 +373,38 @@ pub async fn get_tip_images(
     tip_id: String,
     limit: Option<i32>,
     offset: Option<i32>,
+    db_manager: State<'_, DbManager>
 ) -> Result<HashMap<String, String>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-
-    // 设置默认限制，防止一次性加载过多数据
-    let limit = limit.unwrap_or(10).min(50); // 最多50张图片
-    let offset = offset.unwrap_or(0).max(0);
-
-    let images_map = get_images_for_tip_paginated(&db, &tip_id, limit, offset)?;
-
-    Ok(images_map.unwrap_or_default())
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let images = if let (Some(l), Some(o)) = (limit, offset) {
+        db::get_tip_images_paginated(&conn, &tip_id, l, o)
+    } else {
+        db::get_tip_images(&conn, &tip_id)
+    }.map_err(|e| e.to_string())?;
+    
+    Ok(images.into_iter().collect())
 }
 
 // 实现获取笔记图片总数的API
 #[tauri::command(rename_all = "snake_case")]
-pub async fn get_tip_images_count(tip_id: String) -> Result<i64, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-
-    let count = db
-        .get_tip_images_count(&tip_id)
-        .map_err(|e| e.to_string())?;
-
-    Ok(count)
+pub async fn get_tip_images_count(tip_id: String, db_manager: State<'_, DbManager>) -> Result<i64, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    db::get_tip_images_count(&conn, &tip_id).map_err(|e| e.to_string())
 }
 
 // 实现删除图片的API
 #[tauri::command]
-pub async fn delete_tip_image(image_id: String) -> Result<(), String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    db.delete_image(&image_id).map_err(|e| e.to_string())?;
-
-    Ok(())
+pub async fn delete_tip_image(image_id: String, db_manager: State<'_, DbManager>) -> Result<(), String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    db::delete_image(&conn, &image_id).map_err(|e| e.to_string())
 }
 
 // 工具函数：获取笔记的所有图片并转换为HashMap
 fn get_images_for_tip(
-    db: &DbManager,
+    conn: &db::DbConnection,
     tip_id: &str,
 ) -> Result<Option<HashMap<String, String>>, String> {
-    let images = db.get_tip_images(tip_id).map_err(|e| e.to_string())?;
+    let images = db::get_tip_images(conn, tip_id).map_err(|e| e.to_string())?;
 
     if images.is_empty() {
         return Ok(None);
@@ -477,13 +420,12 @@ fn get_images_for_tip(
 
 // 工具函数：分页获取笔记的图片并转换为HashMap
 fn get_images_for_tip_paginated(
-    db: &DbManager,
+    conn: &db::DbConnection,
     tip_id: &str,
     limit: i32,
     offset: i32,
 ) -> Result<Option<HashMap<String, String>>, String> {
-    let images = db
-        .get_tip_images_paginated(tip_id, limit, offset)
+    let images = db::get_tip_images_paginated(conn, tip_id, limit, offset)
         .map_err(|e| e.to_string())?;
 
     if images.is_empty() {
@@ -499,43 +441,28 @@ fn get_images_for_tip_paginated(
 }
 
 #[tauri::command]
-pub async fn get_tips_by_category_recursive(category_id: String) -> Result<Vec<TipWithTags>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db.get_tips_by_category_recursive(&category_id).map_err(|e| e.to_string())?;
-
+pub async fn get_tips_by_category_recursive(category_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_category_recursive(&conn, &category_id)
+        .map_err(|e| e.to_string())?;
+    
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-
-        // 获取笔记的图片
-        let images = get_images_for_tip(&db, &tip.id)?;
-
-        // 检查加密状态
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-        let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
-        
-        // 如果笔记已加密但未解锁，返回占位符内容
-        let content = if is_encrypted && !is_unlocked {
-            "[此笔记已加密，请解锁后查看]".to_string()
-        } else {
-            tip.content
-        };
-
         result.push(TipWithTags {
             id: tip.id,
             title: tip.title,
-            content,
+            content: tip.content,
             tip_type: tip_type_str,
             language: tip.language,
             category_id: tip.category_id,
             created_at: tip.created_at,
             updated_at: tip.updated_at,
             tags,
-            images,
+            images: None,
         });
     }
-
     Ok(result)
 }
 
@@ -543,18 +470,16 @@ pub async fn get_tips_by_category_recursive(category_id: String) -> Result<Vec<T
 pub async fn get_tips_paged(
     page: i64,
     page_size: i64,
+    db_manager: State<'_, DbManager>
 ) -> Result<Vec<TipSummary>, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tips = db
-        .get_tips_paged(page, page_size)
-        .map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tips = db::get_tips_paged(&conn, page, page_size).map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db.get_tip_tags(&tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-
-        let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
 
         result.push(TipSummary {
             id: tip.id,
@@ -573,16 +498,8 @@ pub async fn get_tips_paged(
 }
 
 #[tauri::command]
-pub async fn get_tip_content(id: String) -> Result<String, String> {
-    let db = DbManager::init().map_err(|e| e.to_string())?;
-    let tip = db.get_tip(&id).map_err(|e| e.to_string())?;
-
-    let is_encrypted = db.is_item_encrypted(&tip.id, "note").unwrap_or(false);
-    let is_unlocked = db.is_item_unlocked(&tip.id, "note").unwrap_or(false);
-
-    if is_encrypted && !is_unlocked {
-        return Ok("[This note is encrypted. Please unlock to view.]".to_string());
-    }
-
+pub async fn get_tip_content(id: String, db_manager: State<'_, DbManager>) -> Result<String, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let tip = db::get_tip(&conn, &id).map_err(|e| e.to_string())?;
     Ok(tip.content)
 }

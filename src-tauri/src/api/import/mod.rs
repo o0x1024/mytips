@@ -77,11 +77,11 @@ pub fn import_from_directory(
     directory_path: String,
     target_notebook_id: Option<String>,
     options: ImportOptions,
-    db_state: tauri::State<'_, std::sync::Mutex<DbManager>>,
+    db_manager: tauri::State<'_, DbManager>,
 ) -> Result<ImportResult, String> {
-    let db = db_state
-        .lock()
-        .map_err(|e| format!("数据库锁定失败: {}", e))?;
+    let conn = db_manager
+        .get_conn()
+        .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
     let path = Path::new(&directory_path);
@@ -89,7 +89,7 @@ pub fn import_from_directory(
         return Err("指定的目录不存在".to_string());
     }
 
-    match process_directory_sync(&*db, &path, target_notebook_id, &options, &mut result) {
+    match process_directory_sync(&conn, &path, target_notebook_id, &options, &mut result) {
         Ok(_) => {
             result.success = true;
             Ok(result)
@@ -107,11 +107,11 @@ pub fn import_markdown_file(
     _app: tauri::AppHandle,
     file_path: String,
     target_notebook_id: String,
-    db_state: tauri::State<'_, std::sync::Mutex<DbManager>>,
+    db_manager: tauri::State<'_, DbManager>,
 ) -> Result<ImportResult, String> {
-    let db = db_state
-        .lock()
-        .map_err(|e| format!("数据库锁定失败: {}", e))?;
+    let conn = db_manager
+        .get_conn()
+        .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
     let path = Path::new(&file_path);
@@ -119,7 +119,7 @@ pub fn import_markdown_file(
         return Err("指定的文件不存在".to_string());
     }
 
-    match import_single_file_sync(&*db, &path, &target_notebook_id, &mut result) {
+    match import_single_file_sync(&conn, &path, &target_notebook_id, &mut result) {
         Ok(_) => {
             result.success = true;
             Ok(result)
@@ -152,7 +152,7 @@ pub fn get_import_preview(directory_path: String) -> Result<ImportPreview, Strin
 
 // 同步处理目录
 fn process_directory_sync(
-    db: &DbManager,
+    conn: &crate::db::DbConnection,
     dir_path: &Path,
     parent_notebook_id: Option<String>,
     options: &ImportOptions,
@@ -167,15 +167,13 @@ fn process_directory_sync(
 
     let notebook_id = if let Some(parent_id) = parent_notebook_id {
         // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
-        let category = db
-            .create_category(&dir_name, Some(&parent_id))
+        let category = crate::db::create_category(conn, &dir_name, Some(&parent_id))
             .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
         result.notebooks_created += 1;
         category.id
     } else {
         // 创建顶级笔记本
-        let category = db
-            .create_category(&dir_name, None)
+        let category = crate::db::create_category(conn, &dir_name, None)
             .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
         result.notebooks_created += 1;
         category.id
@@ -187,7 +185,7 @@ fn process_directory_sync(
             let path = entry.path();
 
             if path.is_file() && is_markdown_file(&path) {
-                if let Err(e) = import_single_file_sync(db, &path, &notebook_id, result) {
+                if let Err(e) = import_single_file_sync(conn, &path, &notebook_id, result) {
                     result
                         .errors
                         .push(format!("导入文件 {} 失败: {}", path.display(), e));
@@ -195,7 +193,7 @@ fn process_directory_sync(
             } else if path.is_dir() && options.include_subdirs {
                 // 递归处理子目录，将当前笔记本ID作为父ID传递
                 if let Err(e) =
-                    process_directory_sync(db, &path, Some(notebook_id.clone()), options, result)
+                    process_directory_sync(conn, &path, Some(notebook_id.clone()), options, result)
                 {
                     result
                         .errors
@@ -210,7 +208,7 @@ fn process_directory_sync(
 
 // 导入单个文件（同步版本）
 fn import_single_file_sync(
-    db: &DbManager,
+    conn: &crate::db::DbConnection,
     file_path: &Path,
     notebook_id: &str,
     result: &mut ImportResult,
@@ -246,14 +244,12 @@ fn import_single_file_sync(
         };
 
         // 保存笔记
-        match db.save_tip(tip) {
+        match crate::db::save_tip(conn, tip) {
             Ok(_) => {
                 result.notes_imported += 1;
                 Ok(())
-            },
-            Err(e) => {
-                Err(anyhow!("保存笔记失败: {}", e))
             }
+            Err(e) => Err(anyhow!("保存笔记失败: {}", e)),
         }
     } else {
         // 有图片的情况，需要先保存笔记再保存图片
@@ -269,31 +265,31 @@ fn import_single_file_sync(
         };
 
         // 保存笔记
-        match db.save_tip(tip) {
+        match crate::db::save_tip(conn, tip) {
             Ok(saved_tip) => {
                 // 使用保存后返回的笔记ID来保存图片，确保外键约束
                 let actual_tip_id = saved_tip.id;
-                
+
                 // 确认笔记ID是否为空
                 if actual_tip_id.is_empty() {
                     result.warnings.push(format!(
-                        "笔记ID为空，无法保存图片。文件: {}", 
+                        "笔记ID为空，无法保存图片。文件: {}",
                         file_path.display()
                     ));
                     result.notes_imported += 1;
                     return Ok(());
                 }
-                
+
                 // 保存图片
                 for (image_id, base64_data) in image_data {
-                    match db.save_image(&actual_tip_id, &image_id, &base64_data) {
+                    match crate::db::save_image(conn, &actual_tip_id, &image_id, &base64_data) {
                         Ok(_) => {
                             result.images_processed += 1;
-                        },
+                        }
                         Err(e) => {
                             // 记录警告但不中断导入过程
                             result.warnings.push(format!(
-                                "保存图片 {} 失败: {}。笔记ID: {}", 
+                                "保存图片 {} 失败: {}。笔记ID: {}",
                                 image_id, e, actual_tip_id
                             ));
                         }
@@ -302,10 +298,8 @@ fn import_single_file_sync(
 
                 result.notes_imported += 1;
                 Ok(())
-            },
-            Err(e) => {
-                Err(anyhow!("保存笔记失败: {}", e))
             }
+            Err(e) => Err(anyhow!("保存笔记失败: {}", e)),
         }
     }
 }

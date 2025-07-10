@@ -433,9 +433,9 @@ fn is_sensitive_content(content: &str) -> bool {
 
 /// 清理过期的剪贴板条目
 pub fn clean_expired_entries(app_handle: &AppHandle) {
-    // 获取剪贴板设置
-    if let Ok(db) = app_handle.state::<Mutex<DbManager>>().lock() {
-        if let Ok(setting) = db.get_setting("clipboard_settings") {
+    let db_manager = app_handle.state::<DbManager>();
+    if let Ok(conn) = db_manager.get_conn() {
+        if let Ok(setting) = crate::db::get_setting(&conn, "clipboard_settings") {
             let settings = setting
                 .and_then(|s| ClipboardSettings::from_json(&s).ok())
                 .unwrap_or_default();
@@ -450,7 +450,7 @@ pub fn clean_expired_entries(app_handle: &AppHandle) {
                 let expire_timestamp = expire_date.timestamp();
 
                 // 删除过期条目
-                if let Err(e) = db.delete_expired_clipboard_entries(expire_timestamp) {
+                if let Err(e) = crate::db::delete_expired_clipboard_entries(&conn, expire_timestamp) {
                     eprintln!("清理过期剪贴板条目失败: {}", e);
                 }
             }
@@ -514,16 +514,18 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
             }
 
             // 获取剪贴板设置
-            let settings = if let Ok(db) = app_handle.state::<Mutex<DbManager>>().lock() {
-                match db.get_setting("clipboard_settings") {
-                    Ok(Some(settings_str)) => match ClipboardSettings::from_json(&settings_str) {
-                        Ok(settings) => settings,
-                        Err(_) => ClipboardSettings::default(),
-                    },
-                    _ => ClipboardSettings::default(),
+            let settings = {
+                let db_manager = app_handle.state::<DbManager>();
+                if let Ok(conn) = db_manager.get_conn() {
+                    match crate::db::get_setting(&conn, "clipboard_settings") {
+                        Ok(Some(settings_str)) => {
+                            ClipboardSettings::from_json(&settings_str).unwrap_or_default()
+                        }
+                        _ => ClipboardSettings::default(),
+                    }
+                } else {
+                    ClipboardSettings::default()
                 }
-            } else {
-                ClipboardSettings::default()
             };
 
             // 检查文本内容
@@ -594,37 +596,36 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                         }
                     }
 
-                    // 先检查该内容是否已经存在于数据库中，避免重复添加
-                    let db_state: State<Mutex<DbManager>> = app_handle.state();
-                    let db_guard = match db_state.lock() {
-                        Ok(guard) => guard,
-                        Err(e) => {
-                            eprintln!("锁定数据库失败: {}", e);
+                    // 获取数据库连接
+                    let db_manager = app_handle.state::<DbManager>();
+                    if let Ok(conn) = db_manager.get_conn() {
+                        // 检查是否已经存在相同内容
+                        let content_exists =
+                            match crate::db::check_clipboard_entry_exists(&conn, &current_text) {
+                                Ok(exists) => exists,
+                                Err(e) => {
+                                    eprintln!("检查剪贴板内容是否存在失败: {}", e);
+                                    false // 如果检查失败，继续尝试添加
+                                }
+                            };
+
+                        if content_exists {
+                            println!("相同内容已存在于数据库，跳过添加");
                             continue;
                         }
-                    };
 
-                    // 检查是否已经存在相同内容
-                    let content_exists = match db_guard.check_clipboard_entry_exists(&current_text)
-                    {
-                        Ok(exists) => exists,
-                        Err(e) => {
-                            eprintln!("检查剪贴板内容是否存在失败: {}", e);
-                            false // 如果检查失败，继续尝试添加
+                        // 添加到数据库
+                        if let Err(e) =
+                            crate::db::add_clipboard_entry(&conn, &current_text, source.as_deref())
+                        {
+                            eprintln!("添加剪贴板内容到数据库失败: {}", e);
+                        } else {
+                            println!("剪贴板文本内容已添加到临时笔记区");
+                            has_new_content = true;
                         }
-                    };
-
-                    if content_exists {
-                        println!("相同内容已存在于数据库，跳过添加");
-                        continue;
-                    }
-
-                    // 添加到数据库
-                    if let Err(e) = db_guard.add_clipboard_entry(&current_text, source.as_deref()) {
-                        eprintln!("添加剪贴板内容到数据库失败: {}", e);
                     } else {
-                        println!("剪贴板文本内容已添加到临时笔记区");
-                        has_new_content = true;
+                        eprintln!("获取数据库连接失败");
+                        continue;
                     }
                 }
             }
@@ -707,10 +708,11 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                             }
 
                             // 获取数据库连接并保存图片内容
-                            if let Ok(db) = app_handle.state::<Mutex<DbManager>>().lock() {
+                            let db_manager = app_handle.state::<DbManager>();
+                             if let Ok(conn) = db_manager.get_conn() {
                                 // 检查是否已经存在相同内容
                                 let content_exists =
-                                    match db.check_clipboard_entry_exists(&img_text) {
+                                    match crate::db::check_clipboard_entry_exists(&conn, &img_text) {
                                         Ok(exists) => exists,
                                         Err(e) => {
                                             eprintln!("检查剪贴板图片内容是否存在失败: {}", e);
@@ -723,7 +725,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                     continue;
                                 }
 
-                                if let Err(e) = db.add_clipboard_entry(&img_text, source.as_deref())
+                                if let Err(e) = crate::db::add_clipboard_entry(&conn, &img_text, source.as_deref())
                                 {
                                     eprintln!("添加剪贴板图片内容到数据库失败: {}", e);
                                 } else {
@@ -733,7 +735,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                             }
                         }
                     }
-                    Err(e) => {
+                    Err(_) => {
                         // 忽略无图片内容的错误
                         // if !e.to_string().contains("no image content available") {
                         //     eprintln!("获取剪贴板图片失败: {}", e);

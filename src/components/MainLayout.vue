@@ -253,13 +253,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTipsStore, Tip, Category, TipSummary } from '../stores/tipsStore'
 import { useUIStore } from '../stores/uiStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
-import { showConfirm } from '../services/dialog'
+import { showConfirm, showAlert } from '../services/dialog'
 
 // Components
 import SideNavBar from './SideNavBar.vue'
@@ -416,22 +416,29 @@ watch(navSearchQuery, (query) => {
 
 // 接收来自NoteList的事件
 async function handleNoteSelection(noteOrId: string | Tip) {
+  let note: Tip | null = null;
   if (typeof noteOrId === 'string') {
-    const note = await tipsStore.fetchTip(noteOrId)
-    if (note) {
-      selectNote(note)
-    }
-          } else {
-    selectNote(noteOrId)
+    note = await tipsStore.fetchTip(noteOrId);
+  } else {
+    note = noteOrId;
+  }
+
+  if (note) {
+    await nextTick(); // 等待DOM更新
+    selectNote(note);
+  } else {
+    console.warn(`Note not found for selection:`, noteOrId);
   }
 }
 
 function selectNote(note: Tip) {
   if (note && note.id) {
-    selectedNoteId.value = note.id
-    selectedNote.value = note
-      } else {
+    selectedNote.value = { ...note }; // 使用扩展运算符创建一个新的对象
+    selectedNoteId.value = note.id;
+  } else {
     console.warn("Invalid note selected:", note);
+    selectedNote.value = null;
+    selectedNoteId.value = null;
   }
 }
 
@@ -476,21 +483,26 @@ watch(selectedTags, () => {
 // Example of an updated method:
 async function createNewNote() {
   const newNoteData = {
-    title: '新建笔记',
-    content: '',
-    tip_type: 'markdown',
-    tags: [],
-    category_id: selectedNotebookId.value || undefined
+    title: '无标题笔记',
+    content: '# 新笔记\n\n在这里开始你的创作...',
+    tip_type: 'markdown', // 添加缺失的字段
+    category_id: selectedNotebookId.value || undefined,
+    tags: selectedTags.value // 直接使用 selectedTags
+  };
+
+  const savedNote = await tipsStore.saveTip(newNoteData);
+
+  // 新增: 保存成功后立即更新计数
+  if (savedNote && savedNote.category_id) {
+    updateNotebookTreeCount(savedNote.category_id, 1);
   }
-  const newNote = await tipsStore.saveTip(newNoteData)
-  if (newNote) {
-    // saveTip 已经把新笔记插入 storeTips，避免重复插入
- 
-    // 直接在前端更新笔记本树的计数
-    updateNotebookTreeCount(newNote.category_id, 1); // 增加计数
-    
-    // 选中新创建的笔记
-    selectNote(newNote)
+
+  if (savedNote) {
+    // saveTip 应该返回完整的笔记对象，并已将其添加到store中
+    await handleNoteSelection(savedNote);
+  } else {
+    console.error("Failed to create new note.");
+    showAlert('创建新笔记失败，请稍后再试。', { title: '错误' });
   }
 }
 
