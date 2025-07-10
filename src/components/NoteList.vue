@@ -107,15 +107,6 @@
             </div>
           </div>
           <p class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(filteredNotes[virtualRow.index]) }}</p>
-          <div v-if="filteredNotes[virtualRow.index].tags && filteredNotes[virtualRow.index].tags.length > 0" class="flex flex-wrap gap-1 mt-1">
-            <span 
-              v-for="tag in filteredNotes[virtualRow.index].tags.slice(0, 3)" 
-              :key="tag.id" 
-              class="badge badge-sm border-base-300 text-base-content/80 bg-transparent">
-              {{ tag.name }}
-            </span>
-            <span v-if="filteredNotes[virtualRow.index].tags.length > 3" class="badge badge-sm">+{{ filteredNotes[virtualRow.index].tags.length - 3 }}</span>
-          </div>
         </div>
       </div>
 
@@ -484,8 +475,7 @@ watch(
       const query = searchQuery.value.toLowerCase()
       result = result.filter(note => {
         return (
-          (note.title || '').toLowerCase().includes(query) ||
-          (note.tags || []).some(tag => tag.name.toLowerCase().includes(query))
+          (note.title || '').toLowerCase().includes(query)
         )
       })
     }

@@ -239,7 +239,7 @@
               </div>
 
               <!-- 忽略敏感内容设置 -->
-              <div class="form-control mb-4">
+              <!-- <div class="form-control mb-4">
                 <label class="label cursor-pointer justify-start gap-4">
                   <span class="label-text">忽略敏感内容</span>
                   <input type="checkbox" class="toggle toggle-primary"
@@ -248,7 +248,7 @@
                 <p class="text-xs text-base-content/80 mt-1">
                   启用后，将自动忽略从密码框等敏感区域复制的内容
                 </p>
-              </div>
+              </div> -->
 
               <!-- 捕获图片设置 -->
               <div class="form-control mb-4">

@@ -167,6 +167,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { useTipsStore } from '../stores/tipsStore'
 
 // 类型定义
 interface Tag {
@@ -185,6 +186,9 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: Tag[]): void;
   (e: 'saveNote'): void;
 }>()
+
+// Store
+const tipsStore = useTipsStore()
 
 // 标签相关状态
 const newTag = ref('')
@@ -346,25 +350,14 @@ async function addTag() {
         addTagToNote(existingTag)
       }
     } else {
-      // 创建新标签
-      const { listen } = await import('@tauri-apps/api/event')
-      const unlisten = await listen('tag-created', (event: { payload: any }) => {
-        const newTag = event.payload as Tag
-        // 更新可用标签列表
-        const existingIndex = availableTags.value.findIndex(t => t.id === newTag.id)
-        if (existingIndex >= 0) {
-          availableTags.value[existingIndex] = newTag
-        } else {
-          availableTags.value.push(newTag)
-        }
-        
+      // 通过 Pinia store 创建新标签并自动同步全局状态
+      const createdTag = await tipsStore.createTag(tagName)
+      if (createdTag) {
+        // 更新本地可用标签列表
+        availableTags.value.push(createdTag)
         // 添加到笔记
-        addTagToNote(newTag)
-        unlisten()
-      })
-      
-      // 创建新标签
-      await invoke('create_tag', { name: tagName })
+        addTagToNote(createdTag)
+      }
     }
     
     // 清空输入框

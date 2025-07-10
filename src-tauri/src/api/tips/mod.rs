@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 use uuid::Uuid;
+use rusqlite::{params, OptionalExtension};
 
 // 前端传递的笔记数据
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -188,63 +189,109 @@ pub async fn get_tip(id: String, db_manager: State<'_, DbManager>) -> Result<Tip
 // 保存笔记
 #[tauri::command]
 pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Result<TipWithTags, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    
-    let now = Utc::now().timestamp_millis();
-    
-    let is_new = tip_data.id.is_none() || tip_data.id.as_ref().unwrap().is_empty();
+    let mut conn = db_manager.get_conn().map_err(|e| e.to_string())?;
 
-    let id = if is_new {
-        Uuid::new_v4().to_string()
-    } else {
-        tip_data.id.clone().unwrap()
-    };
+    // 使用事务确保操作的原子性
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let now = Utc::now().timestamp_millis();
+    let tip_type_str: String = TipType::try_from(tip_data.tip_type.clone())
+        .map_err(|e| format!("Invalid tip type: {}", e))?
+        .into();
+
+    let tip_id = tip_data.id.clone().unwrap_or_else(|| Uuid::new_v4().to_string());
+    let is_new_tip = tip_data.id.is_none();
     
-    let created_at = if !is_new {
-        match db::get_tip(&conn, &id) {
-            Ok(existing_tip) => existing_tip.created_at,
-            Err(_) => now
-        }
+    // 如果是更新操作，需要获取原始的创建时间
+    let created_at = if !is_new_tip {
+        tx.query_row(
+            "SELECT created_at FROM tips WHERE id = ?1",
+            params![&tip_id],
+            |row| row.get(0)
+        ).unwrap_or(now) // 如果找不到（虽然不应该），就用当前时间
     } else {
         now
     };
+
+    // 插入或更新笔记
+    tx.execute(
+        "INSERT INTO tips (id, title, content, tip_type, language, category_id, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+         ON CONFLICT(id) DO UPDATE SET
+           title = excluded.title,
+           content = excluded.content,
+           tip_type = excluded.tip_type,
+           language = excluded.language,
+           category_id = excluded.category_id,
+           updated_at = excluded.updated_at",
+        params![
+            &tip_id,
+            &tip_data.title,
+            &tip_data.content,
+            &tip_type_str,
+            &tip_data.language,
+            &tip_data.category_id,
+            created_at,
+            now
+        ],
+    ).map_err(|e| e.to_string())?;
+
+    // 更新标签
+    // 1. 清除所有旧的标签关联
+    tx.execute("DELETE FROM tip_tags WHERE tip_id = ?1", params![&tip_id])
+        .map_err(|e| e.to_string())?;
     
-    let tip_type = TipType::try_from(tip_data.tip_type.clone()).map_err(|e| e.to_string())?;
-    
-    let tip = Tip {
-        id,
-        title: tip_data.title.clone(),
-        content: tip_data.content.clone(),
-        tip_type,
-        language: tip_data.language.clone(),
-        category_id: tip_data.category_id.clone(),
+    // 2. 添加新的标签关联
+    let mut tags = Vec::new();
+    for tag_name in tip_data.tags.iter().filter(|t| !t.trim().is_empty()) {
+        // 查找标签是否存在
+        let tag: db::Tag = match tx.query_row(
+            "SELECT id, name FROM tags WHERE name = ?1",
+            params![tag_name],
+            |row| Ok(db::Tag { id: row.get(0)?, name: row.get(1)? })
+        ).optional().map_err(|e| e.to_string())? {
+            Some(t) => t, // 标签已存在
+            None => { // 如果不存在，则创建新标签
+                let new_tag = db::Tag {
+                    id: Uuid::new_v4().to_string(),
+                    name: tag_name.clone(),
+                };
+                tx.execute(
+                    "INSERT INTO tags (id, name) VALUES (?1, ?2)",
+                    params![&new_tag.id, &new_tag.name],
+                ).map_err(|e| e.to_string())?;
+                new_tag
+            }
+        };
+
+        // 关联标签和笔记，忽略已存在的关联
+        tx.execute(
+            "INSERT OR IGNORE INTO tip_tags (tip_id, tag_id) VALUES (?1, ?2)",
+            params![&tip_id, &tag.id],
+        ).map_err(|e| e.to_string())?;
+        
+        tags.push(tag);
+    }
+
+    // 提交事务
+    tx.commit().map_err(|e| e.to_string())?;
+
+    // 事务提交后，获取图片信息（这是一个独立查询，不影响事务）
+    let final_conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let images = get_images_for_tip(&final_conn, &tip_id)?;
+
+    Ok(TipWithTags {
+        id: tip_id,
+        title: tip_data.title,
+        content: tip_data.content,
+        tip_type: tip_data.tip_type,
+        language: tip_data.language,
+        category_id: tip_data.category_id,
         created_at,
         updated_at: now,
-    };
-
-    let saved_tip: Tip = db::save_tip(&conn, tip).map_err(|e| e.to_string())?;
-
-    db::set_tip_tags(&conn, &saved_tip.id, &tip_data.tags)
-        .map_err(|e| e.to_string())?;
-
-    let tags = db::get_tip_tags(&conn, &saved_tip.id).map_err(|e| e.to_string())?;
-
-    let tip_type_str: String = saved_tip.tip_type.into();
-
-    let result = TipWithTags {
-        id: saved_tip.id,
-        title: saved_tip.title,
-        content: saved_tip.content,
-        tip_type: tip_type_str,
-        language: saved_tip.language,
-        category_id: saved_tip.category_id,
-        created_at: saved_tip.created_at,
-        updated_at: saved_tip.updated_at,
         tags,
-        images: None,
-    };
-
-    Ok(result)
+        images,
+    })
 }
 
 // 删除笔记

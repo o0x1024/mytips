@@ -439,7 +439,8 @@ export const useTipsStore = defineStore('tips', () => {
     try {
       isLoading.value = true
       error.value = null
-      const result = await invoke<Tip[]>('get_tips_by_category', { categoryId })
+      // 调用递归接口，获取目标分类及其所有子分类下的笔记
+      const result = await invoke<Tip[]>('get_tips_by_category_recursive', { categoryId })
       
       // 转换
       tips.value = result.map(tip => ({

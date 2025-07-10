@@ -1,6 +1,6 @@
 <template>
   <div class="modal" :class="{ 'modal-open': visible }">
-    <div :class="['modal-box', 'prose', type === 'confirm' ? 'max-w-md' : '']">
+    <div class="modal-box">
       <h3 v-if="title" class="font-bold text-lg">{{ title }}</h3>
       <div class="py-4" v-html="renderedMessage"></div>
       <div class="modal-action">

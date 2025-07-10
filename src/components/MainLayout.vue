@@ -699,37 +699,48 @@ function createResizeHandler(
     const startWidth = widthRef.value;
     let animationFrameId: number | null = null;
 
+    // Add classes to disable transitions and set global cursor/user-select
+    document.body.classList.add('dragging');
+    container.classList.add('resizing');
+
     const onMouseMove = (moveEvent: MouseEvent) => {
+      // If mouse button is released, stop listening
+      if (moveEvent.buttons === 0) {
+        onMouseUp();
+        return;
+      }
+
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
 
       animationFrameId = requestAnimationFrame(() => {
         const deltaX = moveEvent.clientX - startX;
         let newWidth = startWidth + deltaX;
 
-        if (newWidth < minWidth) newWidth = minWidth;
-        if (newWidth > maxWidth) newWidth = maxWidth;
+        // Clamp width within min/max bounds
+        newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
 
         container.style.width = `${newWidth}px`;
       });
     };
 
-    const onMouseUp = (upEvent: MouseEvent) => {
+    const onMouseUp = () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
       
       const finalWidth = parseFloat(container.style.width) || widthRef.value;
       widthRef.value = finalWidth;
       localStorage.setItem(storageKey, String(finalWidth));
 
+      // Cleanup event listeners
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+
+      // Cleanup classes
+      document.body.classList.remove('dragging');
+      container.classList.remove('resizing');
     };
 
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
   };
 }
 

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invokeSafe as invoke } from './api'
 
 // AI服务提供商信息
 export interface AIProvider {

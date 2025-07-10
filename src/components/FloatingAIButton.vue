@@ -31,7 +31,6 @@ const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 // 记录拖动开始位置，用于判断是否真正拖动了
 const dragStartPosition = ref({ x: 0, y: 0 })
-const hasDragged = ref(false)
 // 消息和对话内容
 const userMessage = ref('')
 const chatMessages = ref<Array<{role: string, content: string, timestamp: number}>>([])
@@ -70,9 +69,47 @@ const availableModels = ref([
 
 // 计算聊天窗口位置
 const chatWindowPosition = computed(() => {
+  const buttonSize = 50; // AI按钮的尺寸
+  const margin = 10; // 窗口与屏幕边缘的间距
+
+  // 默认情况下，弹出框的底部与按钮的顶部对齐
+  let top = position.value.y - chatWindowSize.value.height;
+
+  // 根据按钮在左侧还是右侧，决定弹出框的水平对齐方式
+  let left;
+  if (isRightEdge.value) {
+    // 如果按钮在右侧，则弹出框的右边缘与按钮的右边缘对齐
+    left = position.value.x + buttonSize - chatWindowSize.value.width;
+  } else {
+    // 否则，弹出框的左边缘与按钮的左边缘对齐
+    left = position.value.x;
+  }
+
+  // --- 边界碰撞检测 ---
+  
+  // 确保弹出框不会超出屏幕顶部
+  if (top < margin) {
+    top = margin;
+  }
+  
+  // 确保弹出框不会超出屏幕底部
+  if (top + chatWindowSize.value.height > windowHeight.value - margin) {
+    top = windowHeight.value - chatWindowSize.value.height - margin;
+  }
+  
+  // 确保弹出框不会超出屏幕左边
+  if (left < margin) {
+    left = margin;
+  }
+  
+  // 确保弹出框不会超出屏幕右边
+  if (left + chatWindowSize.value.width > windowWidth.value - margin) {
+    left = windowWidth.value - chatWindowSize.value.width - margin;
+  }
+
   return {
-    left: `${Math.min(position.value.x, windowWidth.value - chatWindowSize.value.width - 20)}px`,
-    top: `${Math.min(position.value.y, windowHeight.value - chatWindowSize.value.height - 50)}px`,
+    left: `${left}px`,
+    top: `${top}px`,
     width: `${chatWindowSize.value.width}px`,
     height: `${chatWindowSize.value.height}px`
   }
@@ -297,15 +334,10 @@ const sendMessage = async () => {
 
 // 处理按钮鼠标按下事件
 const handleMouseDown = (event: MouseEvent) => {
-  event.preventDefault() // 防止触发其他事件
+  event.preventDefault()
   isDragging.value = true
-  hasDragged.value = false
   
-  // 记录拖动开始位置
-  dragStartPosition.value = {
-    x: event.clientX,
-    y: event.clientY
-  }
+  dragStartPosition.value = { x: event.clientX, y: event.clientY }
   
   dragOffset.value = {
     x: event.clientX - position.value.x,
@@ -317,43 +349,29 @@ const handleMouseDown = (event: MouseEvent) => {
 
 // 拖动中
 const onDrag = (event: MouseEvent) => {
-  if (isDragging.value) {
-    // 计算拖动距离，如果超过5像素就认为是真正的拖动
-    const dragDistance = Math.sqrt(
-      Math.pow(event.clientX - dragStartPosition.value.x, 2) + 
-      Math.pow(event.clientY - dragStartPosition.value.y, 2)
-    )
-    
-    if (dragDistance > 5) {
-      hasDragged.value = true
-    }
-    
-    position.value = {
-      x: event.clientX - dragOffset.value.x,
-      y: event.clientY - dragOffset.value.y
-    }
-    checkEdgeSnap()
+  if (!isDragging.value) return;
+  position.value = {
+    x: event.clientX - dragOffset.value.x,
+    y: event.clientY - dragOffset.value.y
   }
 }
 
 // 处理按钮鼠标释放事件
-const handleMouseUp = () => {
+const handleMouseUp = (event: MouseEvent) => {
   isDragging.value = false
   document.removeEventListener('mousemove', onDrag)
   document.removeEventListener('mouseup', handleMouseUp)
   
-  // 检查是否需要贴边并半隐藏
-  checkEdgeSnap()
-  
-  // 如果没有进行拖动，则认为是点击操作
-  if (!hasDragged.value) {
+  const dragDistance = Math.sqrt(
+    Math.pow(event.clientX - dragStartPosition.value.x, 2) + 
+    Math.pow(event.clientY - dragStartPosition.value.y, 2)
+  )
+
+  if (dragDistance < 5) {
     toggleChat()
   }
   
-  // 延迟重置拖动状态
-  setTimeout(() => {
-    hasDragged.value = false
-  }, 100)
+  checkEdgeSnap()
 }
 
 // 检查是否贴边
@@ -395,12 +413,7 @@ const showButton = () => {
 }
 
 // 切换聊天窗口
-const toggleChat = async (_event?: MouseEvent) => {
-  // 如果刚刚进行了拖动操作，则不执行点击操作
-  if (hasDragged.value) {
-    return
-  }
-  
+const toggleChat = async () => {
   showFloatingChat.value = !showFloatingChat.value
   if (showFloatingChat.value) {
     // 确保有对话ID
