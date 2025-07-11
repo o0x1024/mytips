@@ -27,7 +27,6 @@
           v-model:title="localNote.title"
           :is-fullscreen="isFullscreen"
           @input="autoSave"
-          @title-blur="onTitleBlur"
           @command="handleTopBarCommand"
         />
 
@@ -56,7 +55,6 @@
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
             @keydown="handleKeyDown"
-            @blur="onContentBlur"
             @preview-scroll="handlePreviewScroll"
           />
 
@@ -118,127 +116,91 @@
   </div>
 
   <!-- AI 解释弹窗 -->
-  <div v-if="showExplanationBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showExplanationBox=false">
-    <div class="bg-base-100 rounded-lg shadow-lg  w-1/2 p-4">
-      <h3 class="font-bold text-lg mb-2">AI解释</h3>
-      <div class="prose max-h-80  overflow-y-auto">
-        <div v-if="isExplaining && !explanationContent" class="flex justify-center items-center h-24">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-        <div v-else v-html="explanationContent"></div>
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-sm" @click="copyExplanation">复制</button>
-        <button class="btn btn-sm" @click="insertExplanationToContent">插入笔记</button>
-        <button class="btn btn-sm btn-error" @click="showExplanationBox=false">关闭</button>
-      </div>
-    </div>
-  </div>
+  <AIExplanationDialog
+    :visible="showExplanationBox"
+    :loading="isExplaining"
+    :content="explanationContent"
+    @close="showExplanationBox = false"
+    @copy="copyExplanation"
+    @insert="insertExplanationToContent"
+  />
 
   <!-- AI 翻译弹窗 -->
-  <div v-if="showTranslationBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showTranslationBox=false">
-    <div class="bg-base-100 rounded-lg shadow-lg w-1/2 p-4">
-      <h3 class="font-bold text-lg mb-2">AI翻译</h3>
-      <div class="prose max-h-80 overflow-y-auto">
-        <div v-if="isTranslating && !translationContent" class="flex justify-center items-center h-24">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-        <div v-else v-html="translationContent"></div>
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-sm" @click="copyTranslation">复制</button>
-        <button class="btn btn-sm" @click="insertTranslationToContent">插入笔记</button>
-        <button class="btn btn-sm btn-error" @click="showTranslationBox=false">关闭</button>
-      </div>
-    </div>
-  </div>
+  <AITranslationDialog
+    :visible="showTranslationBox"
+    :loading="isTranslating"
+    :content="translationContent"
+    @close="showTranslationBox = false"
+    @copy="copyTranslation"
+    @insert="insertTranslationToContent"
+  />
 
   <!-- TIP 对话框 -->
-  <div v-if="showTipDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeTipDialog">
-    <div class="bg-base-100 rounded-lg shadow-lg w-1/2 p-4">
-      <h3 class="font-bold text-lg mb-2">TIP一下</h3>
-      <textarea v-model="tipPrompt" class="textarea textarea-bordered w-full h-32 tip-prompt-textarea"></textarea>
-      <div class="mt-2 text-xs text-right text-base-content/60">{{ tipPrompt.length }} 字符</div>
-      <div class="mt-4 flex flex-wrap gap-2">
-        <button class="btn btn-sm" @click="setTipTemplate('expand')">扩充</button>
-        <button class="btn btn-sm" @click="setTipTemplate('improve')">改进</button>
-        <button class="btn btn-sm" @click="setTipTemplate('rewrite')">重写</button>
-        <button class="btn btn-sm" @click="setTipTemplate('summarize')">总结</button>
-        <button class="btn btn-sm" @click="setTipTemplate('question')">提问</button>
-        <button class="btn btn-sm" @click="setTipTemplate('code')">代码</button>
-        <button class="btn btn-sm" @click="saveCurrentAsTemplate">保存为模板</button>
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-sm btn-secondary" @click="resetTipPrompt">重置</button>
-        <button class="btn btn-sm btn-primary" @click="confirmTip">确认</button>
-        <button class="btn btn-sm btn-error" @click="closeTipDialog">取消</button>
-      </div>
-    </div>
-  </div>
+  <TipInputDialog
+    :visible="showTipDialog"
+    :prompt="tipPrompt"
+    :selected-text="selectedTextForTip"
+    @close="closeTipDialog"
+    @confirm="confirmTip"
+    @set-template="setTipTemplate"
+    @reset="resetTipPrompt"
+    @save-template="saveCurrentAsTemplate"
+  />
 
   <!-- TIP结果弹窗 -->
-  <div v-if="showTipResultBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeTipResultBox">
-    <div class="bg-base-100 rounded-lg shadow-lg  w-1/2 p-4">
-      <h3 class="font-bold text-lg mb-2">TIP结果</h3>
-      <div class="prose max-h-80 overflow-y-auto">
-        <div v-if="isTipProcessing && !tipResultContent" class="flex justify-center items-center h-24">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-        <div v-else v-html="tipResultContent"></div>
-      </div>
-      <div class="mt-4 flex justify-end gap-2">
-        <button class="btn btn-sm" @click="copyTipResult">复制</button>
-        <button class="btn btn-sm" @click="insertTipResultToContent">插入笔记</button>
-        <button class="btn btn-sm btn-error" @click="closeTipResultBox">取消</button>
-      </div>
-    </div>
-  </div>
+  <TipResultDialog
+    :visible="showTipResultBox"
+    :loading="isTipProcessing"
+    :content="tipResultContent"
+    @close="closeTipResultBox"
+    @copy="copyTipResult"
+    @insert="insertTipResultToContent"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount } from 'vue'
-import DOMPurify from 'dompurify'
 import { invoke } from '@tauri-apps/api/core'
+import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 import EncryptedContent from './EncryptedContent.vue'
 import EditorToolbar from './EditorToolbar.vue'
 import EditorTopBar from './EditorTopBar.vue'
 import EditorFooter from './EditorFooter.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
+import AIExplanationDialog from './dialogs/AIExplanationDialog.vue'
+import AITranslationDialog from './dialogs/AITranslationDialog.vue'
+import TipInputDialog from './dialogs/TipInputDialog.vue'
+import TipResultDialog from './dialogs/TipResultDialog.vue'
 import { showAlert } from '../services/dialog'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { getDefaultAIModel } from '../services/aiService'
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
 import Prism from 'prismjs'
-// 导入 Prism 的核心样式和主题 - 只导入一个基础主题
-// import 'prismjs/themes/prism.css' // <--- REMOVED TO PREVENT STYLE CONFLICTS
-// 导入行号插件
+// Import prism styles and plugins
 import 'prismjs/plugins/line-numbers/prism-line-numbers.css'
 import 'prismjs/plugins/line-numbers/prism-line-numbers'
-// 导入工具栏插件（用于复制按钮）
 import 'prismjs/plugins/toolbar/prism-toolbar.css'
 import 'prismjs/plugins/toolbar/prism-toolbar'
 import 'prismjs/plugins/copy-to-clipboard/prism-copy-to-clipboard'
-// 静态导入所需的 Prism 语言组件
-
+// Import prism languages
 import 'prismjs/components/prism-markup-templating'
 import 'prismjs/components/prism-markup'
 import 'prismjs/components/prism-css'
-
 import 'prismjs/components/prism-javascript'
 import 'prismjs/components/prism-json'
 import 'prismjs/components/prism-bash'
-
 import 'prismjs/components/prism-python'
 import 'prismjs/components/prism-java'
 import 'prismjs/components/prism-go'
-
 import 'prismjs/components/prism-rust'
 import 'prismjs/components/prism-sql'
 import 'prismjs/components/prism-yaml'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-php'
 import 'prismjs/components/prism-csharp'
+import { diff_match_patch as DiffMatchPatch, patch_obj } from 'diff-match-patch';
+import { LRUCache } from 'lru-cache'
+import { useTipTemplateStore } from '../stores/tipTemplateStore'
 
 // 预定义主题样式映射，避免动态加载CSS
 const PRISM_THEMES = {
@@ -378,7 +340,8 @@ const fullscreenContainer = ref<HTMLElement | null>(null)
 
 // 添加图片加载相关状态
 const isLoadingImages = ref(false)
-const imageLoadCache = ref<Map<string, Record<string, string>>>(new Map())
+// 将 imageLoadCache 从 Map 更改为 LRUCache
+const imageLoadCache = ref(new LRUCache<string, Record<string, string>>({ max: 50 }))
 const imageLoadTimeouts = ref<Map<string, number>>(new Map())
 
 const hasSelectedText = computed(() => {
@@ -416,8 +379,8 @@ const hiddenItems = ref<any[]>([])
 
 // 目录相关状态
 const showToc = ref(false)
-const tocItems = ref<Array<{ id: string, text: string, level: number }>>([])
-const activeHeadingId = ref<string>('')
+const tocItems = ref<{ id: string; level: number; text: string }[]>([]);
+const activeHeadingId = ref('');
 const tocPosition = ref({ x: window.innerWidth - 320, y: 200 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
@@ -426,9 +389,10 @@ const tocContainer = ref<HTMLElement | null>(null)
 const resizeObserver = ref<ResizeObserver | null>(null)
 let globalUnlisten: (() => void) | null = null; // 全局事件监听器引用
 
-// 添加撤销/重做堆栈
-const undoStack = ref<string[]>([])
-const redoStack = ref<string[]>([])
+// 优化撤销/重做堆栈
+const dmp = new DiffMatchPatch()
+const undoStack = ref<any[]>([])
+const redoStack = ref<any[]>([])
 const lastSavedContent = ref<string>('')
 
 // 动态响应式工具栏相关函数
@@ -596,13 +560,40 @@ function getItemContent(item: HTMLElement): string {
 
 // 初始化时保存初始内容到撤销栈
 onMounted(() => {
-  undoStack.value = [localNote.value.content]
   lastSavedContent.value = localNote.value.content
   
   // 初始化响应式工具栏
   nextTick(() => {
     initResponsiveToolbar()
   })
+
+  markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
+
+  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
+    if (event.data.error) {
+      console.error('Markdown rendering error:', event.data.error);
+      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
+      return;
+    }
+    if(event.data.html) {
+        // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
+        const safeHtml = DOMPurify.sanitize(event.data.html, {
+          ADD_ATTR: ['target', 'class', 'href'],
+          ALLOW_DATA_ATTR: true
+        });
+        renderedContent.value = safeHtml;
+        nextTick(() => {
+            highlightCode();
+            updateToc();
+        });
+    }
+  };
+})
+
+onBeforeUnmount(() => {
+  if (markdownWorker.value) {
+    markdownWorker.value.terminate();
+  }
 })
 
 // 优化的图片加载函数
@@ -901,8 +892,14 @@ function handleKeyDown(event: KeyboardEvent) {
   setTimeout(() => {
     const currentContent = localNote.value.content
     if (currentContent !== lastSavedContent.value) {
-      // 添加到撤销堆栈
-      undoStack.value.push(currentContent)
+      // 计算差异并添加到撤销堆栈
+      const diff = dmp.diff_main(lastSavedContent.value, currentContent, true);
+      if (diff.length > 2) {
+        dmp.diff_cleanupSemantic(diff);
+      }
+      const patch = dmp.patch_make(lastSavedContent.value, diff);
+      
+      undoStack.value.push(patch)
       // 清空重做堆栈
       redoStack.value = []
       // 更新最后保存的内容
@@ -918,18 +915,29 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // 撤销函数
 function undo() {
-  if (undoStack.value.length <= 1) return // 至少保留一个初始状态
+  if (undoStack.value.length === 0) return
 
-  // 将当前内容保存到重做堆栈
-  redoStack.value.push(localNote.value.content)
+  const patch = undoStack.value.pop()
 
-  // 移除当前状态，获取上一个状态
-  undoStack.value.pop()
-  const previousContent = undoStack.value[undoStack.value.length - 1]
+  // 应用补丁回到上一个状态
+  const [previousContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
 
-  // 更新编辑器内容
-  localNote.value.content = previousContent
-  lastSavedContent.value = previousContent
+  // 检查应用是否成功
+  if (results.every((r: boolean) => r)) {
+    // 将当前内容（撤销前）的逆向补丁保存到重做堆栈
+    const redoDiff = dmp.diff_main(previousContent, lastSavedContent.value, true)
+    const redoPatch = dmp.patch_make(previousContent, redoDiff)
+    redoStack.value.push(redoPatch as any)
+
+    // 更新编辑器内容
+    localNote.value.content = previousContent
+    lastSavedContent.value = previousContent
+  } else {
+    console.error("撤销失败: 补丁应用不成功", results)
+    // 如果失败，将补丁放回栈中
+    undoStack.value.push(patch)
+    return
+  }
 
   // 触发自动保存，但使用延迟，避免频繁保存
   if (autoSaveTimeout.value) {
@@ -944,15 +952,26 @@ function undo() {
 function redo() {
   if (redoStack.value.length === 0) return
 
-  // 获取下一个状态
-  const nextContent = redoStack.value.pop() as string
+  // 获取下一个状态的补丁
+  const patch = redoStack.value.pop()
 
-  // 将当前内容保存到撤销堆栈
-  undoStack.value.push(nextContent)
+  // 应用补丁
+  const [nextContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
+  
+  if (results.every((r: boolean) => r)) {
+    // 将当前内容（重做前）的逆向补丁保存到撤销堆栈
+    const undoDiff = dmp.diff_main(nextContent, lastSavedContent.value, true)
+    const undoPatch = dmp.patch_make(nextContent, undoDiff)
+    undoStack.value.push(undoPatch as any)
 
-  // 更新编辑器内容
-  localNote.value.content = nextContent
-  lastSavedContent.value = nextContent
+    // 更新编辑器内容
+    localNote.value.content = nextContent
+    lastSavedContent.value = nextContent
+  } else {
+    console.error("重做失败: 补丁应用不成功", results)
+    redoStack.value.push(patch)
+    return
+  }
 
   // 触发自动保存，但使用延迟，避免频繁保存
   if (autoSaveTimeout.value) {
@@ -963,113 +982,7 @@ function redo() {
   }, 1000) as unknown as number
 }
 
-// 计算属性 - 已被替换为 renderMarkdown 方法
-function renderMarkdown() {
-  if (!localNote.value.content) {
-    renderedContent.value = '';
-    return;
-  }
 
-  // 添加对主题的依赖，确保主题切换时重新渲染
-  const currentTheme = currentHighlightTheme.value
-
-  try {
-    // 首先替换本地图片引用
-    let processedContent = localNote.value.content
-    const placeholderSrc = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
-    // 匹配 ![xxx](local://img_id) 格式的图片引用
-    const localImageRegex = /!\[([^\]]*)\]\(local:\/\/([^)]+)\)/g
-    
-    processedContent = processedContent.replace(localImageRegex, (_match, alt, imageId) => {
-      // 检查图片ID是否存在于images对象中
-      if (localNote.value.images && localNote.value.images[imageId]) {
-        // 验证base64数据格式
-        const imageData = localNote.value.images[imageId]
-        if (imageData && imageData.startsWith('data:image/') && imageData.includes('base64,')) {
-          // 返回HTML图片标签，使用base64数据，添加响应式类名
-          return `<img src="${placeholderSrc}" data-src="${imageData}" alt="${alt || '图片'}" class="embedded-image responsive-image lazy-load-image" />`
-        } else {
-          console.log(`[渲染] ❌ 图片数据格式无效: ${imageId}, 数据开头: ${imageData?.substring(0, 50)}`)
-          return `<div class="image-placeholder">图片格式错误 (${alt || imageId})</div>`
-        }
-      }
-      // 如果找不到图片，显示占位符，防止marked生成无效URL
-      console.log(`[渲染] 🖼️ 图片未加载或未找到，使用占位符: ${imageId}`)
-      return `<div class="image-placeholder">图片加载中... (${alt || imageId})</div>`
-    })
-
-    // 创建 marked 实例并配置高亮
-    const marked = new Marked();
-    
-    // 使用 marked-highlight 扩展
-    marked.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        // 如果没有指定语言，使用 plaintext 作为默认语言
-        const actualLang = lang || 'plaintext';
-        
-        // 使用安全检查函数
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang);
-          } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error);
-            return escapeHtml(code);
-          }
-        }
-        
-        return escapeHtml(code);
-      }
-    }));
-
-    // 配置 marked 选项
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      pedantic: false,
-      silent: true,
-    })
-
-    // 使用 marked 渲染 Markdown
-    const rawHtml = marked.parse(processedContent) as string
-
-    // 使用DOMPurify清理HTML，防止XSS，但允许安全的HTML标签和图片
-    const cleanHtml = DOMPurify.sanitize(rawHtml, {
-      ADD_TAGS: ['iframe', 'pre', 'code', 'img', 'mark'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'data-code', 'data-language', 'data-search-index', 'loading', 'decoding'],
-      ALLOW_DATA_ATTR: true,
-      ALLOW_UNKNOWN_PROTOCOLS: true,
-      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
-    })
-
-    renderedContent.value = cleanHtml;
-
-    // 处理代码块的后处理逻辑
-    nextTick(() => {
-      console.log(`渲染内容完成，当前主题: ${currentTheme}，开始处理代码块`)
-      
-      // 应用当前主题样式
-      applyThemeStyles(currentTheme)
-      
-      // 处理代码块
-      setTimeout(() => {
-        enhanceCodeBlocks()
-        console.log(`代码块增强完成，主题: ${currentTheme}`)
-      }, 5)
-
-      // 设置图片懒加载
-      if (isPreviewMode.value || isSplitMode.value) {
-        setupImageLazyLoader()
-      }
-    })
-  } catch (err) {
-    console.error('Markdown渲染错误:', err)
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    renderedContent.value = `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
-            <pre>${DOMPurify.sanitize(localNote.value.content)}</pre>`
-  }
-}
 
 function enhanceCodeBlocks() {
   // 查找所有还未处理的代码块
@@ -2037,17 +1950,17 @@ onMounted(async () => {
       
       // 重新应用主题
       nextTick(() => {
-        applyThemeStyles(theme)
+        // applyThemeStyles(theme) // REMOVED
         
         // 清理并重新处理代码块
         const codeBlocks = document.querySelectorAll('.prose pre code[data-enhanced]')
         codeBlocks.forEach(codeBlock => {
           codeBlock.removeAttribute('data-enhanced')
-          codeBlock.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
+          codeBlock.classList.remove('prism-default', 'okaidia', 'twilight', 'solarized-light', 'tomorrow-night')
           
           const preElement = codeBlock.closest('pre')
           if (preElement) {
-            preElement.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
+            preElement.classList.remove('prism-default', 'okaidia', 'twilight', 'solarized-light', 'tomorrow-night')
           }
         })
         
@@ -2130,16 +2043,16 @@ function forceRefreshCodeBlocks(theme: string) {
   
   allCodeBlocks.forEach((codeBlock, index) => {
     // 移除所有主题类
-    codeBlock.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
+    codeBlock.classList.remove('prism-default', 'okaidia', 'twilight', 'solarized-light', 'tomorrow-night')
     
-    // 添加新主题类
-    codeBlock.classList.add(`prism-${theme}`)
+    // 添加新主题类 - Prism会自动根据link加载的css文件来应用样式，我们无需手动加class
+    // codeBlock.classList.add(`prism-${theme}`)
     
     // 更新父级pre元素
     const preElement = codeBlock.closest('pre')
     if (preElement) {
-      preElement.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
-      preElement.classList.add(`prism-${theme}`)
+      preElement.classList.remove('prism-default', 'okaidia', 'twilight', 'solarized-light', 'tomorrow-night')
+      // preElement.classList.add(`prism-${theme}`)
     }
     
     // console.log(`代码块 ${index + 1} 主题更新完成: ${theme}`)
@@ -2450,359 +2363,28 @@ function setMarkdownTheme(theme: string) {
 
 // 应用Markdown主题样式
 function applyMarkdownTheme(theme: string) {
-  const themeConfig = MARKDOWN_THEMES[theme as keyof typeof MARKDOWN_THEMES] || MARKDOWN_THEMES.github
-  
-  // 创建或更新样式元素
-  let styleElement = document.getElementById('markdown-theme-styles') as HTMLStyleElement
-  if (!styleElement) {
-    styleElement = document.createElement('style')
-    styleElement.id = 'markdown-theme-styles'
-    document.head.appendChild(styleElement)
+  const themeConfig = MARKDOWN_THEMES[theme as keyof typeof MARKDOWN_THEMES] || MARKDOWN_THEMES.github;
+  const container = fullscreenContainer.value;
+
+  if (!container) {
+    // 如果容器在初始渲染时还不可用，稍后重试
+    setTimeout(() => applyMarkdownTheme(theme), 100);
+    return;
   }
+  
+  // 将主题变量作为CSS自定义属性应用到容器元素上
+  const variables = themeConfig.variables;
+  Object.entries(variables).forEach(([key, value]) => {
+    container.style.setProperty(key, value);
+  });
 
-  // 生成CSS变量
-  const cssVariables = Object.entries(themeConfig.variables)
-    .map(([key, value]) => `${key}: ${value};`)
-    .join('\n    ')
-
-  // 生成完整的CSS样式
-  const cssContent = `
-    /* Markdown主题样式 - ${theme} */
-    .prose {
-      ${cssVariables}
-    }
-
-    /* 应用主题变量到具体元素 */
-    .prose {
-      color: var(--prose-body);
-    }
-
-    .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
-      color: var(--prose-headings);
-      font-weight: 600;
-    }
-
-    .prose h1 {
-      font-size: 2.25em;
-      margin-top: 0;
-      margin-bottom: 0.8888889em;
-      line-height: 1.1111111;
-    }
-
-    .prose h2 {
-      font-size: 1.875em;
-      margin-top: 1.6em;
-      margin-bottom: 0.8em;
-      line-height: 1.3333333;
-    }
-
-    .prose h3 {
-      font-size: 1.5em;
-      margin-top: 1.6em;
-      margin-bottom: 0.6em;
-      line-height: 1.6;
-    }
-
-    .prose h4 {
-      font-size: 1.25em;
-      margin-top: 1.5em;
-      margin-bottom: 0.5em;
-      line-height: 1.5;
-    }
-
-    .prose p {
-      margin-top: 1.25em;
-      margin-bottom: 1.25em;
-      line-height: 1.75;
-    }
-
-    .prose [class~="lead"] {
-      color: var(--prose-lead);
-      font-size: 1.25em;
-      line-height: 1.6;
-      margin-top: 1.2em;
-      margin-bottom: 1.2em;
-    }
-
-    .prose a {
-      color: var(--prose-links);
-      text-decoration: underline;
-      font-weight: 500;
-    }
-
-    .prose strong {
-      color: var(--prose-bold);
-      font-weight: 600;
-    }
-
-    .prose ol > li::marker {
-      font-weight: 400;
-      color: var(--prose-counters);
-    }
-
-    .prose ul > li::marker {
-      color: var(--prose-bullets);
-    }
-
-    .prose hr {
-      border-color: var(--prose-hr);
-      border-top-width: 1px;
-      margin-top: 3em;
-      margin-bottom: 3em;
-    }
-
-    .prose blockquote {
-      font-weight: 500;
-      font-style: italic;
-      color: var(--prose-quotes);
-      border-left-width: 0.25rem;
-      border-left-color: var(--prose-quote-borders);
-      quotes: "\\201C""\\201D""\\2018""\\2019";
-      margin-top: 1.6em;
-      margin-bottom: 1.6em;
-      padding-left: 1em;
-    }
-
-    .prose figcaption {
-      color: var(--prose-captions);
-      font-size: 0.875em;
-      line-height: 1.4285714;
-      margin-top: 0.8571429em;
-    }
-
-    .prose code {
-      color: var(--prose-code);
-      font-weight: 600;
-      font-size: 0.875em;
-    }
-
-    .prose pre {
-      color: var(--prose-pre-code);
-      background-color: var(--prose-pre-bg);
-      overflow-x: auto;
-      font-weight: 400;
-      font-size: 0.875em;
-      line-height: 1.7142857;
-      margin-top: 1.7142857em;
-      margin-bottom: 1.7142857em;
-      border-radius: 0.375rem;
-      padding: 0.8571429em 1.1428571em;
-    }
-
-    .prose pre code {
-      background-color: transparent;
-      border-width: 0;
-      border-radius: 0;
-      padding: 0;
-      font-weight: inherit;
-      color: inherit;
-      font-size: inherit;
-      font-family: inherit;
-      line-height: inherit;
-    }
-
-    .prose table {
-      width: 100%;
-      table-layout: auto;
-      text-align: left;
-      margin-top: 2em;
-      margin-bottom: 2em;
-      font-size: 0.875em;
-      line-height: 1.7142857;
-    }
-
-    .prose thead {
-      border-bottom-width: 1px;
-      border-bottom-color: var(--prose-th-borders);
-    }
-
-    .prose thead th {
-      color: var(--prose-headings);
-      font-weight: 600;
-      vertical-align: bottom;
-      padding-right: 0.5714286em;
-      padding-bottom: 0.5714286em;
-      padding-left: 0.5714286em;
-    }
-
-    .prose tbody tr {
-      border-bottom-width: 1px;
-      border-bottom-color: var(--prose-td-borders);
-    }
-
-    .prose tbody td {
-      vertical-align: baseline;
-      padding: 0.5714286em;
-    }
-
-    /* 暗色主题适配 */
-    @media (prefers-color-scheme: dark) {
-      .prose {
-        color: var(--prose-invert-body);
-      }
-
-      .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
-        color: var(--prose-invert-headings);
-      }
-
-      .prose [class~="lead"] {
-        color: var(--prose-invert-lead);
-      }
-
-      .prose a {
-        color: var(--prose-invert-links);
-      }
-
-      .prose strong {
-        color: var(--prose-invert-bold);
-      }
-
-      .prose ol > li::marker {
-        color: var(--prose-invert-counters);
-      }
-
-      .prose ul > li::marker {
-        color: var(--prose-invert-bullets);
-      }
-
-      .prose hr {
-        border-color: var(--prose-invert-hr);
-      }
-
-      .prose blockquote {
-        color: var(--prose-invert-quotes);
-        border-left-color: var(--prose-invert-quote-borders);
-      }
-
-      .prose figcaption {
-        color: var(--prose-invert-captions);
-      }
-
-      .prose code {
-        color: var(--prose-invert-code);
-      }
-
-      .prose pre {
-        color: var(--prose-invert-pre-code);
-        background-color: var(--prose-invert-pre-bg);
-      }
-
-      .prose thead th {
-        color: var(--prose-invert-headings);
-        border-bottom-color: var(--prose-invert-th-borders);
-      }
-
-      .prose tbody tr {
-        border-bottom-color: var(--prose-invert-td-borders);
-      }
-    }
-
-    /* DaisyUI主题适配 */
-    [data-theme="dark"] .prose,
-    [data-theme="night"] .prose,
-    [data-theme="black"] .prose {
-      color: var(--prose-invert-body);
-    }
-
-    [data-theme="dark"] .prose h1,
-    [data-theme="dark"] .prose h2,
-    [data-theme="dark"] .prose h3,
-    [data-theme="dark"] .prose h4,
-    [data-theme="dark"] .prose h5,
-    [data-theme="dark"] .prose h6,
-    [data-theme="night"] .prose h1,
-    [data-theme="night"] .prose h2,
-    [data-theme="night"] .prose h3,
-    [data-theme="night"] .prose h4,
-    [data-theme="night"] .prose h5,
-    [data-theme="night"] .prose h6,
-    [data-theme="black"] .prose h1,
-    [data-theme="black"] .prose h2,
-    [data-theme="black"] .prose h3,
-    [data-theme="black"] .prose h4,
-    [data-theme="black"] .prose h5,
-    [data-theme="black"] .prose h6 {
-      color: var(--prose-invert-headings);
-    }
-
-    [data-theme="dark"] .prose [class~="lead"],
-    [data-theme="night"] .prose [class~="lead"],
-    [data-theme="black"] .prose [class~="lead"] {
-      color: var(--prose-invert-lead);
-    }
-
-    [data-theme="dark"] .prose a,
-    [data-theme="night"] .prose a,
-    [data-theme="black"] .prose a {
-      color: var(--prose-invert-links);
-    }
-
-    [data-theme="dark"] .prose strong,
-    [data-theme="night"] .prose strong,
-    [data-theme="black"] .prose strong {
-      color: var(--prose-invert-bold);
-    }
-
-    [data-theme="dark"] .prose ol > li::marker,
-    [data-theme="night"] .prose ol > li::marker,
-    [data-theme="black"] .prose ol > li::marker {
-      color: var(--prose-invert-counters);
-    }
-
-    [data-theme="dark"] .prose ul > li::marker,
-    [data-theme="night"] .prose ul > li::marker,
-    [data-theme="black"] .prose ul > li::marker {
-      color: var(--prose-invert-bullets);
-    }
-
-    [data-theme="dark"] .prose hr,
-    [data-theme="night"] .prose hr,
-    [data-theme="black"] .prose hr {
-      border-color: var(--prose-invert-hr);
-    }
-
-    [data-theme="dark"] .prose blockquote,
-    [data-theme="night"] .prose blockquote,
-    [data-theme="black"] .prose blockquote {
-      color: var(--prose-invert-quotes);
-      border-left-color: var(--prose-invert-quote-borders);
-    }
-
-    [data-theme="dark"] .prose figcaption,
-    [data-theme="night"] .prose figcaption,
-    [data-theme="black"] .prose figcaption {
-      color: var(--prose-invert-captions);
-    }
-
-    [data-theme="dark"] .prose code,
-    [data-theme="night"] .prose code,
-    [data-theme="black"] .prose code {
-      color: var(--prose-invert-code);
-    }
-
-    [data-theme="dark"] .prose pre,
-    [data-theme="night"] .prose pre,
-    [data-theme="black"] .prose pre {
-      color: var(--prose-invert-pre-code);
-      background-color: var(--prose-invert-pre-bg);
-    }
-
-    [data-theme="dark"] .prose thead th,
-    [data-theme="night"] .prose thead th,
-    [data-theme="black"] .prose thead th {
-      color: var(--prose-invert-headings);
-      border-bottom-color: var(--prose-invert-th-borders);
-    }
-
-    [data-theme="dark"] .prose tbody tr,
-    [data-theme="night"] .prose tbody tr,
-    [data-theme="black"] .prose tbody tr {
-      border-bottom-color: var(--prose-invert-td-borders);
-    }
-  `
-
-  styleElement.textContent = cssContent
-  console.log(`已应用Markdown主题: ${theme}`)
+  // 确保旧的动态样式表被移除（用于从旧版本平滑过渡）
+  const styleElement = document.getElementById('markdown-theme-styles');
+  if (styleElement) {
+    styleElement.remove();
+  }
+  
+  console.log(`已通过CSS变量应用Markdown主题: ${theme}`);
 }
 
 // 新增函数：应用主题样式
@@ -3461,7 +3043,12 @@ function resetTipPrompt() {
   tipPrompt.value = originalTipPrompt.value
 }
 
-async function confirmTip() {
+async function confirmTip(newPrompt?: string) {
+  // 当对话框返回新的提示词时，更新本地状态
+  if (typeof newPrompt === 'string') {
+    tipPrompt.value = newPrompt;
+  }
+
   if (!tipPrompt.value.trim()) {
     await showAlert('请输入提示词', { title: '提示' })
     return
@@ -3519,25 +3106,21 @@ function setTipTemplate(templateType: string) {
 
 // 获取用户自定义的提示词模板
 function getCustomTipTemplates() {
-  try {
-    const saved = localStorage.getItem('mytips-custom-tip-templates')
-    return saved ? JSON.parse(saved) : {}
-  } catch (error) {
-    console.error('获取自定义模板失败:', error)
-    return {}
-  }
+  const map: Record<string, string> = {};
+  templateStore.templates.value.forEach((t: {name: string; content: string}) => {
+    map[t.name] = t.content;
+  });
+  return map;
 }
 
 // 保存用户自定义的提示词模板
 async function saveCustomTipTemplate(name: string, template: string) {
   try {
-    const customTemplates = getCustomTipTemplates()
-    customTemplates[name] = template
-    localStorage.setItem('mytips-custom-tip-templates', JSON.stringify(customTemplates))
+    await templateStore.addTemplate(name, template);
     console.log(`已保存自定义模板: ${name}`)
   } catch (error) {
     console.error('保存自定义模板失败:', error)
-    await showAlert('保存模板失败，请检查浏览器存储空间', { title: '保存失败' })
+    await showAlert('保存模板失败', { title: '错误' })
   }
 }
 
@@ -3598,11 +3181,6 @@ async function pasteFromClipboard() {
   }
 }
 
-// 只更新标题
-function onTitleBlur() {
-  emit('update', { id: localNote.value.id, title: localNote.value.title, _titleOnly: true })
-}
-
 // 只更新内容
 function onContentBlur() {
   emit('update', { id: localNote.value.id, content: localNote.value.content, updated_at: Date.now(), _contentOnly: true })
@@ -3612,7 +3190,7 @@ function onContentBlur() {
 function onEditorBlur(event: FocusEvent) {
   // 只有真正离开整个编辑器才触发
   if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)) {
-    emit('update', { ...localNote.value })
+    saveNoteToList()
   }
 }
 
@@ -3776,9 +3354,6 @@ watch(() => currentHighlightTheme.value, (newTheme, oldTheme) => {
     // 只有当主题变化不是由setHighlightTheme函数触发时才处理
     // setHighlightTheme函数已经处理了主题应用，这里只需要处理其他情况
     setTimeout(() => {
-      // 确保样式已经应用
-      applyThemeStyles(newTheme)
-      
       // 刷新代码块
       forceRefreshCodeBlocks(newTheme)
     }, 50)
@@ -4129,6 +3704,146 @@ function renderInlineMarkdown(text: string): string {
   }
 }
 
+const markdownWorker = ref<Worker | null>(null);
+
+onMounted(() => {
+  markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
+
+  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
+    if (event.data.error) {
+      console.error('Markdown rendering error:', event.data.error);
+      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
+      return;
+    }
+    if(event.data.html) {
+        // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
+        const safeHtml = DOMPurify.sanitize(event.data.html, {
+          ADD_ATTR: ['target', 'class', 'href'],
+          ALLOW_DATA_ATTR: true
+        });
+        renderedContent.value = safeHtml;
+        nextTick(() => {
+            highlightCode();
+            updateToc();
+        });
+    }
+  };
+});
+
+onBeforeUnmount(() => {
+  if (markdownWorker.value) {
+    markdownWorker.value.terminate();
+  }
+});
+
+// 渲染Markdown内容
+const renderMarkdown = () => {
+  if (markdownWorker.value && localNote.value) {
+    // 向 Worker 传递的对象必须是可结构化克隆的数据，
+    // 将可能带有 Vue Proxy 的 images 深拷贝为纯 JSON，避免 DataCloneError。
+    markdownWorker.value.postMessage({
+      markdown: localNote.value.content,
+      images: localNote.value.images ? JSON.parse(JSON.stringify(localNote.value.images)) : undefined
+    });
+  }
+};
+
+const highlightCode = () => {
+  const preview = document.querySelector('.markdown-preview');
+  if (!preview) return;
+
+  const blocks = preview.querySelectorAll('pre code:not([data-highlighted="true"])');
+  
+  const highlight = (deadline?: IdleDeadline) => {
+    blocks.forEach((block, index) => {
+      // If there's a deadline, check if we have time
+      if (deadline && deadline.timeRemaining() <= 0 && index < blocks.length -1) {
+          // Not enough time, schedule the rest for the next idle period
+          requestIdleCallback(() => highlightRest(index));
+          return;
+      }
+      Prism.highlightElement(block as HTMLElement);
+      block.setAttribute('data-highlighted', 'true');
+    });
+  };
+
+  const highlightRest = (startIndex: number) => {
+      for (let i = startIndex; i < blocks.length; i++) {
+          Prism.highlightElement(blocks[i] as HTMLElement);
+          blocks[i].setAttribute('data-highlighted', 'true');
+      }
+  }
+
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(highlight);
+  } else {
+    // Fallback for browsers that don't support requestIdleCallback
+    setTimeout(highlight, 0);
+  }
+};
+
+const updateToc = () => {
+  const container = document.querySelector('.markdown-preview');
+  if (!container) return;
+  const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  const items: { id: string; level: number; text: string }[] = [];
+  headings.forEach((heading, index) => {
+    const level = parseInt(heading.tagName.substring(1), 10);
+    let id = heading.id;
+    if (!id) {
+      id = `heading-${index}`;
+      heading.id = id;
+    }
+    items.push({
+      id,
+      level,
+      text: heading.textContent || '',
+    });
+  });
+  tocItems.value = items;
+};
+
+onMounted(() => {
+  markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
+
+  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
+    if (event.data.error) {
+      console.error('Markdown rendering error:', event.data.error);
+      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
+      return;
+    }
+    if(event.data.html) {
+        // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
+        const safeHtml = DOMPurify.sanitize(event.data.html, {
+          ADD_ATTR: ['target', 'class', 'href'],
+          ALLOW_DATA_ATTR: true
+        });
+        renderedContent.value = safeHtml;
+        nextTick(() => {
+            highlightCode();
+            updateToc();
+        });
+    }
+  };
+  
+  // Other onMounted logic...
+});
+
+onBeforeUnmount(() => {
+  if (markdownWorker.value) {
+    markdownWorker.value.terminate();
+  }
+});
+
+// Watch for content changes to trigger rendering
+watch(() => localNote.value?.content, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+      renderMarkdown();
+  }
+}, { deep: true });
+
+const templateStore = useTipTemplateStore();
+
 </script>
 
 <style scoped>
@@ -4190,7 +3905,7 @@ function renderInlineMarkdown(text: string): string {
   width: 2px;
   background: var(--border-color);
   cursor: col-resize;
-  transition: background 0.2s ease;
+  transition: background-color 0.2s;
 }
 
 .editor-divider:hover {
@@ -4856,6 +4571,35 @@ function renderInlineMarkdown(text: string): string {
   align-items: center !important;
   border-bottom: 1px solid rgba(var(--bc), 0.1) !important;
   font-size: 0.75rem !important;
+}
+
+:deep(.prose .code-language) {
+  color: rgba(var(--bc), 0.6) !important;
+  font-weight: 500 !important;
+  text-transform: uppercase !important;
+}
+
+:deep(.prose .copy-code-btn) {
+  opacity: 0.6 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+:deep(.prose .copy-code-btn:hover) {
+  opacity: 1 !important;
+}
+
+/* 暗色主题下的代码块头部适配 */
+[data-theme="dark"] :deep(.prose .code-block-header),
+[data-theme="night"] :deep(.prose .code-block-header),
+[data-theme="black"] :deep(.prose .code-block-header) {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+[data-theme="dark"] :deep(.prose .code-language),
+[data-theme="night"] :deep(.prose .code-language),
+[data-theme="black"] :deep(.prose .code-language) {
+  color: rgba(255, 255, 255, 0.8) !important;
 }
 
 </style>

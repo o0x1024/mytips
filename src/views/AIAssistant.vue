@@ -1179,10 +1179,12 @@ async function loadMessages(conversationId: string) {
 // 新建对话
 async function createNewConversation() {
   const model = selectedModel.value
-  const newId = await invoke('create_ai_conversation', { model, title: '无标题对话' }) as string
+  // 后端返回的是包含 id 等信息的 Conversation 对象，这里需要提取 id 字段
+  const newConversation = await invoke('create_ai_conversation', { model, title: '无标题对话' }) as { id: string }
+
   await loadConversations()
-  activeConversationId.value = newId
-  await loadMessages(String(newId))
+  activeConversationId.value = newConversation.id
+  await loadMessages(newConversation.id)
   showConversationsDrawer.value = false
   
   // 新建对话后确保滚动状态正确 - 适配反向布局

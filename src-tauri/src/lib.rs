@@ -131,6 +131,10 @@ pub fn run() {
             copy_to_clipboard,
             add_clipboard_entry,
             add_selection_to_clipboard,
+            // 提示词模板相关API
+            get_tip_templates,
+            save_tip_template,
+            delete_tip_template,
             // 剪贴板设置相关API
             get_clipboard_settings,
             save_clipboard_settings,

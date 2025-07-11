@@ -10,6 +10,7 @@ pub mod tags;
 pub mod tips;
 pub mod updater;
 pub mod encryption;
+pub mod templates;
 
 // 重新导出所有公共API函数，方便在main.rs中注册
 pub use ai::*;
@@ -23,3 +24,4 @@ pub use shortcuts::*;
 pub use tags::*;
 pub use tips::*;
 pub use updater::*;
+pub use templates::*;

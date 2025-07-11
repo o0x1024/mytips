@@ -67,6 +67,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             
+            <!-- 提示词模板图标 -->
+            <svg v-else-if="page.id === 'templates'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
+            </svg>
+            
             <!-- 关于图标 -->
             <svg v-else-if="page.id === 'about'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -728,7 +733,7 @@
                   <option value="deepseek">DeepSeek</option>
                   <option value="ali">通义千问</option>
                   <option value="doubao">字节豆包</option>
-                  <option value="xai">xAI Grok</option>
+                  <option value="grok">xAI Grok</option>
                   <option value="custom">自定义模型</option>
                 </select>
               </div>
@@ -796,22 +801,25 @@
                   />
                 </div>
                 
+                <!-- 输入框 + datalist，同时支持手动输入和下拉选择 -->
                 <div class="form-control mb-4" v-else>
                   <label class="label">
                     <span class="label-text">默认模型</span>
                   </label>
-                  <select 
-                    v-model="aiProviders[selectedConfigModel].default_model" 
-                    class="select select-bordered w-full"
-                  >
-                    <option 
-                      v-for="model in aiProviders[selectedConfigModel].models" 
-                      :key="model.name" 
+                  <input
+                    type="text"
+                    v-model="aiProviders[selectedConfigModel].default_model"
+                    :list="`models-${selectedConfigModel}`"
+                    placeholder="输入模型名称或选择"
+                    class="input input-bordered w-full"
+                  />
+                  <datalist :id="`models-${selectedConfigModel}`">
+                    <option
+                      v-for="model in aiProviders[selectedConfigModel].models"
+                      :key="model.name"
                       :value="model.name"
-                    >
-                      {{ model.name }}
-                    </option>
-                  </select>
+                    />
+                  </datalist>
                 </div>
                 
                 <div class="flex justify-between">
@@ -1015,6 +1023,55 @@
               <p class="text-sm text-base-content/80 mt-2">
                 一个简单的笔记管理应用，帮助你收集和整理有用的代码片段、文档和提示。
               </p>
+            </div>
+          </div>
+
+          <!-- 提示词模板管理 -->
+          <div v-else-if="currentPage === 'templates'" class="card bg-base-100 shadow-md">
+            <div class="card-body">
+              <h2 class="card-title text-primary mb-4">提示词模板管理</h2>
+
+              <!-- 新增/编辑模板表单 -->
+              <div class="form-control mb-3">
+                <label class="label">
+                  <span class="label-text">模板名称</span>
+                </label>
+                <input type="text" v-model="templateName" placeholder="输入模板名称" class="input input-bordered w-full" />
+              </div>
+              <div class="form-control mb-3">
+                <label class="label">
+                  <span class="label-text">模板内容</span>
+                </label>
+                <textarea v-model="templateContent" class="textarea textarea-bordered w-full h-32" placeholder="输入模板内容"></textarea>
+              </div>
+              <div class="flex gap-2 mb-4">
+                <button class="btn btn-primary" @click="saveTemplate" :disabled="!templateName.trim() || !templateContent.trim()">
+                  {{ isEditingTemplate ? '更新模板' : '添加模板' }}
+                </button>
+                <button v-if="isEditingTemplate" class="btn btn-ghost" @click="cancelEdit">取消编辑</button>
+              </div>
+
+              <div class="divider"></div>
+
+              <!-- 模板列表 -->
+              <div v-if="templateStore.isLoading.value" class="flex justify-center py-6">
+                <span class="loading loading-spinner loading-lg"></span>
+              </div>
+              <div v-else>
+                <div v-if="templateStore.templates.value.length === 0" class="text-center text-base-content/60">暂无模板</div>
+                <div v-else class="space-y-2">
+                  <div v-for="tpl in templateStore.templates.value" :key="tpl.name" class="flex items-start justify-between p-3 bg-base-200 rounded">
+                    <div class="flex-1">
+                      <div class="font-medium">{{ tpl.name }}</div>
+                      <div class="text-sm text-base-content/70 whitespace-pre-wrap">{{ tpl.content }}</div>
+                    </div>
+                    <div class="flex gap-2 ml-3">
+                      <button class="btn btn-xs btn-outline" @click="editTemplate(tpl)">编辑</button>
+                      <button class="btn btn-xs btn-error btn-outline" @click="deleteTemplate(tpl.name)">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1248,6 +1305,7 @@ import {
   testAIConnection, saveAIConfig, getAIConfig, getAIUsageStats, reloadAIServices,
   getAIServiceStatus, defaultProviders
 } from '../services/aiService'
+import { useTipTemplateStore } from '../stores/tipTemplateStore'
 
 const uiStore = useUIStore()
 const updateStore = useUpdateStore()
@@ -1262,6 +1320,7 @@ const settingsPages = [
   { id: 'data', title: '数据管理' },
   { id: 'app', title: '应用设置' },
   { id: 'ai', title: 'AI助手' },
+  { id: 'templates', title: '提示词模板' },
   { id: 'update', title: '更新' },
   { id: 'about', title: '关于' }
 ]
@@ -2917,6 +2976,51 @@ async function saveAIProviderConfig() {
     isSavingApiConfig.value = false
   }
 }
+
+// ---------------- 提示词模板管理 ----------------
+const templateStore = useTipTemplateStore()
+const templateName = ref('')
+const templateContent = ref('')
+const isEditingTemplate = ref(false)
+let originalTemplateName = ''
+
+function resetTemplateForm() {
+  templateName.value = ''
+  templateContent.value = ''
+  isEditingTemplate.value = false
+  originalTemplateName = ''
+}
+
+async function saveTemplate() {
+  if (!templateName.value.trim() || !templateContent.value.trim()) return
+  await templateStore.addTemplate(templateName.value.trim(), templateContent.value.trim())
+  if (isEditingTemplate.value && originalTemplateName && originalTemplateName !== templateName.value.trim()) {
+    await templateStore.deleteTemplate(originalTemplateName)
+  }
+  resetTemplateForm()
+}
+
+function editTemplate(tpl: { name: string; content: string }) {
+  templateName.value = tpl.name
+  templateContent.value = tpl.content
+  isEditingTemplate.value = true
+  originalTemplateName = tpl.name
+}
+
+async function deleteTemplate(name: string) {
+  await templateStore.deleteTemplate(name)
+  if (isEditingTemplate.value && name === originalTemplateName) {
+    resetTemplateForm()
+  }
+}
+
+function cancelEdit() {
+  resetTemplateForm()
+}
+
+onMounted(() => {
+  templateStore.loadTemplates()
+})
 </script>
 
 <style scoped>

@@ -18,6 +18,10 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use self::service::SaveAiConfigRequest;
+use genai::chat::{ChatMessage, ChatRole};
+
+// 系统提示词常量
+const SYSTEM_PROMPT: &str = "";
 
 type StreamCancelMap = Arc<TokioMutex<HashMap<String, Arc<AtomicBool>>>>;
 
@@ -59,38 +63,63 @@ pub async fn send_ai_message(
     let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for provider '{}' not found", provider_id))?;
     let model_name = &provider_config.default_model;
 
-    let final_message = if let Some(role_id) = role_id {
-        if let Ok(role) = get_ai_role(role_id, db_manager.clone()).await {
-            format!("{}\n{}", role.description, message)
+    let role_description = if let Some(ref role_id) = role_id {
+        if let Ok(role) = get_ai_role(role_id.clone(), db_manager.clone()).await {
+            role.description
         } else {
-            message
+            String::new()
         }
     } else {
-        message
+        String::new()
     };
 
-    let result_str = if let Some(conv_id) = conversation_id {
+    // 构建系统提示词
+    let system_content = if role_description.is_empty() {
+        SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n{}", SYSTEM_PROMPT, role_description)
+    };
+
+    // 收集聊天消息
+    let mut chat_messages: Vec<ChatMessage> = Vec::new();
+    chat_messages.push(ChatMessage {
+        role: ChatRole::System,
+        content: system_content.into(),
+        options: Default::default(),
+    });
+
+    // 加载历史
+    if let Some(conv_id) = conversation_id.clone() {
         let history = conversations::list_ai_messages(conv_id, db_manager.clone()).await?;
-        let history_chat_messages = history
+        let history_chat_messages: Vec<ChatMessage> = history
             .into_iter()
             .map(|m| {
                 let role = match m.role.as_str() {
-                    "user" => genai::chat::ChatRole::User,
-                    "assistant" => genai::chat::ChatRole::Assistant,
-                    "system" => genai::chat::ChatRole::System,
-                    _ => genai::chat::ChatRole::User, // 默认
+                    "user" => ChatRole::User,
+                    "assistant" => ChatRole::Assistant,
+                    "system" => ChatRole::System,
+                    _ => ChatRole::User,
                 };
-                genai::chat::ChatMessage {
+                ChatMessage {
                     role,
                     content: m.content.into(),
                     options: Default::default(),
                 }
             })
             .collect();
-        models::chat_with_history(api_key, model_name, history_chat_messages).await?
-    } else {
-        send_message_to_ai(api_key, model_name, final_message).await?
-    };
+        chat_messages.extend(history_chat_messages);
+    }
+
+    // 当前用户消息
+    chat_messages.push(ChatMessage {
+        role: ChatRole::User,
+        content: message.clone().into(),
+        options: Default::default(),
+    });
+
+    println!("chat_messages: {:?}", chat_messages);
+    // 调用AI
+    let result_str = models::chat_with_history(api_key, model_name, chat_messages).await?;
 
     Ok(serde_json::json!({ "reply": result_str }))
 }
@@ -126,59 +155,65 @@ pub async fn send_ai_message_stream(
         .ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
     let model_name = provider_config.default_model.clone();
 
-    let final_message = if let Some(role_id_str) = role_id {
-        if let Ok(role) = get_ai_role(role_id_str, db_manager.clone()).await {
-            format!("{}\n{}", role.description, message)
+    let role_description = if let Some(ref role_id_str) = role_id {
+        if let Ok(role) = get_ai_role(role_id_str.clone(), db_manager.clone()).await {
+            role.description
         } else {
-            message
+            String::new()
         }
     } else {
-        message
+        String::new()
     };
 
-    let history_chat_messages = if let Some(conv_id) = conversation_id {
-        conversations::list_ai_messages(conv_id, db_manager.clone())
-            .await
-            .unwrap_or_default()
+    let system_content = if role_description.is_empty() {
+        SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n{}", SYSTEM_PROMPT, role_description)
+    };
+
+    let mut chat_messages: Vec<ChatMessage> = Vec::new();
+    chat_messages.push(ChatMessage {
+        role: ChatRole::System,
+        content: system_content.into(),
+        options: Default::default(),
+    });
+
+    if let Some(conv_id) = conversation_id.clone() {
+        let history = conversations::list_ai_messages(conv_id, db_manager.clone()).await.unwrap_or_default();
+        let history_msgs: Vec<ChatMessage> = history
             .into_iter()
             .map(|m| {
                 let role = match m.role.as_str() {
-                    "user" => genai::chat::ChatRole::User,
-                    "assistant" => genai::chat::ChatRole::Assistant,
-                    "system" => genai::chat::ChatRole::System,
-                    _ => genai::chat::ChatRole::User,
+                    "user" => ChatRole::User,
+                    "assistant" => ChatRole::Assistant,
+                    "system" => ChatRole::System,
+                    _ => ChatRole::User,
                 };
-                genai::chat::ChatMessage {
+                ChatMessage {
                     role,
                     content: m.content.into(),
                     options: Default::default(),
                 }
             })
-            .collect::<Vec<_>>()
-            .into()
-    } else {
-        None
-    };
+            .collect();
+        chat_messages.extend(history_msgs);
+    }
 
+    chat_messages.push(ChatMessage {
+        role: ChatRole::User,
+        content: message.clone().into(),
+        options: Default::default(),
+    });
+
+    println!("chat_messages: {:?}", chat_messages);
     let emitter_stream_id = stream_id.clone();
     let handle = tauri::async_runtime::spawn(async move {
-        let stream_result = if let Some(history) = history_chat_messages {
-            models::stream_chat_with_history(
-                api_key,
-                &model_name,
-                history,
-                None, // custom model name is not needed here
-            )
-            .await
-        } else {
-            stream_message_from_ai(
-                api_key,
-                &model_name,
-                final_message,
-                None, // custom model name is not needed here
-            )
-            .await
-        };
+        let stream_result = models::stream_chat_with_history(
+            api_key,
+            &model_name,
+            chat_messages,
+            None,
+        ).await;
 
         match stream_result {
             Ok(mut stream) => {
@@ -187,7 +222,6 @@ pub async fn send_ai_message_stream(
                         println!("Stream {} cancelled.", stream_id);
                         break;
                     }
-
                     let chunk = chunk_result.unwrap_or_else(|e| e.to_string());
                     if tx.send(Ok(serde_json::json!({ "chunk": chunk }))).await.is_err() {
                         break;

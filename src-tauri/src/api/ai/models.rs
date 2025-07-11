@@ -62,10 +62,13 @@ pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Clie
             async move {
                 let model_name = service_target.model.model_name.to_string();
                 if model_name.starts_with("doubao") {
+                    // 豆包 Ark 平台，兼容 OpenAI 协议
                     service_target.endpoint = Endpoint::from_static(
                         "https://ark.cn-beijing.volces.com/api/v3/",
                     );
                     service_target.auth = AuthData::from_single(key);
+                    // 强制使用 OpenAI 适配器，避免被误判为 Ollama
+                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 } else if model_name.starts_with("grok") {
                     service_target.endpoint = Endpoint::from_static("https://api.x.ai/v1");
                     service_target.auth = AuthData::from_single(key);
