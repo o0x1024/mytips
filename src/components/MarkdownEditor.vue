@@ -21,7 +21,7 @@
     <div v-if="isPreviewMode || isSplitMode"
       ref="previewDiv"
       class="flex-1 p-4 overflow-auto prose dark:prose-invert max-w-none"
-      :class="{ 'w-1/2': isSplitMode, 'markdown-body': true }"
+      :class="{ 'w-1/2': isSplitMode, 'markdown-body': true, 'markdown-preview': true }"
       v-html="renderedContent"
       @scroll="handlePreviewScroll"
       @wheel="setUserScrollingPane('preview')"
@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref } from 'vue';
 
 const props = defineProps({
   modelValue: {
@@ -106,8 +106,3 @@ defineExpose({
 });
 </script>
 
-<style scoped>
-.markdown-body {
-  /* Add any specific styles for the markdown body if needed */
-}
-</style> 

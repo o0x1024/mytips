@@ -315,7 +315,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
-const props = defineProps({
+defineProps({
   isFullscreen: {
     type: Boolean,
     default: false,

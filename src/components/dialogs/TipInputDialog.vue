@@ -57,13 +57,7 @@ watch(() => props.prompt, (newVal) => {
 
 const close = () => emit('close');
 const confirm = () => emit('confirm', localPrompt.value);
-const setTemplate = (type: string) => {
-  if (type === 'save') {
-    emit('save-template', localPrompt.value);
-  } else {
-    emit('set-template', type);
-  }
-};
+
 const reset = () => emit('reset');
 
 </script>

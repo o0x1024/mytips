@@ -198,70 +198,11 @@ import 'prismjs/components/prism-yaml'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-php'
 import 'prismjs/components/prism-csharp'
-import { diff_match_patch as DiffMatchPatch, patch_obj } from 'diff-match-patch';
+import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
 
-// 预定义主题样式映射，避免动态加载CSS
-const PRISM_THEMES = {
-  default: {
-    background: '#f5f2f0',
-    color: '#728fcb',
-    selectionBackground: '#b3d4fc'
-  },
-  okaidia: {
-    background: '#272822',
-    color: '#f8f8f2',
-    selectionBackground: '#49483e'
-  },
-  twilight: {
-    background: '#141414',
-    color: '#f7f7f7',
-    selectionBackground: '#444'
-  },
-  'solarized-light': {
-    background: '#fdf6e3',
-    color: '#657b83',
-    selectionBackground: '#eee8d5'
-  },
-  'tomorrow-night': {
-    background: '#2d2d2d',
-    color: '#ccc',
-    selectionBackground: '#515151'
-  }
-}
 
-const providerMapping: Record<string, string> = {
-  'chatgpt': 'openai',
-  'gemini': 'gemini',
-  'deepseek': 'deepseek',
-  'qwen': 'ali',
-  'claude': 'anthropic',
-  'doubao': 'doubao',
-  'grok': 'xai',
-  'custom': 'custom'
-};
-
-// 安全检查 Prism 语言是否可用
-function isPrismLanguageAvailable(lang: string): boolean {
-  try {
-    // plaintext 总是可用的，因为它不需要特殊的语法高亮
-    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
-      return true;
-    }
-    
-    return !!(
-      typeof Prism !== 'undefined' && 
-      Prism.languages && 
-      typeof Prism.languages === 'object' &&
-      Prism.languages[lang] &&
-      typeof Prism.highlight === 'function'
-    );
-  } catch (error) {
-    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
-    return false;
-  }
-}
 
 // 简化的语言组件初始化函数
 async function loadPrismLanguages() {
@@ -583,6 +524,7 @@ onMounted(() => {
         });
         renderedContent.value = safeHtml;
         nextTick(() => {
+            enhanceCodeBlocks();
             highlightCode();
             updateToc();
         });
@@ -987,7 +929,6 @@ function redo() {
 function enhanceCodeBlocks() {
   // 查找所有还未处理的代码块
   const codeElements = document.querySelectorAll('.prose pre > code:not([data-enhanced])')
-  const currentTheme = currentHighlightTheme.value || 'default'
   
   codeElements.forEach((codeElement, _index) => {
     const pre = codeElement.closest('pre')
@@ -1004,45 +945,30 @@ function enhanceCodeBlocks() {
     // 获取语言类型
     const classNames = codeElement.className.split(' ')
     const langClass = classNames.find(cls => cls.startsWith('language-'))
-    const lang = langClass ? langClass.replace('language-', '') : 'plaintext'
 
     // 如果没有指定语言，为code元素添加language-plaintext类
     if (!langClass) {
       codeElement.classList.add('language-plaintext')
     }
 
-    // 清理可能存在的旧样式类
-    codeElement.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
-    pre.classList.remove('prism-default', 'prism-okaidia', 'prism-twilight', 'prism-solarized-light', 'prism-tomorrow-night')
-
-    // 添加当前主题类
-    const themeClass = `prism-${currentTheme}`
-    codeElement.classList.add(themeClass)
-    pre.classList.add(themeClass)
-    
-    // 创建容器
+    // 不再额外添加主题类，依靠全局 CSS 文件实现主题颜色
+    // ---- 新增：为代码块添加容器及行号支持 ----
     const container = document.createElement('div')
     container.className = 'code-block-container'
 
-
-    // 为pre元素添加行号支持
+    // Prism 的 line-numbers 插件行号
     pre.classList.add('line-numbers')
 
-    // 将pre元素包装到容器中
+    // 避免重复包装
     const parent = pre.parentNode
     if (parent) {
       parent.insertBefore(container, pre)
       container.appendChild(pre)
     }
+    // ---- 新增结束 ----
   })
 }
 
-// HTML 转义函数
-function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
-}
 
 
 
@@ -1173,58 +1099,6 @@ function handleContextMenu(event: MouseEvent) {
     // 使用捕获阶段监听点击事件，确保先于其他事件处理器
     document.addEventListener('mousedown', closeContextMenu, true)
   })
-}
-
-async function expandSelectedText() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  // 确保有选择的文本
-  if (start === end) {
-    await showAlert('请先选择一段文本', { title: '提示' })
-    return
-  }
-
-  const selectedText = localNote.value.content.substring(start, end)
-  
-  // 显示TIP对话框让用户修改提示词，保存选择位置
-  selectedTextForTip.value = selectedText
-  originalTipPrompt.value = selectedText
-  tipPrompt.value = originalTipPrompt.value
-  
-  // 保存选择位置用于后续处理
-  ;(window as any)._tipSelectionStart = start
-  ;(window as any)._tipSelectionEnd = end
-  
-  showTipDialog.value = true
-  showContextMenu.value = false
-}
-
-// 添加解释功能函数
-async function explainSelectedText() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  // 确保有选择的文本
-  if (start === end) {
-    await showAlert('请先选择一段文本', { title: '提示' })
-    return
-  }
-
-  const selectedText = localNote.value.content.substring(start, end)
-  selectedTextForExplanation.value = selectedText
-  explanationContent.value = ''
-  showExplanationBox.value = true
-  showContextMenu.value = false
-
-  // 使用AI解释选中的文本
-  await processExplanation(selectedText)
 }
 
 // 根据笔记标题或选中内容使用AI扩充
@@ -1461,32 +1335,6 @@ function cleanupStream() {
   isAIProcessing.value = false
 }
 
-async function cancelAIGeneration() {
-  if (isStreaming.value && currentStreamingId.value) {
-    try {
-      console.log(`取消生成: ${currentStreamingId.value}`)
-      await invoke('cancel_ai_generation', {
-        streamId: currentStreamingId.value
-      })
-
-      // 更新编辑器内容以确保显示当前生成的内容
-      nextTick(() => {
-        if (editorTextarea.value) {
-          editorTextarea.value.value = localNote.value.content
-          editorTextarea.value.dispatchEvent(new Event('input', { bubbles: true }))
-        }
-      })
-
-      // 保存当前已生成的内容
-      saveNoteToList()
-
-    } catch (error) {
-      console.error('取消AI生成失败:', error)
-    } finally {
-      cleanupStream()
-    }
-  }
-}
 
 function setEditMode(mode: string) {
   if (mode === 'editOnly') {
@@ -1817,20 +1665,6 @@ function exportNote() {
   URL.revokeObjectURL(url)
 }
 
-// 格式化日期时间
-function formatDateTime(dateString: number): string {
-  if (!dateString) return ''
-
-  const date = new Date(dateString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
 // 在组件属性下添加以下状态变量
 const currentHighlightTheme = ref(localStorage.getItem('mytips-highlight-theme') || getDefaultHighlightTheme())
 const currentMarkdownTheme = ref(localStorage.getItem('mytips-markdown-theme') || 'github')
@@ -2041,7 +1875,7 @@ function forceRefreshCodeBlocks(theme: string) {
   const allCodeBlocks = document.querySelectorAll('.prose pre code')
   console.log(`找到 ${allCodeBlocks.length} 个代码块需要更新主题`)
   
-  allCodeBlocks.forEach((codeBlock, index) => {
+  allCodeBlocks.forEach((codeBlock) => {
     // 移除所有主题类
     codeBlock.classList.remove('prism-default', 'okaidia', 'twilight', 'solarized-light', 'tomorrow-night')
     
@@ -2065,53 +1899,52 @@ function forceRefreshCodeBlocks(theme: string) {
 
 // 修改setHighlightTheme函数，移除hljs相关代码，使用CSS变量方式
 async function setHighlightTheme(theme: string) {
-  console.log(`切换代码高亮主题: ${theme}`)
-  currentHighlightTheme.value = theme
-  localStorage.setItem('mytips-highlight-theme', theme)
+  console.log(`切换代码高亮主题: ${theme}`);
 
+  currentHighlightTheme.value = theme;
+  localStorage.setItem('mytips-highlight-theme', theme);
   // 标记用户已手动选择主题
-  localStorage.setItem('mytips-highlight-theme-manual', 'true')
+  localStorage.setItem('mytips-highlight-theme-manual', 'true');
 
-  // 移除旧的动态加载的主题样式
-  const existingThemeLink = document.querySelector('link[data-prism-theme]')
-  if (existingThemeLink) {
-    existingThemeLink.remove()
-  }
+  // 动态获取对应主题的 CSS 资源 URL（通过 ?url 让构建工具返回文件路径而不是自动插入 style）
+  const themeUrlLoaders: Record<string, () => Promise<string>> = {
+    default: async () => (await import('prismjs/themes/prism.css?url')).default,
+    okaidia: async () => (await import('prismjs/themes/prism-okaidia.css?url')).default,
+    twilight: async () => (await import('prismjs/themes/prism-twilight.css?url')).default,
+    'solarized-light': async () => (await import('prismjs/themes/prism-solarizedlight.css?url')).default,
+    'tomorrow-night': async () => (await import('prismjs/themes/prism-tomorrow.css?url')).default,
+  };
 
-  // 使用动态导入加载CSS
   try {
-    switch (theme) {
-      case 'default':
-        // For default theme, we don't need to load any extra css.
-        // The base styles should be sufficient.
-        break;
-      case 'okaidia':
-        await import('prismjs/themes/prism-okaidia.css');
-        break;
-      case 'twilight':
-        await import('prismjs/themes/prism-twilight.css');
-        break;
-      case 'solarized-light':
-        await import('prismjs/themes/prism-solarizedlight.css');
-        break;
-      case 'tomorrow-night':
-        await import('prismjs/themes/prism-tomorrow.css');
-        break;
-      default:
-        // Default case, do nothing or load a base theme if necessary
-        break;
+    const getUrl = themeUrlLoaders[theme];
+    if (!getUrl) {
+      console.warn(`未找到主题 ${theme} 的 CSS。`);
+      return;
     }
-    console.log(`${theme} theme loaded successfully.`);
-    Prism.highlightAll()
-  } catch (error) {
-    console.error(`Failed to load theme ${theme}:`, error);
-  }
 
+    const cssHref = await getUrl();
+
+    // 处理 <link> 标签，按需创建或更新
+    let linkEl = document.getElementById('prism-theme-link') as HTMLLinkElement | null;
+    if (!linkEl) {
+      linkEl = document.createElement('link');
+      linkEl.id = 'prism-theme-link';
+      linkEl.rel = 'stylesheet';
+      document.head.appendChild(linkEl);
+    }
+
+    linkEl.href = cssHref;
+
+    console.log(`已加载 Prism 主题 CSS: ${cssHref}`);
+
+    // 重新高亮
+    Prism.highlightAll();
+  } catch (error) {
+    console.error(`加载 Prism 主题 ${theme} 失败:`, error);
+  }
 
   // 发送全局事件，通知其他笔记编辑器实例更新主题
-  window.dispatchEvent(new CustomEvent('prism-theme-changed', { 
-    detail: { theme } 
-  }))
+  window.dispatchEvent(new CustomEvent('prism-theme-changed', { detail: { theme } }));
 }
 
 // Markdown主题配置
@@ -2387,128 +2220,6 @@ function applyMarkdownTheme(theme: string) {
   console.log(`已通过CSS变量应用Markdown主题: ${theme}`);
 }
 
-// 新增函数：应用主题样式
-function applyThemeStyles(theme: string) {
-  const themeConfig = PRISM_THEMES[theme as keyof typeof PRISM_THEMES] || PRISM_THEMES.default
-  
-  // 创建样式元素
-  let styleElement = document.getElementById('prism-theme-styles') as HTMLStyleElement
-  if (!styleElement) {
-    styleElement = document.createElement('style')
-    styleElement.id = 'prism-theme-styles'
-    document.head.appendChild(styleElement)
-  }
-
-  // 根据主题生成CSS样式
-  const cssContent = `
-    /* 代码块主题样式 - ${theme} */
-    .prose pre.prism-${theme} {
-      background-color: ${themeConfig.background} !important;
-      border: 1px solid rgba(0,0,0,0.1) !important;
-      border-radius: 0.5rem !important;
-      overflow: auto !important;
-      margin: 1rem 0 !important;
-      padding: 0 !important;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
-    }
-
-    .prose pre.prism-${theme} code {
-      background: transparent !important;
-      color: ${themeConfig.color} !important;
-      padding: 1rem !important;
-      border: none !important;
-      border-radius: 0 !important;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-      font-size: 0.875rem !important;
-      line-height: 1.5 !important;
-      white-space: pre-wrap !important;
-      word-wrap: break-word !important;
-      overflow-wrap: break-word !important;
-    }
-
-    .prose .code-block-container {
-      // margin: 1rem 0 !important;
-      border-radius: 0.5rem !important;
-      // overflow: hidden !important;
-      // border: 1px solid rgba(0,0,0,0.1) !important;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
-    }
-
-    .prose .code-block-header {
-      background: rgba(0,0,0,0.05) !important;
-      padding: 0.5rem 1rem !important;
-      display: flex !important;
-      justify-content: space-between !important;
-      align-items: center !important;
-      border-bottom: 1px solid rgba(0,0,0,0.1) !important;
-      font-size: 0.75rem !important;
-    }
-
-    .prose .code-language {
-      color: rgba(0,0,0,0.6) !important;
-      font-weight: 500 !important;
-      text-transform: uppercase !important;
-    }
-
-    .prose .copy-code-btn {
-      opacity: 0.6 !important;
-      transition: opacity 0.2s ease !important;
-    }
-
-    .prose .copy-code-btn:hover {
-      opacity: 1 !important;
-    }
-
-    /* 暗色主题适配 */
-    ${theme === 'okaidia' || theme === 'twilight' || theme === 'tomorrow-night' ? `
-      .prose .code-block-header {
-        background: rgba(255,255,255,0.05) !important;
-        border-bottom: 1px solid rgba(255,255,255,0.1) !important;
-      }
-
-      .prose .code-language {
-        color: rgba(255,255,255,0.8) !important;
-      }
-
-      .prose pre.prism-${theme} {
-        border: 1px solid rgba(255,255,255,0.1) !important;
-      }
-
-      .prose .code-block-container {
-        // border: 1px solid rgba(255,255,255,0.1) !important;
-      }
-    ` : ''}
-
-    /* 行号样式 */
-    .prose pre.line-numbers {
-      position: relative !important;
-      padding-left: 3em !important;
-      counter-reset: linenumber !important;
-    }
-
-    .prose pre.line-numbers > code {
-      position: relative !important;
-    }
-
-    .prose pre.line-numbers .line-numbers-rows {
-      position: absolute !important;
-      pointer-events: none !important;
-      top: 1rem !important;
-      font-size: 100% !important;
-      left: -3.8em !important;
-      width: 3em !important;
-      letter-spacing: -1px !important;
-      border-right: 1px solid rgba(0,0,0,0.2) !important;
-      user-select: none !important;
-      ${theme === 'okaidia' || theme === 'twilight' || theme === 'tomorrow-night' ? 
-        'border-right-color: rgba(255,255,255,0.2) !important;' : ''}
-    }
-  `
-
-  styleElement.textContent = cssContent
-  console.log(`已应用${theme}主题样式`)
-}
-
 // 添加插入表格的函数
 function insertTable() {
   const tableTemplate = `| 表头1 | 表头2 | 表头3 |\n| --- | --- | --- |\n| 内容1 | 内容2 | 内容3 |\n| 内容4 | 内容5 | 内容6 |`;
@@ -2638,30 +2349,6 @@ function stopDrag() {
 
 const isScrollingEditor = ref(false)
 const isScrollingPreview = ref(false)
-
-// 处理编辑器滚动事件
-function handleEditorScroll(event: Event) {
-  if (isScrollingPreview.value) return;
-
-  // 标记正在从编辑器滚动
-  isScrollingEditor.value = true;
-
-  // 获取滚动元素
-  const editor = event.target as HTMLTextAreaElement;
-  if (!editor || !previewDiv.value || !isSplitMode.value) return;
-
-  // 计算滚动比例
-  const editorScrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight);
-
-  // 设置预览区的滚动位置
-  const previewScrollable = previewDiv.value.scrollHeight - previewDiv.value.clientHeight;
-  previewDiv.value.scrollTop = editorScrollRatio * previewScrollable;
-
-  // 重置标记，延迟执行防止抖动
-  setTimeout(() => {
-    isScrollingEditor.value = false;
-  }, 100);
-}
 
 // 处理预览区滚动事件
 function handlePreviewScroll(event: Event) {
@@ -2857,14 +2544,6 @@ const modalImageSrc = ref('')
 const modalImageAlt = ref('')
 const modalImageLoading = ref(false)
 
-function onModalImageLoad() {
-  modalImageLoading.value = false
-}
-
-async function onModalImageError() {
-  modalImageLoading.value = false
-  await showAlert('图片加载失败', { title: '错误' })
-}
 
 function closeImageModal() {
   showImageModal.value = false
@@ -2900,30 +2579,6 @@ function setupImageClickHandler() {
       closeImageModal()
     }
   })
-}
-
-// 添加翻译功能
-async function translateSelectedText() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  // 确保有选择的文本
-  if (start === end) {
-    await showAlert('请先选择一段文本', { title: '提示' })
-    return
-  }
-
-  const selectedText = localNote.value.content.substring(start, end)
-  selectedTextForTranslation.value = selectedText
-  translationContent.value = ''
-  showTranslationBox.value = true
-  showContextMenu.value = false
-
-  // 使用AI翻译选中的文本
-  await processTranslation(selectedText)
 }
 
 // 处理翻译
@@ -3054,10 +2709,6 @@ async function confirmTip(newPrompt?: string) {
     return
   }
 
-  // 获取之前保存的选择位置（用于后续插入，但TIP结果不自动插入）
-  const start = (window as any)._tipSelectionStart || 0
-  const end = (window as any)._tipSelectionEnd || 0
-
   // 关闭输入对话框，显示结果对话框
   showTipDialog.value = false
 
@@ -3181,10 +2832,7 @@ async function pasteFromClipboard() {
   }
 }
 
-// 只更新内容
-function onContentBlur() {
-  emit('update', { id: localNote.value.id, content: localNote.value.content, updated_at: Date.now(), _contentOnly: true })
-}
+
 
 // 整个编辑器失焦时完整保存
 function onEditorBlur(event: FocusEvent) {
@@ -3568,7 +3216,7 @@ onMounted(async () => {
 let tipStreamUnlisten: (() => void) | null = null
 
 // 处理TIP请求并生成结果
-async function processTip(originalText: string, prompt: string) {
+async function processTip(_originalText: string, prompt: string) {
   try {
     isTipProcessing.value = true
     tipResultContent.value = ''
@@ -3723,6 +3371,7 @@ onMounted(() => {
         });
         renderedContent.value = safeHtml;
         nextTick(() => {
+            enhanceCodeBlocks();
             highlightCode();
             updateToc();
         });
@@ -3820,6 +3469,7 @@ onMounted(() => {
         });
         renderedContent.value = safeHtml;
         nextTick(() => {
+            enhanceCodeBlocks();
             highlightCode();
             updateToc();
         });
@@ -4528,7 +4178,7 @@ const templateStore = useTipTemplateStore();
 
 /* 修复代码块样式冲突 */
 :deep(.prose pre) {
-  background: transparent !important;
+  /* Prism 主题 CSS 将提供合适的背景色 */
   padding: 0 !important;
   margin: 1rem 0 !important;
   border-radius: 0.5rem !important;
@@ -4536,7 +4186,7 @@ const templateStore = useTipTemplateStore();
 }
 
 :deep(.prose pre code) {
-  background: transparent !important;
+  /* 继承父级背景色，避免强制透明导致主题失效 */
   padding: 1rem !important;
   border: none !important;
   border-radius: 0 !important;

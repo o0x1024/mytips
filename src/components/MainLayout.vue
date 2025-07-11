@@ -256,7 +256,6 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTipsStore, Tip, Category, TipSummary } from '../stores/tipsStore'
-import { useUIStore } from '../stores/uiStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
 import { showConfirm, showAlert } from '../services/dialog'
@@ -280,7 +279,7 @@ const {
   isLoading: storeIsLoading,
 } = storeToRefs(tipsStore)
 
-const uiStore = useUIStore()
+
 const encryptionStore = useEncryptionStore()
 
 // Router
@@ -643,7 +642,7 @@ function navigateTo(path: string) {
   router.push(path)
 }
 
-function addChildNotebook({ parentId, parentName }: { parentId: string, parentName: string }) {
+function addChildNotebook({ parentId }: { parentId: string }) {
   newNotebookParentId.value = parentId
   showAddNotebookModal.value = true
 }
@@ -664,7 +663,7 @@ function deleteNotebook(notebookId: string) {
   }
 }
 
-function deleteTag(tagId: string) {
+function deleteTag(_tagId: string) {
   // implementation
 }
 
@@ -787,7 +786,7 @@ function toggleTag(id: string) {
   }
 }
 
-function exportNote(id: string, format: string) {}
+function exportNote(_id: string, _format: string) {}
 function moveNoteToCategory(noteId: string, categoryId: string) {
   // 查找要移动的笔记
   const noteToMove = storeTips.value.find(note => note.id === noteId);
@@ -853,13 +852,13 @@ function moveNoteToCategory(noteId: string, categoryId: string) {
     console.error(`移动笔记 ${noteId} 到分类 ${categoryId} 失败:`, err);
   });
 }
-function handleNoteEncryption(id: string) {}
-function handleNoteDecryption(id: string) {}
-function duplicateNote(id: string) {}
-function addTagToNote(tag: string) {}
-function removeTagFromNote(tagId: string) {}
-function toggleNotePin(id: string) {}
-function handleNoteUnlock(id: string) {}
+function handleNoteEncryption(_id: string) {}
+function handleNoteDecryption(_id: string) {}
+function duplicateNote(_id: string) {}
+function addTagToNote(_tag: string) {}
+function removeTagFromNote(_tagId: string) {}
+function toggleNotePin(_id: string) {}
+function handleNoteUnlock(_id: string) {}
 
 async function addNotebook() {
   if(newNotebookName.value.trim()){
@@ -907,7 +906,7 @@ async function confirmEditNotebook() {
   }
 }
 
-function handleImportSuccess(importResult: any) {
+function handleImportSuccess(_importResult: any) {
   // 导入成功后，后端已经创建了新的笔记本
   // 我们只需要重新获取所有分类，然后重建前端的笔记本树
   tipsStore.fetchAllCategories().then(() => {

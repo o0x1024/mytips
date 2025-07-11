@@ -7,6 +7,7 @@ import { markedHighlight } from 'marked-highlight'
 import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
 import 'prismjs/themes/prism-okaidia.css'
+import { getDefaultAIModel } from '../services/aiService'
 
 // 检查是否在浏览器环境
 const isBrowser = typeof window !== 'undefined'
@@ -127,14 +128,31 @@ const getModelName = (modelId: string) => {
   return model ? model.name : '自定义模型'
 }
 
-// 加载默认AI模型
-const loadDefaultModel = () => {
+// 加载默认AI模型（优先使用用户选择，其次全局默认，否则回退 chatgpt）
+const loadDefaultModel = async () => {
+  let modelId = 'chatgpt'
+
+  // 1. 用户本地存储的选择
   if (isBrowser) {
     const savedModel = localStorage.getItem('floating-ai-model')
     if (savedModel && availableModels.value.some(m => m.id === savedModel)) {
-      selectedModel.value = savedModel
+      modelId = savedModel
     }
   }
+
+  // 2. 如果本地无记录，尝试获取全局默认模型
+  if (modelId === 'chatgpt') {
+    try {
+      const defaultModel = await getDefaultAIModel('chat')
+      if (defaultModel && defaultModel.provider && availableModels.value.some(m => m.id === defaultModel.provider)) {
+        modelId = defaultModel.provider
+      }
+    } catch (error) {
+      console.error('FloatingAI: 获取全局默认AI模型失败:', error)
+    }
+  }
+
+  selectedModel.value = modelId
 }
 
 // 获取或创建浮动聊天框对话
@@ -431,18 +449,6 @@ const toggleChat = async () => {
   }
 }
 
-// 切换AI模型
-const changeModel = async (modelId: string) => {
-  selectedModel.value = modelId
-  // 保存为默认模型
-  if(isBrowser) {
-    localStorage.setItem('floating-ai-model', modelId)
-  }
-  // 清空聊天记录（但不从数据库删除）
-  chatMessages.value = []
-  // 重置对话ID，下次打开时会重新创建或查找对话
-  floatingConversationId.value = null
-}
 
 // 取消AI生成
 const cancelGeneration = async () => {
@@ -1125,7 +1131,7 @@ let themeObserver: MutationObserver | null = null
 onMounted(async () => {
   if (isBrowser) {
     window.addEventListener('resize', handleResize)
-    loadDefaultModel()
+    await loadDefaultModel()
     setupCodeCopyFeature()
     
     // 应用代码块主题样式
@@ -1226,21 +1232,6 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
           <h3>{{ getModelName(selectedModel) }}</h3>
         </div>
         <div class="flex items-center gap-2">
-          <div class="dropdown dropdown-end">
-            <label tabindex="0" class="btn btn-ghost btn-xs">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </label>
-            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-              <li v-for="model in availableModels" :key="model.id">
-                <a @click="changeModel(model.id)" :class="{ 'active': selectedModel === model.id }">
-                  <img :src="model.avatar" :alt="model.name" class="h-5 w-5 mr-2" />
-                  {{ model.name }}
-                </a>
-              </li>
-            </ul>
-          </div>
           <button 
             class="clear-btn" 
             @click="clearAllMessages"

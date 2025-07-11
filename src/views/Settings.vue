@@ -1298,10 +1298,10 @@ import { useUpdateStore } from '../stores/updateStore'
 import UpdateDialog from '../components/UpdateDialog.vue'
 import { enable, isEnabled, disable } from '@tauri-apps/plugin-autostart';
 import { useRouter } from 'vue-router'
-import { showConfirm, showAlert } from '../services/dialog'
+import { showConfirm } from '../services/dialog'
 import {
-  AIProvider, AIModel, TestConnectionRequest, TestConnectionResponse,
-  getChatModels, getEmbeddingModels, getDefaultAIModel, setDefaultAIModel,
+  AIProvider, AIModel, TestConnectionRequest,
+  getChatModels, getDefaultAIModel,
   testAIConnection, saveAIConfig, getAIConfig, getAIUsageStats, reloadAIServices,
   getAIServiceStatus, defaultProviders
 } from '../services/aiService'
@@ -1921,15 +1921,8 @@ async function migrateConfigToDatabase() {
 
 // 新增模型配置管理功能
 const selectedConfigModel = ref('openai')
-const showApiKey = ref(false)
-const apiConfig = ref({
-  apiKey: '',
-  customModelName: '',
-  maxTokens: 3000,
-  apiEndpoint: ''
-})
-const showModelSuggestions = ref(false)
-const filteredModelSuggestions = ref<Array<{ name: string, description: string }>>([])
+
+
 const editingModelList = ref<Array<{ name: string, description: string }>>([])
 const editingModelType = ref('')
 const newModelName = ref('')
@@ -2032,155 +2025,9 @@ function getModelNameById(modelId: string): string {
   return model ? model.name : '未知模型'
 }
 
-function getDefaultModelName(modelId: string): string {
-  switch (modelId) {
-    case 'chatgpt': return 'gpt-4o'
-    case 'gemini': return 'gemini-1.5-flash'
-    case 'deepseek': return 'deepseek-chat'
-    case 'claude': return 'claude-3.5-sonnet'
-    case 'qwen': return 'qwen-max'
-    case 'doubao': return 'doubao-1.5-pro-4k'
-    case 'grok': return 'grok-3'
-    case 'custom': return 'gpt-3.5-turbo'
-    default: return ''
-  }
-}
 
-function getDefaultMaxTokens(modelId: string): number {
-  const defaults: Record<string, number> = {
-    chatgpt: 4000,
-    gemini: 4000,
-    deepseek: 3000,
-    claude: 4000,
-    qwen: 3000,
-    doubao: 3000,
-    grok: 4000,
-    custom: 3000
-  }
-  return defaults[modelId] || 3000
-}
 
-function getMinMaxTokens(modelId: string): number {
-  const mins: Record<string, number> = {
-    chatgpt: 100,
-    gemini: 100,
-    deepseek: 100,
-    claude: 100,
-    qwen: 100,
-    doubao: 100,
-    grok: 100,
-    custom: 100
-  }
-  return mins[modelId] || 100
-}
 
-function getMaxMaxTokens(modelId: string): number {
-  const maxs: Record<string, number> = {
-    chatgpt: 8000,
-    gemini: 8000,
-    deepseek: 6000,
-    claude: 8000,
-    qwen: 6000,
-    doubao: 6000,
-    grok: 8000,
-    custom: 8000
-  }
-  return maxs[modelId] || 8000
-}
-
-async function loadApiConfig(): Promise<void> {
-  if (!selectedConfigModel.value) return
-  
-  try {
-    // 1. 获取API密钥 (来自后端)
-    const result = await invoke('get_api_key', { service: selectedConfigModel.value })
-    apiConfig.value.apiKey = (result as string) || ''
-
-    // 2. 获取其他配置 (来自localStorage)
-    const storedConfig = localStorage.getItem(`ai-config-${selectedConfigModel.value}`)
-    if (storedConfig) {
-      const config = JSON.parse(storedConfig)
-      apiConfig.value.customModelName = config.customModelName || ''
-      apiConfig.value.maxTokens = config.maxTokens || getDefaultMaxTokens(selectedConfigModel.value)
-    } else {
-      // 如果没有存储，使用默认值
-      apiConfig.value.customModelName = ''
-      apiConfig.value.maxTokens = getDefaultMaxTokens(selectedConfigModel.value)
-    }
-    
-    // 3. 如果是自定义模型，获取端点 (来自后端)
-    if (selectedConfigModel.value === 'custom') {
-      const endpoint = await invoke('get_api_endpoint')
-      apiConfig.value.apiEndpoint = (endpoint as string) || ''
-    } else {
-      apiConfig.value.apiEndpoint = ''
-    }
-
-  } catch (error) {
-    console.error('获取API配置失败:', error)
-    // 出错时重置为默认值
-    apiConfig.value.apiKey = ''
-    apiConfig.value.customModelName = ''
-    apiConfig.value.apiEndpoint = ''
-    apiConfig.value.maxTokens = getDefaultMaxTokens(selectedConfigModel.value)
-  }
-
-  // 初始化模型建议
-  filterModelSuggestions()
-}
-
-async function saveApiConfig(): Promise<void> {
-  if (!selectedConfigModel.value) return
-  
-  isSavingApiConfig.value = true
-  try {
-    // 1. 保存API密钥 (到后端)
-    await invoke('save_api_key', {
-      service: selectedConfigModel.value,
-      apiKey: apiConfig.value.apiKey
-    })
-
-    // 2. 保存其他配置 (到localStorage)
-    const configToStore = {
-      customModelName: apiConfig.value.customModelName,
-      maxTokens: parseInt(apiConfig.value.maxTokens.toString(), 10)
-    }
-    localStorage.setItem(`ai-config-${selectedConfigModel.value}`, JSON.stringify(configToStore))
-
-    // 3. 如果是自定义模型，保存端点 (到后端)
-    if (selectedConfigModel.value === 'custom' && apiConfig.value.apiEndpoint) {
-      await invoke('save_api_endpoint', { endpoint: apiConfig.value.apiEndpoint })
-    }
-
-    // 4. 如果当前是默认模型，更新默认模型设置
-    if (selectedConfigModel.value === defaultAIModel.value) {
-      await saveDefaultAIModel()
-    }
-
-    // 5. 尝试更新新的AI提供商配置
-    try {
-      const provider = providerMapping[selectedConfigModel.value]
-      if (provider && aiProviders.value[provider]) {
-        aiProviders.value[provider].api_key = apiConfig.value.apiKey
-        if (selectedConfigModel.value === 'custom') {
-          aiProviders.value[provider].api_base = apiConfig.value.apiEndpoint
-        }
-        
-        // 保存提供商配置
-        await saveAIProviderConfig()
-      }
-    } catch (error) {
-      console.warn('更新AI提供商配置失败:', error)
-    }
-
-    message('API配置保存成功', { title: '成功' })
-  } catch (error) {
-    console.error('保存API配置失败:', error)
-    message('保存API配置失败: ' + error, { title: '错误' })
-  } finally {
-    isSavingApiConfig.value = false
-  }
-}
 
 async function testApiConnection(providerId: string): Promise<void> {
   if (!aiProviders.value[providerId]) return
@@ -2231,11 +2078,7 @@ async function testApiConnection(providerId: string): Promise<void> {
   }
 }
 
-function openModelConfigModal(modelId: string): void {
-  editingModelType.value = modelId
-  editingModelList.value = [...(modelSuggestions.value[modelId as keyof typeof modelSuggestions.value] || [])]
-  modelConfigModal.value?.showModal()
-}
+
 
 function closeModelConfigModal(): void {
   editingModelType.value = ''
@@ -2265,31 +2108,6 @@ async function saveModelConfig(): Promise<void> {
   }
 }
 
-function filterModelSuggestions(): void {
-  const modelType = selectedConfigModel.value as keyof typeof defaultModelSuggestions
-  const allSuggestions = modelSuggestions.value[modelType] || []
-
-  if (!apiConfig.value.customModelName.trim()) {
-    filteredModelSuggestions.value = allSuggestions
-  } else {
-    const searchTerm = apiConfig.value.customModelName.toLowerCase()
-    filteredModelSuggestions.value = allSuggestions.filter(suggestion =>
-      suggestion.name.toLowerCase().includes(searchTerm) ||
-      suggestion.description.toLowerCase().includes(searchTerm)
-    )
-  }
-}
-
-function hideModelSuggestions(): void {
-  setTimeout(() => {
-    showModelSuggestions.value = false
-  }, 200)
-}
-
-function selectModelSuggestion(name: string): void {
-  apiConfig.value.customModelName = name
-  showModelSuggestions.value = false
-}
 
 function addNewModel(): void {
   if (!newModelName.value.trim() || !newModelDescription.value.trim()) return
@@ -2585,46 +2403,7 @@ async function loadCustomModels(): Promise<void> {
   }
 }
 
-// 打开自定义模型配置模态框
-function openCustomModelModal(): void {
-  editingCustomModelId.value = ''
-  customModelForm.value = {
-    name: '',
-    endpoint: '',
-    model_name: '',
-    api_key: '',
-    adapter_type: 'openai',
-    custom_headers: []
-  }
-  showCustomModelApiKey.value = false
-  customModelModal.value?.showModal()
-}
 
-// 编辑自定义模型
-async function editCustomModel(modelId: string): Promise<void> {
-  try {
-    const config = await invoke('get_custom_model_config', { configId: modelId })
-    const configData = config as any
-    
-    editingCustomModelId.value = modelId
-    customModelForm.value = {
-      name: configData.name || '',
-      endpoint: configData.endpoint || '',
-      model_name: configData.model_name || '',
-      api_key: configData.api_key || '',
-      adapter_type: configData.adapter_type || 'openai',
-      custom_headers: Object.entries(configData.custom_headers || {}).map(([key, value]) => ({
-        key,
-        value: value as string
-      }))
-    }
-    showCustomModelApiKey.value = false
-    customModelModal.value?.showModal()
-  } catch (error) {
-    console.error('获取自定义模型配置失败:', error)
-    message('获取自定义模型配置失败: ' + error, { title: '错误' })
-  }
-}
 
 // 关闭自定义模型配置模态框
 function closeCustomModelModal(): void {
@@ -2677,25 +2456,7 @@ async function saveCustomModel(): Promise<void> {
   }
 }
 
-// 删除自定义模型配置
-async function deleteCustomModel(modelId: string): Promise<void> {
-  const confirmed = await showConfirm('确定要删除这个自定义模型配置吗？', {
-    title: '确认删除',
-    confirmText: '删除',
-    cancelText: '取消'
-  })
-  
-  if (!confirmed) return
-  
-  try {
-    await invoke('delete_custom_model_config', { configId: modelId })
-    message('自定义模型配置删除成功', { title: '成功' })
-    await loadCustomModels()
-  } catch (error) {
-    console.error('删除自定义模型配置失败:', error)
-    message('删除自定义模型配置失败: ' + error, { title: '错误' })
-  }
-}
+
 
 // 测试自定义模型连接
 async function testCustomModelConnection(): Promise<void> {
