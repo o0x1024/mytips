@@ -44,10 +44,10 @@ jobs:
           #   build_cmd: 'tauri ios build'
 
           # Android (arm64)
-          - os: ubuntu-latest
-            platform: 'android-aarch64'
-            rust_target: 'aarch64-linux-android'
-            build_cmd: 'tauri android build'
+          # - os: ubuntu-latest
+          #   platform: 'android-aarch64'
+          #   rust_target: 'aarch64-linux-android'
+          #   build_cmd: 'tauri android build'
 
     steps:
     - name: Checkout repository
