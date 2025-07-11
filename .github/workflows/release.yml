@@ -38,10 +38,10 @@ jobs:
             build_cmd: 'tauri build --target x86_64-pc-windows-msvc'
 
           # iOS (arm64)
-          - os: macos-latest
-            platform: 'ios-aarch64'
-            rust_target: 'aarch64-apple-ios'
-            build_cmd: 'tauri ios build'
+          # - os: macos-latest
+          #   platform: 'ios-aarch64'
+          #   rust_target: 'aarch64-apple-ios'
+          #   build_cmd: 'tauri ios build'
 
           # Android (arm64)
           - os: ubuntu-latest
