@@ -10,44 +10,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30  # 增加超时时间至30分钟
     strategy:
-      max-parallel: 4 # 一次最多并行运行 2 个构建任务
+      max-parallel: 2 # 一次最多并行运行 2 个构建任务
       matrix:
         include:
-          # Linux Desktop
-          # - os: ubuntu-latest
-          #   platform: 'linux-x86_64'
-          #   rust_target: 'x86_64-unknown-linux-gnu'
-          #   build_cmd: 'tauri build --target x86_64-unknown-linux-gnu'
-
-          # macOS Desktop (x64)
+        #   - os: ubuntu-latest
+        #     platform: 'linux-x86_64'
+        #     rust_target: 'x86_64-unknown-linux-gnu'
           - os: macos-latest
             platform: 'darwin-x86_64'
             rust_target: 'x86_64-apple-darwin'
-            build_cmd: 'tauri build --target x86_64-apple-darwin'
-
-          # macOS Desktop (Apple-Silicon)
           - os: macos-14
             platform: 'darwin-aarch64'
             rust_target: 'aarch64-apple-darwin'
-            build_cmd: 'tauri build --target aarch64-apple-darwin'
-
-          # Windows Desktop
           - os: windows-latest
             platform: 'windows-x86_64'
             rust_target: 'x86_64-pc-windows-msvc'
-            build_cmd: 'tauri build --target x86_64-pc-windows-msvc'
-
-          # iOS (arm64)
-          # - os: macos-latest
-          #   platform: 'ios-aarch64'
-          #   rust_target: 'aarch64-apple-ios'
-          #   build_cmd: 'tauri ios build'
-
-          # Android (arm64)
-          # - os: ubuntu-latest
-          #   platform: 'android-aarch64'
-          #   rust_target: 'aarch64-linux-android'
-          #   build_cmd: 'tauri android build'
 
     steps:
     - name: Checkout repository
@@ -64,17 +41,11 @@ jobs:
         toolchain: stable
         target: ${{ matrix.rust_target }}
 
-    # Android 专用依赖
-    - name: Set up Android SDK
-      if: contains(matrix.platform, 'android')
-      uses: android-actions/setup-android@v3
-
     - name: Install Rust dependencies for Linux
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install pkg-config libclang-dev libxcb1-dev libxrandr-dev libdbus-1-dev libpipewire-0.3-dev libwayland-dev libegl-dev libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev libgbm-dev libappindicator3-dev librsvg2-dev patchelf
-
+        sudo apt-get install -y libwebkit2gtk-4.1-0 libappindicator3-1 libgtk-3-0 patchelf
 
     - name: Install dependencies
       run: yarn install --frozen-lockfile
@@ -87,12 +58,7 @@ jobs:
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
 
     - name: Build the application
-      run: |
-        if [ -z "${{ matrix.build_cmd }}" ]; then
-          yarn tauri build --target ${{ matrix.rust_target }}
-        else
-          yarn ${{ matrix.build_cmd }}
-        fi
+      run: yarn tauri build --target ${{ matrix.rust_target }}
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -102,7 +68,7 @@ jobs:
       with:
         name: tauri-build-${{ matrix.platform }}
         path: |
-          src-tauri/target/**/release/bundle/
+          src-tauri/target/${{ matrix.rust_target }}/release/bundle/
 
   release:
     needs: build
