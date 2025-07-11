@@ -380,9 +380,8 @@
 import { ref, computed, watch, onMounted, nextTick, onBeforeUnmount, onActivated } from 'vue'
 import { useTipsStore, TipSummary } from '../stores/tipsStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
-import { showConfirm } from '../services/dialog'
 import { storeToRefs } from 'pinia'
-import { useVirtualizer, Virtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 
 // 类型定义
 interface Note extends TipSummary {
@@ -944,7 +943,6 @@ function isNoteEncrypted(noteId: string): boolean {
 /* 笔记预览文本的特殊截断样式 */
 .note-preview-text {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.4;

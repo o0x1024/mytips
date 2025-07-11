@@ -1434,6 +1434,8 @@ async function sendMessage(resendMessage?: any) {
 
     // 获取自定义模型名称
     let customModelName = ''
+    console.log(customModelName)
+
     if (selectedModel.value.startsWith('custom_')) {
       const config = aiConfigs.value[selectedModel.value]
       if (config && config.model_name) {
@@ -3262,6 +3264,7 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
 
     // 获取自定义模型名称
     let customModelName = ''
+    console.log(customModelName)
     if (selectedModel.value.startsWith('custom_')) {
       const config = aiConfigs.value[selectedModel.value]
       if (config && config.model_name) {
