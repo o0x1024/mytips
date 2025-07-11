@@ -13,18 +13,41 @@ jobs:
       max-parallel: 2 # 一次最多并行运行 2 个构建任务
       matrix:
         include:
-        #   - os: ubuntu-latest
-        #     platform: 'linux-x86_64'
-        #     rust_target: 'x86_64-unknown-linux-gnu'
+          # Linux Desktop
+          - os: ubuntu-latest
+            platform: 'linux-x86_64'
+            rust_target: 'x86_64-unknown-linux-gnu'
+            build_cmd: 'tauri build --target x86_64-unknown-linux-gnu'
+
+          # macOS Desktop (x64)
           - os: macos-latest
             platform: 'darwin-x86_64'
             rust_target: 'x86_64-apple-darwin'
+            build_cmd: 'tauri build --target x86_64-apple-darwin'
+
+          # macOS Desktop (Apple-Silicon)
           - os: macos-14
             platform: 'darwin-aarch64'
             rust_target: 'aarch64-apple-darwin'
+            build_cmd: 'tauri build --target aarch64-apple-darwin'
+
+          # Windows Desktop
           - os: windows-latest
             platform: 'windows-x86_64'
             rust_target: 'x86_64-pc-windows-msvc'
+            build_cmd: 'tauri build --target x86_64-pc-windows-msvc'
+
+          # iOS (arm64)
+          - os: macos-latest
+            platform: 'ios-aarch64'
+            rust_target: 'aarch64-apple-ios'
+            build_cmd: 'tauri ios build'
+
+          # Android (arm64)
+          - os: ubuntu-latest
+            platform: 'android-aarch64'
+            rust_target: 'aarch64-linux-android'
+            build_cmd: 'tauri android build'
 
     steps:
     - name: Checkout repository
@@ -40,6 +63,11 @@ jobs:
       with:
         toolchain: stable
         target: ${{ matrix.rust_target }}
+
+    # Android 专用依赖
+    - name: Set up Android SDK
+      if: contains(matrix.platform, 'android')
+      uses: android-actions/setup-android@v3
 
     - name: Install Rust dependencies for Linux
       if: matrix.os == 'ubuntu-latest'
@@ -58,7 +86,12 @@ jobs:
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
 
     - name: Build the application
-      run: yarn tauri build --target ${{ matrix.rust_target }}
+      run: |
+        if [ -z "${{ matrix.build_cmd }}" ]; then
+          yarn tauri build --target ${{ matrix.rust_target }}
+        else
+          yarn ${{ matrix.build_cmd }}
+        fi
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -68,7 +101,7 @@ jobs:
       with:
         name: tauri-build-${{ matrix.platform }}
         path: |
-          src-tauri/target/${{ matrix.rust_target }}/release/bundle/
+          src-tauri/target/**/release/bundle/
 
   release:
     needs: build
