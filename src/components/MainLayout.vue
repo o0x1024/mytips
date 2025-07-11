@@ -771,15 +771,17 @@ async function selectNotebook(id: string) {
   }
 }
 function toggleTag(id: string) {
-  const index = selectedTags.value.indexOf(id);
-  if (index > -1) {
-    selectedTags.value.splice(index, 1);
+  // If the clicked tag is already selected, unselect it.
+  // Otherwise, select the clicked tag.
+  if (selectedTags.value[0] === id) {
+    selectedTags.value = [];
   } else {
-    selectedTags.value.push(id);
+    selectedTags.value = [id];
   }
+  
   selectedNotebookId.value = null; // clear notebook selection
   if (selectedTags.value.length > 0) {
-    tipsStore.fetchTipsByTag(selectedTags.value.join(',')); // Assuming API can handle multiple tags
+    tipsStore.fetchTipsByTag(selectedTags.value.join(','))
   } else {
     tipsStore.fetchTips(true);
   }

@@ -64,13 +64,13 @@
           <div v-if="showContextMenu"
             class="context-menu absolute bg-base-200 text-base-content rounded-md shadow-lg p-2 z-30"
             :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }">
-            <ul>
-              <li><a @click="copySelectedText" :disabled="!hasSelectedText">复制</a></li>
+            <ul class="menu menu-sm p-0">
+              <li><a @click="copySelectedText" :class="{ 'disabled': !hasSelectedText }">复制</a></li>
               <li><a @click="pasteFromClipboard">粘贴</a></li>
-              <li class="divider"></li>
-              <li><a @click="explainWithAI" :disabled="!hasSelectedText || isAIProcessing">AI解释</a></li>
-              <li><a @click="translateWithAI" :disabled="!hasSelectedText || isAIProcessing">AI翻译</a></li>
-              <li><a @click="tipWithAI" :disabled="!hasSelectedText || isAIProcessing">TIP一下</a></li>
+              <li class="menu-title"><span></span></li>
+              <li><a @click="explainWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">AI解释</a></li>
+              <li><a @click="translateWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">AI翻译</a></li>
+              <li><a @click="tipWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">TIP一下</a></li>
             </ul>
           </div>
             
@@ -116,13 +116,89 @@
             </div>
     </div>
   </div>
+
+  <!-- AI 解释弹窗 -->
+  <div v-if="showExplanationBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showExplanationBox=false">
+    <div class="bg-base-100 rounded-lg shadow-lg  w-1/2 p-4">
+      <h3 class="font-bold text-lg mb-2">AI解释</h3>
+      <div class="prose max-h-80  overflow-y-auto">
+        <div v-if="isExplaining && !explanationContent" class="flex justify-center items-center h-24">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+        <div v-else v-html="explanationContent"></div>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-sm" @click="copyExplanation">复制</button>
+        <button class="btn btn-sm" @click="insertExplanationToContent">插入笔记</button>
+        <button class="btn btn-sm btn-error" @click="showExplanationBox=false">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AI 翻译弹窗 -->
+  <div v-if="showTranslationBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showTranslationBox=false">
+    <div class="bg-base-100 rounded-lg shadow-lg w-1/2 p-4">
+      <h3 class="font-bold text-lg mb-2">AI翻译</h3>
+      <div class="prose max-h-80 overflow-y-auto">
+        <div v-if="isTranslating && !translationContent" class="flex justify-center items-center h-24">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+        <div v-else v-html="translationContent"></div>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-sm" @click="copyTranslation">复制</button>
+        <button class="btn btn-sm" @click="insertTranslationToContent">插入笔记</button>
+        <button class="btn btn-sm btn-error" @click="showTranslationBox=false">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIP 对话框 -->
+  <div v-if="showTipDialog" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeTipDialog">
+    <div class="bg-base-100 rounded-lg shadow-lg w-1/2 p-4">
+      <h3 class="font-bold text-lg mb-2">TIP一下</h3>
+      <textarea v-model="tipPrompt" class="textarea textarea-bordered w-full h-32 tip-prompt-textarea"></textarea>
+      <div class="mt-2 text-xs text-right text-base-content/60">{{ tipPrompt.length }} 字符</div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button class="btn btn-sm" @click="setTipTemplate('expand')">扩充</button>
+        <button class="btn btn-sm" @click="setTipTemplate('improve')">改进</button>
+        <button class="btn btn-sm" @click="setTipTemplate('rewrite')">重写</button>
+        <button class="btn btn-sm" @click="setTipTemplate('summarize')">总结</button>
+        <button class="btn btn-sm" @click="setTipTemplate('question')">提问</button>
+        <button class="btn btn-sm" @click="setTipTemplate('code')">代码</button>
+        <button class="btn btn-sm" @click="saveCurrentAsTemplate">保存为模板</button>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-sm btn-secondary" @click="resetTipPrompt">重置</button>
+        <button class="btn btn-sm btn-primary" @click="confirmTip">确认</button>
+        <button class="btn btn-sm btn-error" @click="closeTipDialog">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIP结果弹窗 -->
+  <div v-if="showTipResultBox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="closeTipResultBox">
+    <div class="bg-base-100 rounded-lg shadow-lg  w-1/2 p-4">
+      <h3 class="font-bold text-lg mb-2">TIP结果</h3>
+      <div class="prose max-h-80 overflow-y-auto">
+        <div v-if="isTipProcessing && !tipResultContent" class="flex justify-center items-center h-24">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+        <div v-else v-html="tipResultContent"></div>
+      </div>
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-sm" @click="copyTipResult">复制</button>
+        <button class="btn btn-sm" @click="insertTipResultToContent">插入笔记</button>
+        <button class="btn btn-sm btn-error" @click="closeTipResultBox">取消</button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount, onUnmounted, onUpdated } from 'vue'
+import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount } from 'vue'
 import DOMPurify from 'dompurify'
 import { invoke } from '@tauri-apps/api/core'
-import TagSelector from './TagSelector.vue'
 import EncryptedContent from './EncryptedContent.vue'
 import EditorToolbar from './EditorToolbar.vue'
 import EditorTopBar from './EditorTopBar.vue'
@@ -130,6 +206,7 @@ import EditorFooter from './EditorFooter.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 import { showAlert } from '../services/dialog'
 import { useEncryptionStore } from '../stores/encryptionStore'
+import { getDefaultAIModel } from '../services/aiService'
 import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import Prism from 'prismjs'
@@ -191,6 +268,17 @@ const PRISM_THEMES = {
     selectionBackground: '#515151'
   }
 }
+
+const providerMapping: Record<string, string> = {
+  'chatgpt': 'openai',
+  'gemini': 'gemini',
+  'deepseek': 'deepseek',
+  'qwen': 'ali',
+  'claude': 'anthropic',
+  'doubao': 'doubao',
+  'grok': 'xai',
+  'custom': 'custom'
+};
 
 // 安全检查 Prism 语言是否可用
 function isPrismLanguageAvailable(lang: string): boolean {
@@ -315,12 +403,15 @@ const showTipDialog = ref(false)
 const tipPrompt = ref('')
 const selectedTextForTip = ref('')
 const originalTipPrompt = ref('')
+// TIP结果弹窗相关状态
+const showTipResultBox = ref(false)
+const tipResultContent = ref('')
+const isTipProcessing = ref(false)
 
 // 动态响应式工具栏相关状态
 const toolbarContainer = ref<HTMLElement | null>(null)
 const toolbarLeft = ref<HTMLElement | null>(null)
 const toolbarRight = ref<HTMLElement | null>(null)
-const moreToolsDropdown = ref<HTMLElement | null>(null)
 const hiddenItems = ref<any[]>([])
 
 // 目录相关状态
@@ -331,7 +422,6 @@ const tocPosition = ref({ x: window.innerWidth - 320, y: 200 })
 const isDragging = ref(false)
 const dragOffset = ref({ x: 0, y: 0 })
 const tocContainer = ref<HTMLElement | null>(null)
-const markdownContent = ref<HTMLElement | null>(null)
 
 const resizeObserver = ref<ResizeObserver | null>(null)
 let globalUnlisten: (() => void) | null = null; // 全局事件监听器引用
@@ -942,10 +1032,10 @@ function renderMarkdown() {
     })
 
     // 使用 marked 渲染 Markdown
-    const htmlContent = marked.parse(processedContent) as string
+    const rawHtml = marked.parse(processedContent) as string
 
     // 使用DOMPurify清理HTML，防止XSS，但允许安全的HTML标签和图片
-    const cleanHtml = DOMPurify.sanitize(htmlContent, {
+    const cleanHtml = DOMPurify.sanitize(rawHtml, {
       ADD_TAGS: ['iframe', 'pre', 'code', 'img', 'mark'],
       ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'data-code', 'data-language', 'data-search-index', 'loading', 'decoding'],
       ALLOW_DATA_ATTR: true,
@@ -986,7 +1076,7 @@ function enhanceCodeBlocks() {
   const codeElements = document.querySelectorAll('.prose pre > code:not([data-enhanced])')
   const currentTheme = currentHighlightTheme.value || 'default'
   
-  codeElements.forEach((codeElement, index) => {
+  codeElements.forEach((codeElement, _index) => {
     const pre = codeElement.closest('pre')
     if (!pre) return
     
@@ -1297,28 +1387,25 @@ async function processWithAI(originalText: string, prompt: string, appendResult 
     currentStreamingId.value = `stream_${Date.now()}`
     console.log(`生成流ID: ${currentStreamingId.value}`)
 
-    // 获取选择的AI模型
-    const selectedModel = localStorage.getItem('mytips-default-ai-model') || 'gemini'
-
-    // 检查API密钥
-    try {
-      const hasApiKey = await invoke('has_api_key', { modelId: selectedModel })
-      if (!hasApiKey) {
-        throw new Error(`未配置${selectedModel}模型的API密钥，请前往AI助手页面进行设置`)
-      }
-    } catch (e) {
-      console.error('API密钥检查失败:', e)
-      throw new Error('无法验证API密钥，请前往AI助手页面进行设置')
-    }
+    // 使用全局默认AI提供商
+    const providerId = defaultProviderId.value
 
     // 在发送API请求前设置事件监听器
     const { listen } = await import('@tauri-apps/api/event')
     globalUnlisten = await listen('ai-stream-chunk', (event: { payload: any }) => {
-      const payload = event.payload as { id: string, chunk: string, done: boolean }
+      const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
 
       // 安全检查：确保我们仍在处理中且ID匹配
       if (!isStreaming.value || !currentStreamingId.value) {
         console.log(`流处理已取消或重置，忽略事件`)
+        return
+      }
+      
+      // 检查后端返回的错误
+      if (payload.error) {
+        console.error('AI stream error from backend:', payload.error)
+        showAlert(`AI处理失败: ${payload.error}`, { title: '错误' })
+        cleanupStream()
         return
       }
 
@@ -1368,9 +1455,9 @@ async function processWithAI(originalText: string, prompt: string, appendResult 
     })
 
     // 发送AI请求
-    console.log(`使用模型${selectedModel}发送请求，提示文本长度: ${prompt.length}字符`)
+    console.log(`使用模型${providerId}发送请求，提示文本长度: ${prompt.length}字符`)
     await invoke('send_ai_message_stream', {
-      modelId: selectedModel,
+      providerId: providerId,
       message: prompt,
       streamId: currentStreamingId.value,
       messages: undefined,
@@ -1695,19 +1782,8 @@ async function processExplanation(textToExplain: string) {
   try {
     isExplaining.value = true
 
-    // 获取选择的AI模型
-    const selectedModel = localStorage.getItem('mytips-default-ai-model') || 'gemini'
-
-    // 检查API密钥
-    try {
-      const hasApiKey = await invoke('has_api_key', { modelId: selectedModel })
-      if (!hasApiKey) {
-        throw new Error(`未配置${selectedModel}模型的API密钥，请前往AI助手页面进行设置`)
-      }
-    } catch (e) {
-      console.error('API密钥检查失败:', e)
-      throw new Error('无法验证API密钥，请前往AI助手页面进行设置')
-    }
+    // 使用全局默认AI提供商
+    const providerId = defaultProviderId.value
 
     // 创建唯一的流ID
     const streamId = `explain_${Date.now()}`
@@ -1720,16 +1796,25 @@ async function processExplanation(textToExplain: string) {
     const { listen } = await import('@tauri-apps/api/event')
     let rawExplanation = ''
     const unlisten = await listen('ai-stream-chunk', (event: { payload: any }) => {
-      const payload = event.payload as { id: string, chunk: string, done: boolean }
+      const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
 
       // 确保ID匹配
       if (payload.id !== streamId) return
+
+      // 检查后端返回的错误
+      if (payload.error) {
+        console.error('AI stream error from backend:', payload.error)
+        explanationContent.value = `<p class="text-error">解释生成失败: ${payload.error}</p>`
+        isExplaining.value = false
+        unlisten()
+        return
+      }
 
       if (payload.chunk) {
         // 累积解释内容
         rawExplanation += payload.chunk
         // 不再使用 marked，直接设置为带有段落标签的HTML
-        explanationContent.value = `<p>${rawExplanation.replace(/\n\n/g, '</p><p>')}</p>`;
+        explanationContent.value = renderInlineMarkdown(rawExplanation)
       }
 
       // 如果完成了，清理监听器
@@ -1741,7 +1826,7 @@ async function processExplanation(textToExplain: string) {
 
     // 发送AI请求
     await invoke('send_ai_message_stream', {
-      modelId: selectedModel,
+      providerId: providerId,
       message: prompt,
       streamId: streamId,
       messages: undefined,
@@ -2021,6 +2106,17 @@ onMounted(async () => {
     // 保存监听器引用以便后续清理
     ;(window as any)._systemThemeListener = themeChangeHandler
     ;(window as any)._darkModeMediaQuery = darkModeMediaQuery
+  }
+
+  // 在组件挂载时获取全局默认AI模型
+  try {
+    const defaultModel = await getDefaultAIModel('chat')
+    if (defaultModel && defaultModel.provider) {
+      defaultProviderId.value = defaultModel.provider
+      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
+    }
+  } catch (error) {
+    console.error('NoteEditor: 获取默认AI模型失败:', error)
   }
 })
 
@@ -3258,24 +3354,25 @@ async function processTranslation(text: string) {
       : `请将以下中文翻译成英文：\n\n${text}`
     const streamId = `translate_${Date.now()}`
     translationContent.value = ''
-    const selectedModel = localStorage.getItem('mytips-default-ai-model') || 'gemini'
-    try {
-      const hasApiKey = await invoke('has_api_key', { modelId: selectedModel })
-      if (!hasApiKey) {
-        throw new Error(`未配置${selectedModel}模型的API密钥，请前往AI助手页面进行设置`)
-      }
-    } catch (e) {
-      console.error('API密钥检查失败:', e)
-      throw new Error('无法验证API密钥，请前往AI助手页面进行设置')
-    }
+    const providerId = defaultProviderId.value
     const { listen } = await import('@tauri-apps/api/event')
     let rawResult = ''
     const unlisten = await listen('ai-stream-chunk', (event: { payload: any }) => {
-      const payload = event.payload as { id: string, chunk: string, done: boolean }
+      const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
       if (payload.id !== streamId) return
+
+      // 检查后端返回的错误
+      if (payload.error) {
+        console.error('AI stream error from backend:', payload.error)
+        translationContent.value = `<p class="text-error">翻译失败: ${payload.error}</p>`
+        isTranslating.value = false
+        unlisten()
+        return
+      }
+
       if (payload.chunk) {
         rawResult += payload.chunk
-        translationContent.value = `<p>${rawResult}</p>`
+        translationContent.value = renderInlineMarkdown(rawResult)
       }
       if (payload.done) {
         isTranslating.value = false
@@ -3283,7 +3380,7 @@ async function processTranslation(text: string) {
       }
     })
     await invoke('send_ai_message_stream', {
-      modelId: selectedModel,
+      providerId: providerId,
       message: prompt,
       streamId: streamId,
       messages: undefined,
@@ -3370,23 +3467,23 @@ async function confirmTip() {
     return
   }
 
-  // 获取之前保存的选择位置
+  // 获取之前保存的选择位置（用于后续插入，但TIP结果不自动插入）
   const start = (window as any)._tipSelectionStart || 0
   const end = (window as any)._tipSelectionEnd || 0
 
-  // 关闭对话框
+  // 关闭输入对话框，显示结果对话框
   showTipDialog.value = false
 
   try {
-    // 使用用户自定义的提示词进行AI处理
-    await processWithAI(selectedTextForTip.value, tipPrompt.value, false, start, end)
+    // 调用新TIP处理函数，等待服务器响应
+    await processTip(selectedTextForTip.value, tipPrompt.value)
   } catch (error) {
     console.error('TIP处理失败:', error)
     await showAlert('TIP处理失败: ' + error, { title: '错误' })
   } finally {
     // 清理状态
     tipPrompt.value = ''
-    selectedTextForTip.value = ''
+    // 选中文本保留，以便插入时使用
     originalTipPrompt.value = ''
     // 清理保存的位置
     delete (window as any)._tipSelectionStart
@@ -3793,38 +3890,78 @@ function handleTopBarCommand(command: string) {
 }
 
 // AI功能相关
-function explainWithAI() {
-  const textarea = editorTextarea.value;
-  if (!textarea) return;
-  const selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
-  if (selectedText) {
-    // 触发AI解释逻辑
+async function explainWithAI() {
+  const textarea = editorTextarea.value
+  if (!textarea) return
+
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+
+  // 确保有选择的文本
+  if (start === end) {
+    await showAlert('请先选择一段文本', { title: '提示' })
+    return
   }
-  showContextMenu.value = false;
+
+  const selectedText = localNote.value.content.substring(start, end)
+  selectedTextForExplanation.value = selectedText
+  explanationContent.value = ''
+  showExplanationBox.value = true
+  showContextMenu.value = false
+
+  // 使用AI解释选中的文本
+  await processExplanation(selectedText)
 }
 
-function translateWithAI() {
-  const textarea = editorTextarea.value;
-  if (!textarea) return;
-  const selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
-  if (selectedText) {
-    // 触发AI翻译逻辑
+async function translateWithAI() {
+  const textarea = editorTextarea.value
+  if (!textarea) return
+
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+
+  // 确保有选择的文本
+  if (start === end) {
+    await showAlert('请先选择一段文本', { title: '提示' })
+    return
   }
-  showContextMenu.value = false;
+
+  const selectedText = localNote.value.content.substring(start, end)
+  selectedTextForTranslation.value = selectedText
+  translationContent.value = ''
+  showTranslationBox.value = true
+  showContextMenu.value = false
+
+  // 使用AI翻译选中的文本
+  await processTranslation(selectedText)
 }
 
-function tipWithAI() {
-  const textarea = editorTextarea.value;
-  if (!textarea) return;
-  const selectedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
-  if (selectedText) {
-    // 触发TIP一下逻辑
-    selectedTextForTip.value = selectedText;
-    originalTipPrompt.value = `请基于以下内容进行操作：\n\n${selectedText}`;
-    tipPrompt.value = originalTipPrompt.value;
-    showTipDialog.value = true;
+async function tipWithAI() {
+  const textarea = editorTextarea.value
+  if (!textarea) return
+
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+
+  // 确保有选择的文本
+  if (start === end) {
+    await showAlert('请先选择一段文本', { title: '提示' })
+    return
   }
-  showContextMenu.value = false;
+
+  const selectedText = localNote.value.content.substring(start, end)
+  
+  // 显示TIP对话框让用户修改提示词，保存选择位置
+  selectedTextForTip.value = selectedText
+  originalTipPrompt.value = selectedText
+  tipPrompt.value = originalTipPrompt.value
+  
+  // 保存选择位置用于后续处理
+  ;(window as any)._tipSelectionStart = start
+  ;(window as any)._tipSelectionEnd = end
+  
+  showTipDialog.value = true
+  showContextMenu.value = false
 }
 
 function handleThemeChange(event: Event) {
@@ -3833,6 +3970,162 @@ function handleThemeChange(event: Event) {
   if (newTheme && newTheme !== currentHighlightTheme.value) {
     console.log(`接收到全局主题变更事件，切换到: ${newTheme}`);
     setHighlightTheme(newTheme);
+  }
+}
+
+// 全局默认AI提供商ID（在上方已定义并在顶层 onMounted 中赋值）
+const defaultProviderId = ref<string>('gemini')
+
+// 在组件挂载时获取全局默认AI模型
+onMounted(async () => {
+  try {
+    const defaultModel = await getDefaultAIModel('chat')
+    if (defaultModel && defaultModel.provider) {
+      defaultProviderId.value = defaultModel.provider
+      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
+    }
+  } catch (error) {
+    console.error('NoteEditor: 获取默认AI模型失败:', error)
+  }
+})
+
+// TIP结果流监听器引用
+let tipStreamUnlisten: (() => void) | null = null
+
+// 处理TIP请求并生成结果
+async function processTip(originalText: string, prompt: string) {
+  try {
+    isTipProcessing.value = true
+    tipResultContent.value = ''
+    showTipResultBox.value = true
+
+    const providerId = defaultProviderId.value
+    const streamId = `tip_${Date.now()}`
+
+    // 用于累积流式内容
+    let rawResult = ''
+
+    // 监听流式返回
+    const { listen } = await import('@tauri-apps/api/event')
+    tipStreamUnlisten = await listen('ai-stream-chunk', (event: { payload: any }) => {
+      const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
+
+      if (payload.id !== streamId) return
+
+      // 错误处理
+      if (payload.error) {
+        console.error('AI stream error from backend:', payload.error)
+        tipResultContent.value = `<p class="text-error">TIP生成失败: ${payload.error}</p>`
+        isTipProcessing.value = false
+        cleanupTipStream()
+        return
+      }
+
+      if (payload.chunk) {
+        rawResult += payload.chunk
+        tipResultContent.value = renderInlineMarkdown(rawResult)
+      }
+
+      if (payload.done) {
+        isTipProcessing.value = false
+        cleanupTipStream()
+      }
+    })
+
+    // 发送请求
+    await invoke('send_ai_message_stream', {
+      providerId,
+      message: prompt,
+      streamId,
+      messages: undefined,
+      customModelName: undefined
+    })
+  } catch (error) {
+    console.error('TIP生成失败:', error)
+    tipResultContent.value = `<p class=\"text-error\">TIP生成失败: ${error}</p>`
+    isTipProcessing.value = false
+    cleanupTipStream()
+  }
+}
+
+// 复制TIP结果
+async function copyTipResult() {
+  try {
+    const temp = document.createElement('div')
+    temp.innerHTML = tipResultContent.value
+    const textContent = temp.textContent || ''
+    await navigator.clipboard.writeText(textContent)
+  } catch (err) {
+    console.error('复制TIP结果失败:', err)
+    await showAlert('复制失败，请手动选择并复制', { title: '复制失败' })
+  }
+}
+
+// 将TIP结果插入笔记
+function insertTipResultToContent() {
+  const textarea = editorTextarea.value
+  if (!textarea) return
+
+  // 提取纯文本
+  const temp = document.createElement('div')
+  temp.innerHTML = tipResultContent.value
+  const textContent = temp.textContent || ''
+
+  const cursorPos = textarea.selectionEnd
+
+  const newContent =
+    localNote.value.content.substring(0, cursorPos) +
+    '\n\n' + textContent + '\n\n' +
+    localNote.value.content.substring(cursorPos)
+
+  localNote.value.content = newContent
+
+  nextTick(() => {
+    textarea.focus()
+    textarea.selectionStart = textarea.selectionEnd = cursorPos + textContent.length + 4
+  })
+
+  // 保存
+  autoSave()
+
+  // 关闭结果框
+  showTipResultBox.value = false
+}
+
+// 清理TIP流监听器
+function cleanupTipStream() {
+  if (tipStreamUnlisten) {
+    try {
+      tipStreamUnlisten()
+    } catch (e) {
+      console.error('清理TIP事件监听器失败:', e)
+    }
+    tipStreamUnlisten = null
+  }
+}
+
+// 关闭TIP结果弹窗
+function closeTipResultBox() {
+  cleanupTipStream()
+  showTipResultBox.value = false
+  isTipProcessing.value = false
+}
+
+// 将纯 Markdown 字符串转换为安全的 HTML，用于弹窗实时渲染
+function renderInlineMarkdown(text: string): string {
+  try {
+    const md = new Marked()
+    md.setOptions({ breaks: true, gfm: true, silent: true })
+
+    const rawHtml = md.parse(text) as string
+    return DOMPurify.sanitize(rawHtml, {
+      ADD_ATTR: ['target', 'class', 'href'],
+      ALLOW_DATA_ATTR: true
+    })
+  } catch (e) {
+    console.error('Markdown 渲染失败:', e)
+    // 失败时退化为纯文本
+    return `<pre>${text}</pre>`
   }
 }
 
