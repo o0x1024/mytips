@@ -2813,7 +2813,7 @@ dependencies = [
 
 [[package]]
 name = "mytips"
-version = "1.0.9"
+version = "1.1.1"
 dependencies = [
  "aes-gcm",
  "anyhow",

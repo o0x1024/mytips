@@ -30,7 +30,11 @@
     @apply bg-base-100 text-neutral;
   }
   
-  /* 侧边栏折叠状态 */
+  /* 侧边栏宽度，收起时自动切换 */
+  .sidebar-width {
+    width: var(--sidebar-width);
+    transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
   html[data-sidebar-collapsed="true"] .sidebar-width {
     width: var(--sidebar-collapsed-width) !important;
   }

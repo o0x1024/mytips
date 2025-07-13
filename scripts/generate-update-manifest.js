@@ -23,6 +23,12 @@ const config = {
   prerelease: process.env.PRERELEASE === 'true'
 }
 
+// 检查是否为 debug 构建
+const isDebug = process.argv.includes('--debug');
+if (isDebug) {
+  console.log('💡 检测到 Debug 构建模式，将跳过签名。');
+}
+
 // 支持的平台
 const platforms = {
   'darwin-x86_64': {
@@ -73,26 +79,34 @@ function readSignature(platform) {
 
   // 根据平台确定签名文件的具体路径
   const version = config.version;
+  
+  const findSigFile = (dir, extension) => {
+    if (!fs.existsSync(dir)) return null;
+    const files = fs.readdirSync(dir);
+    const sigFile = files.find(f => f.endsWith(extension));
+    return sigFile ? path.join(dir, sigFile) : null;
+  };
+
   if (platform.startsWith('darwin-')) {
     // Tauri 通常不会在 macos 的 .app 包名中加入版本号
     sigPath = path.join(bundlePath, 'macos', `mytips.app.tar.gz.sig`);
   } else if (platform === 'linux-x86_64') {
     sigPath = path.join(bundlePath, 'appimage', `mytips_${version}_amd64.AppImage.tar.gz.sig`);
   } else if (platform === 'windows-x86_64') {
-    // 检查 NSIS 和 MSI 两种可能
-    const nsisSigPath = path.join(bundlePath, 'nsis', `mytips_${version}_x64-setup.nsis.zip.sig`);
-    const msiSigPath = path.join(bundlePath, 'msi', `mytips_${version}_x64_en-US.msi.zip.sig`);
-    sigPath = fs.existsSync(nsisSigPath) ? nsisSigPath : msiSigPath;
+    // 动态查找 NSIS 或 MSI 签名文件，优先使用 NSIS
+    const nsisSigPath = findSigFile(path.join(bundlePath, 'nsis'), '.nsis.zip.sig');
+    const msiSigPath = findSigFile(path.join(bundlePath, 'msi'), '.msi.zip.sig');
+    sigPath = nsisSigPath || msiSigPath;
   } else {
     console.warn(`警告: 未知平台 ${platform}`);
     return null;
   }
   
   try {
-    if (fs.existsSync(sigPath)) {
+    if (sigPath && fs.existsSync(sigPath)) {
       return fs.readFileSync(sigPath, 'utf8').trim()
     } else {
-      console.warn(`警告: 签名文件不存在: ${sigPath}`)
+      console.warn(`警告: 签名文件不存在于预期路径: ${sigPath || '未找到'}`)
       return null
     }
   } catch (error) {
@@ -116,8 +130,8 @@ function generateUnifiedManifest(outputDir) {
       url: platforms[platform].url
     }
     
-    // 只有当签名存在时才添加签名字段
-    if (signature) {
+    // 只有当签名存在且不是 debug 构建时才添加签名字段
+    if (signature && !isDebug) {
       platformData.signature = signature
     }
     
@@ -156,8 +170,8 @@ function main() {
         url: platforms[platform].url
       }
       
-      // 只有当签名存在时才添加签名字段
-      if (signature) {
+      // 只有当签名存在且不是 debug 构建时才添加签名字段
+      if (signature && !isDebug) {
         platformManifest.signature = signature
       }
       
@@ -184,6 +198,60 @@ function main() {
 
 // 生成部署脚本
 function generateDeployScript(outputDir) {
+  const projectRoot = path.join(__dirname, '..', '..');
+
+  const findBundleDir = (platform) => {
+    const BUNDLE_DIR = path.join(projectRoot, 'src-tauri', 'target', 'release', 'bundle');
+    let crossBundleDir = '';
+    switch (platform) {
+      case 'darwin-aarch64':
+        crossBundleDir = path.join(projectRoot, 'src-tauri', 'target', 'aarch64-apple-darwin', 'release', 'bundle');
+        break;
+      case 'darwin-x86_64':
+        crossBundleDir = path.join(projectRoot, 'src-tauri', 'target', 'x86_64-apple-darwin', 'release', 'bundle');
+        break;
+      case 'windows-x86_64':
+        crossBundleDir = path.join(projectRoot, 'src-tauri', 'target', 'x86_64-pc-windows-msvc', 'release', 'bundle');
+        break;
+      case 'linux-x86_64':
+        crossBundleDir = path.join(projectRoot, 'src-tauri', 'target', 'x86_64-unknown-linux-gnu', 'release', 'bundle');
+        break;
+    }
+    return crossBundleDir && fs.existsSync(crossBundleDir) ? crossBundleDir : BUNDLE_DIR;
+  };
+
+  const getAssetPaths = (platform) => {
+    const bundleDir = findBundleDir(platform);
+    const assets = [];
+    
+    const findFiles = (dir, pattern) => {
+      if (!fs.existsSync(dir)) return [];
+      return fs.readdirSync(dir)
+        .filter(f => f.match(pattern))
+        .map(f => path.relative(projectRoot, path.join(dir, f)));
+    };
+    
+    switch (platform) {
+      case 'darwin-aarch64':
+      case 'darwin-x86_64':
+        assets.push(...findFiles(path.join(bundleDir, 'macos'), /^mytips\.app\.tar\.gz(\.sig)?$/));
+        assets.push(...findFiles(path.join(bundleDir, 'dmg'), /^mytips_.*\.dmg$/));
+        break;
+      case 'linux-x86_64':
+        assets.push(...findFiles(path.join(bundleDir, 'appimage'), /^mytips_.*_amd64\.AppImage(\.tar\.gz(\.sig)?)?$/));
+        break;
+      case 'windows-x86_64':
+        assets.push(...findFiles(path.join(bundleDir, 'nsis'), /^mytips_.*_x64-setup(\.exe|\.nsis\.zip(\.sig)?)?$/));
+        assets.push(...findFiles(path.join(bundleDir, 'msi'), /^mytips_.*_x64_en-US(\.msi|\.msi\.zip(\.sig)?)?$/));
+        break;
+    }
+    return assets;
+  };
+
+  const allAssets = Object.keys(platforms).flatMap(getAssetPaths);
+  const uniqueAssets = [...new Set(allAssets)];
+  const manifestPath = path.relative(projectRoot, path.join(outputDir, 'latest.json'));
+
   const deployScript = `#!/bin/bash
 
 # GitHub Release 部署脚本
@@ -193,156 +261,50 @@ set -e
 
 VERSION="${config.version}"
 REPO="${config.repo}"
-TAG="v\$VERSION"
+TAG="v$VERSION"
 RELEASE_NOTES="${config.notes}"
-PROJECT_ROOT="\$(cd "\$(dirname "\$0")/../.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 echo "正在创建 GitHub Release..."
 
 # 创建 release
-gh release create "\$TAG" \\
-  --repo "\$REPO" \\
-  --title "v\$VERSION" \\
-  --notes "\$RELEASE_NOTES" \\
+gh release create "$TAG" \\
+  --repo "$REPO" \\
+  --title "v$VERSION" \\
+  --notes "$RELEASE_NOTES" \\
   ${config.prerelease ? '--prerelease' : ''}
 
 echo "正在上传构建产物..."
 
-# 定义构建产物路径
-BUNDLE_DIR="\$PROJECT_ROOT/src-tauri/target/release/bundle"
-WINDOWS_CROSS_BUNDLE_DIR="\$PROJECT_ROOT/src-tauri/target/x86_64-pc-windows-msvc/release/bundle"
+# List of assets to upload (paths are relative to project root)
+ASSETS=(
+${uniqueAssets.map(p => `  "${p.replace(/\\/g, '/')}"`).join('\n')}
+)
 
-# 检查并上传 macOS 构建产物
-echo "检查 macOS 构建产物..."
-if [ -f "\$BUNDLE_DIR/macos/MyTips.app.tar.gz" ]; then
-  echo "上传 macOS 更新包..."
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$BUNDLE_DIR/macos/MyTips.app.tar.gz"
-fi
-
-if [ -f "\$BUNDLE_DIR/macos/MyTips.app.tar.gz.sig" ]; then
-  echo "上传 macOS 签名文件..."
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$BUNDLE_DIR/macos/MyTips.app.tar.gz.sig"
-fi
-
-# 动态查找 DMG 文件（支持不同版本号）
-DMG_FILE=\$(find "\$BUNDLE_DIR/dmg" -name "MyTips_*_aarch64.dmg" -type f | head -1)
-if [ -n "\$DMG_FILE" ] && [ -f "\$DMG_FILE" ]; then
-  echo "上传 macOS DMG 安装包: \$(basename "\$DMG_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$DMG_FILE"
-fi
-
-# 检查并上传 Windows 构建产物（支持交叉编译）
-echo "检查 Windows 构建产物..."
-
-# 检查交叉编译路径
-if [ -d "\$WINDOWS_CROSS_BUNDLE_DIR" ]; then
-  echo "检测到 Windows 交叉编译构建产物..."
-  WINDOWS_BUNDLE_DIR="\$WINDOWS_CROSS_BUNDLE_DIR"
-else
-  echo "使用本地 Windows 构建产物..."
-  WINDOWS_BUNDLE_DIR="\$BUNDLE_DIR"
-fi
-
-# 动态查找 MSI 文件
-MSI_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/msi" -name "MyTips_*_x64_en-US.msi" -type f 2>/dev/null | head -1)
-if [ -n "\$MSI_FILE" ] && [ -f "\$MSI_FILE" ]; then
-  echo "上传 Windows MSI 安装包: \$(basename "\$MSI_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$MSI_FILE"
-fi
-
-MSI_ZIP_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/msi" -name "MyTips_*_x64_en-US.msi.zip" -type f 2>/dev/null | head -1)
-if [ -n "\$MSI_ZIP_FILE" ] && [ -f "\$MSI_ZIP_FILE" ]; then
-  echo "上传 Windows MSI 更新包: \$(basename "\$MSI_ZIP_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$MSI_ZIP_FILE"
-fi
-
-MSI_SIG_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/msi" -name "MyTips_*_x64_en-US.msi.zip.sig" -type f 2>/dev/null | head -1)
-if [ -n "\$MSI_SIG_FILE" ] && [ -f "\$MSI_SIG_FILE" ]; then
-  echo "上传 Windows MSI 签名文件: \$(basename "\$MSI_SIG_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$MSI_SIG_FILE"
-fi
-
-# 动态查找 NSIS 文件
-NSIS_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/nsis" -name "MyTips_*_x64-setup.exe" -type f 2>/dev/null | head -1)
-if [ -n "\$NSIS_FILE" ] && [ -f "\$NSIS_FILE" ]; then
-  echo "上传 Windows NSIS 安装包: \$(basename "\$NSIS_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$NSIS_FILE"
-fi
-
-NSIS_ZIP_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/nsis" -name "MyTips_*_x64-setup.nsis.zip" -type f 2>/dev/null | head -1)
-if [ -n "\$NSIS_ZIP_FILE" ] && [ -f "\$NSIS_ZIP_FILE" ]; then
-  echo "上传 Windows NSIS 更新包: \$(basename "\$NSIS_ZIP_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$NSIS_ZIP_FILE"
-fi
-
-NSIS_SIG_FILE=\$(find "\$WINDOWS_BUNDLE_DIR/nsis" -name "MyTips_*_x64-setup.nsis.zip.sig" -type f 2>/dev/null | head -1)
-if [ -n "\$NSIS_SIG_FILE" ] && [ -f "\$NSIS_SIG_FILE" ]; then
-  echo "上传 Windows NSIS 签名文件: \$(basename "\$NSIS_SIG_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$NSIS_SIG_FILE"
-fi
-
-# 检查并上传 Linux 构建产物
-echo "检查 Linux 构建产物..."
-# 动态查找 AppImage 文件
-APPIMAGE_FILE=\$(find "\$BUNDLE_DIR/appimage" -name "mytips_*_amd64.AppImage" -type f | head -1)
-if [ -n "\$APPIMAGE_FILE" ] && [ -f "\$APPIMAGE_FILE" ]; then
-  echo "上传 Linux AppImage 安装包: \$(basename "\$APPIMAGE_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$APPIMAGE_FILE"
-fi
-
-APPIMAGE_TAR_FILE=\$(find "\$BUNDLE_DIR/appimage" -name "mytips_*_amd64.AppImage.tar.gz" -type f | head -1)
-if [ -n "\$APPIMAGE_TAR_FILE" ] && [ -f "\$APPIMAGE_TAR_FILE" ]; then
-  echo "上传 Linux AppImage 更新包: \$(basename "\$APPIMAGE_TAR_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$APPIMAGE_TAR_FILE"
-fi
-
-APPIMAGE_SIG_FILE=\$(find "\$BUNDLE_DIR/appimage" -name "mytips_*_amd64.AppImage.tar.gz.sig" -type f | head -1)
-if [ -n "\$APPIMAGE_SIG_FILE" ] && [ -f "\$APPIMAGE_SIG_FILE" ]; then
-  echo "上传 Linux AppImage 签名文件: \$(basename "\$APPIMAGE_SIG_FILE")"
-  gh release upload "\$TAG" \\
-    --repo "\$REPO" \\
-    "\$APPIMAGE_SIG_FILE"
-fi
+for asset_relative_path in "\${ASSETS[@]}"; do
+  asset_full_path="\$PROJECT_ROOT/\$asset_relative_path"
+  if [ -f "\$asset_full_path" ]; then
+    echo "Uploading \$asset_relative_path..."
+    gh release upload "$TAG" --repo "$REPO" "\$asset_full_path"
+  else
+    echo "Warning: Asset not found, skipping: \$asset_full_path"
+  fi
+done
 
 echo "正在上传更新清单..."
 
 # 上传更新清单
-gh release upload "\$TAG" \\
-  --repo "\$REPO" \\
-  "${outputDir}/latest.json" \\
-  "${outputDir}/darwin-x86_64.json" \\
-  "${outputDir}/darwin-aarch64.json" \\
-  "${outputDir}/linux-x86_64.json" \\
-  "${outputDir}/windows-x86_64.json"
+manifest_full_path="\$PROJECT_ROOT/${manifestPath.replace(/\\/g, '/')}"
+gh release upload "$TAG" \\
+  --repo "$REPO" \\
+  "\$manifest_full_path"
 
 echo "✅ GitHub Release 创建完成!"
-echo "📍 Release URL: https://github.com/\$REPO/releases/tag/\$TAG"
+echo "📍 Release URL: https://github.com/$REPO/releases/tag/$TAG"
 
 echo ""
 echo "📦 已上传的文件:"
-gh release view "\$TAG" --repo "\$REPO" --json assets --jq '.assets[].name' | sort
+gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name' | sort
 `
 
   const scriptPath = path.join(outputDir, 'deploy.sh')

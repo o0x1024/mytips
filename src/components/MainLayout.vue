@@ -4,8 +4,7 @@
     <main class="flex-1 flex overflow-hidden relative">
       <!-- 左侧导航栏 -->
       <div 
-        class="h-full flex-shrink-0 relative sidebar-container"
-        :style="{ width: sidebarCollapsed ? '62px' : `${sidebarWidth}px` }"
+        class="h-full flex-shrink-0 relative sidebar-container sidebar-width"
       >
         <SideNavBar 
           :notebooks="notebooks"

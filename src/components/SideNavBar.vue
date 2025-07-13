@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full flex flex-col bg-base-200 border-r border-base-300 transition-all duration-300">
+  <div class="h-full w-full flex flex-col bg-base-200 border-r border-base-300 transition-all duration-300 sidebar-width">
     <!-- 顶部标题和折叠按钮 -->
     <div class="p-3 flex items-center justify-between">
       <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', isCollapsed ? 'opacity-0 w-0 absolute' : 'opacity-100']">
