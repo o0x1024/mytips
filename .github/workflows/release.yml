@@ -25,6 +25,9 @@ jobs:
           - os: windows-latest
             platform: 'windows-x86_64'
             rust_target: 'x86_64-pc-windows-msvc'
+          - os: ubuntu-latest
+            platform: 'android'
+            rust_target: 'aarch64-linux-android' # 默认编译 aarch64 架构
 
     steps:
     - name: Checkout repository
@@ -35,20 +38,38 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Set up Java for Android build
+      if: matrix.platform == 'android'
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         target: ${{ matrix.rust_target }}
+        components: rust-src # for android
 
     - name: Install Rust dependencies for Linux
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.platform != 'android'
       run: |
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-0 libappindicator3-1 libgtk-3-0 patchelf
 
     - name: Install dependencies
       run: yarn install --frozen-lockfile
+      
+    - name: Setup Android signing
+      if: matrix.platform == 'android'
+      run: |
+        KEYSTORE_PATH=$RUNNER_TEMP/keystore.jks
+        echo "storeFile=$KEYSTORE_PATH" > src-tauri/keystore.properties
+        echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> src-tauri/keystore.properties
+        echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> src-tauri/keystore.properties
+        echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> src-tauri/keystore.properties
+        echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > $KEYSTORE_PATH
 
     - name: Import Apple Certificate
       if: runner.os == 'macOS'
@@ -58,7 +79,15 @@ jobs:
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
 
     - name: Build the application
+      if: matrix.platform != 'android'
       run: yarn tauri build --target ${{ matrix.rust_target }}
+      env:
+        TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+    - name: Build Android App Bundle (AAB)
+      if: matrix.platform == 'android'
+      run: yarn tauri android build
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -154,6 +183,9 @@ jobs:
         find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip" \;
         find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
         
+        # 查找并移动 Android 产物 (AAB)
+        find "$TARGET_DIR/tauri-build-android/android-artifacts/release/apk" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+
         # 查找并移动清单文件
         find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
 

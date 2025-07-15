@@ -144,3 +144,16 @@
     font-size: 10px;
   }
 } 
+
+.tooltip-multiline::after {
+  width: max-content;
+  max-width: 200px; /* or your desired max-width */
+  white-space: normal;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .toolbar-right-group {
+    display: none;
+  }
+} 

@@ -8,13 +8,23 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
-        <h1 class="text-xl font-bold">设置 - {{ getCurrentPageTitle() }}</h1>
+        <h1 v-if="!isMobile" class="text-xl font-bold">设置 - {{ getCurrentPageTitle() }}</h1>
+        <h1 v-else class="text-xl font-bold">设置</h1>
+      </div>
+
+      <!-- Mobile Page Selector -->
+      <div v-if="isMobile" class="flex-none">
+        <select class="select select-bordered" v-model="currentPage">
+          <option v-for="page in settingsPages" :key="page.id" :value="page.id">
+            {{ page.title }}
+          </option>
+        </select>
       </div>
     </div>
 
     <div class="flex flex-1 overflow-hidden">
-      <!-- 左侧导航栏 -->
-      <nav class="w-64 min-w-[240px] max-w-[280px] bg-base-100 flex flex-col py-6 px-3 gap-2 shadow-lg border-r border-base-200">
+      <!-- 左侧导航栏 (仅桌面) -->
+      <nav v-if="!isMobile" class="w-64 min-w-[240px] max-w-[280px] bg-base-100 flex flex-col py-6 px-3 gap-2 shadow-lg border-r border-base-200">
         <div>
           <h2 class="text-lg font-semibold text-base-content px-3 mb-4">设置选项</h2>
         </div>
@@ -99,7 +109,7 @@
       </nav>
 
       <!-- 右侧内容区域 -->
-      <div class="flex-1 overflow-auto p-6">
+      <div class="flex-1 overflow-auto p-4 md:p-6">
         <div class="max-w-3xl mx-auto">
           <!-- 外观设置 -->
           <div v-if="currentPage === 'appearance'" class="card bg-base-100 shadow-md">
@@ -738,7 +748,7 @@
                 </select>
               </div>
               
-              <div class="tabs tabs-boxed mb-4">
+              <div class="tabs tabs-boxed mb-4 flex-wrap gap-2">
                 <a 
                   v-for="(provider, id) in aiProviders" 
                   :key="id"
@@ -1290,15 +1300,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed, onActivated } from 'vue'
+import { ref, onMounted, watch, computed, onActivated, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { message } from '@tauri-apps/plugin-dialog'
+import { emit } from '@tauri-apps/api/event'
 import { useUIStore } from '../stores/uiStore'
 import { useUpdateStore } from '../stores/updateStore'
 import UpdateDialog from '../components/UpdateDialog.vue'
 import { enable, isEnabled, disable } from '@tauri-apps/plugin-autostart';
 import { useRouter } from 'vue-router'
-import { showConfirm } from '../services/dialog'
+import { showConfirm, showMessage } from '../services/dialog'
 import {
   AIProvider, AIModel, TestConnectionRequest,
   getChatModels, getDefaultAIModel,
@@ -1310,6 +1320,14 @@ import { useTipTemplateStore } from '../stores/tipTemplateStore'
 const uiStore = useUIStore()
 const updateStore = useUpdateStore()
 const router = useRouter()
+
+// --- Responsive state ---
+const windowWidth = ref(window.innerWidth)
+const isMobile = computed(() => windowWidth.value < 768)
+
+const onResize = () => {
+  windowWidth.value = window.innerWidth
+}
 
 // 页面管理
 const currentPage = ref('appearance')
@@ -1488,10 +1506,10 @@ async function applyShortcutChanges() {
     
     // 保存到后端
     await invoke('update_global_shortcut', { config: shortcutConfig })
-    message('快捷键已更新，重启应用后生效', { title: '成功' })
+    showMessage('快捷键已更新，重启应用后生效', { title: '成功' })
   } catch (error) {
     console.error('更新快捷键失败:', error)
-    message('更新快捷键失败: ' + error, { title: '错误' })
+    showMessage('更新快捷键失败: ' + error, { title: '错误' })
   } finally {
     isApplyingShortcut.value = false
   }
@@ -1647,107 +1665,94 @@ const proxySettings = ref<ProxySettings>({
 
 const isTestingProxy = ref(false)
 
+// 辅助函数：处理从路由参数导航
+function handlePageNavigationFromRoute() {
+  const route = router.currentRoute.value;
+  if (route.query.page && typeof route.query.page === 'string') {
+    const targetPage = route.query.page;
+    if (settingsPages.some(page => page.id === targetPage)) {
+      currentPage.value = targetPage;
+    }
+  }
+}
+
+// 辅助函数：加载所有设置
+async function loadAllSettings() {
+  try {
+    // 获取代理设置
+    const proxyData = await invoke<ProxySettings>('get_proxy_settings');
+    if (proxyData) {
+      proxySettings.value = proxyData;
+    }
+
+    // 获取自动启动状态
+    autoStartEnabled.value = await isEnabled();
+
+    // 加载剪贴板设置
+    await loadClipboardSettingsFromBackend();
+    
+    // 加载自定义模型列表
+    await loadCustomModels();
+    
+    // 加载当前数据库路径
+    await loadCurrentDatabasePath();
+    
+    // 加载默认AI模型
+    await loadDefaultAIModel();
+    
+    // 加载AI提供商配置
+    await loadAIProvidersConfig();
+
+    // 加载AI使用统计
+    await refreshAIStats();
+
+  } catch (error) {
+    console.error('获取设置失败:', error);
+    showMessage('加载页面设置时出错，部分功能可能不正常。', { title: '错误' });
+  }
+}
+
 // 更新onActivated支持
 onActivated(async () => {
-  // 检查URL参数，自动切换到指定页面
-  const route = router.currentRoute.value
-  if (route.query.page && typeof route.query.page === 'string') {
-    const targetPage = route.query.page
-    if (settingsPages.some(page => page.id === targetPage)) {
-      currentPage.value = targetPage
-    }
-  }
-
-  if (!uiStore.settingsLoaded) {
-    try {
-      // 获取代理设置
-      const proxyData = await invoke<ProxySettings>('get_proxy_settings')
-      if (proxyData) {
-        proxySettings.value = proxyData
-      }
-
-      // 获取自动启动状态
-      autoStartEnabled.value = await isEnabled()
-
-      // 加载剪贴板设置
-      await loadClipboardSettingsFromBackend()
-      
-      // 加载自定义模型列表
-      await loadCustomModels()
-      
-      // 加载当前数据库路径
-      await loadCurrentDatabasePath()
-      
-      // 标记设置已加载
-      uiStore.settingsLoaded = true
-    } catch (error) {
-      console.error('获取设置失败:', error)
-    }
-  }
+  handlePageNavigationFromRoute();
+  await loadAllSettings();
 })
 
 // 初始加载
 onMounted(async () => {
-  // 检查URL参数，自动切换到指定页面
-  const route = router.currentRoute.value
-  if (route.query.page && typeof route.query.page === 'string') {
-    const targetPage = route.query.page
-    if (settingsPages.some(page => page.id === targetPage)) {
-      currentPage.value = targetPage
-    }
-  }
-
-  // 如果设置尚未加载，则加载设置
-  if (!uiStore.settingsLoaded) {
-    try {
-      // 获取代理设置
-      const proxyData = await invoke<ProxySettings>('get_proxy_settings')
-      if (proxyData) {
-        proxySettings.value = proxyData
-      }
-
-      // 获取自动启动状态
-      autoStartEnabled.value = await isEnabled()
-
-      // 加载剪贴板设置
-      await loadClipboardSettingsFromBackend()
-      
-      // 标记设置已加载
-      uiStore.settingsLoaded = true
-    } catch (error) {
-      console.error('获取设置失败:', error)
-    }
-  }
+  handlePageNavigationFromRoute();
   
-  // 初始化更新设置
-  checkIntervalHours.value = Math.floor(updateStore.checkInterval / (1000 * 60 * 60))
+  await loadAllSettings();
   
-  // 获取当前版本
+  // 初始化更新设置 (仅执行一次)
+  checkIntervalHours.value = Math.floor(updateStore.checkInterval / (1000 * 60 * 60));
+  
+  // 获取当前版本 (仅执行一次)
   try {
-    const version = await invoke('get_current_version') as string
-    updateStore.setCurrentVersion(version)
+    const version = await invoke('get_current_version') as string;
+    updateStore.setCurrentVersion(version);
   } catch (error) {
-    console.error('获取当前版本失败:', error)
+    console.error('获取当前版本失败:', error);
   }
   
-  // 加载自定义模型列表
-  await loadCustomModels()
+  // 加载模板
+  templateStore.loadTemplates();
   
-  // 加载默认AI模型
-  await loadDefaultAIModel()
-  
-  // 加载当前数据库路径
-  await loadCurrentDatabasePath()
+  window.addEventListener('resize', onResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
 })
 
 // 保存代理设置
 async function saveProxySettings() {
   try {
     await invoke('save_proxy_settings', { proxySettings: proxySettings.value })
-    // message('代理设置已保存')
+    // showMessage('代理设置已保存')
   } catch (error) {
     console.error('保存代理设置失败:', error)
-    message('保存代理设置失败: ' + error, { title: '错误' })
+    showMessage('保存代理设置失败: ' + error, { title: '错误' })
   }
 }
 
@@ -1764,10 +1769,10 @@ async function testProxyConnection() {
       proxySettings: proxySettings.value
     })
 
-    message(result, { title: '连接测试' })
+    showMessage(result, { title: '连接测试' })
   } catch (error) {
     console.error('代理测试失败:', error)
-    message('代理测试失败: ' + error, { title: '错误' })
+    showMessage('代理测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingProxy.value = false
   }
@@ -1777,10 +1782,10 @@ async function testProxyConnection() {
 async function backupDatabase() {
   try {
     const result = await invoke<string>('backup_database')
-    message(result, { title: '备份成功' })
+    showMessage(result, { title: '备份成功' })
   } catch (error) {
     console.error('备份数据库失败:', error)
-    message('备份数据库失败: ' + error, { title: '错误' })
+    showMessage('备份数据库失败: ' + error, { title: '错误' })
   }
 }
 
@@ -1788,10 +1793,10 @@ async function backupDatabase() {
 async function restoreDatabase() {
   try {
     const result = await invoke<string>('restore_database')
-    message(result, { title: '恢复成功' })
+    showMessage(result, { title: '恢复成功' })
   } catch (error) {
     console.error('恢复数据库失败:', error)
-    message('恢复数据库失败: ' + error, { title: '错误' })
+    showMessage('恢复数据库失败: ' + error, { title: '错误' })
   }
 }
 
@@ -1799,10 +1804,10 @@ async function restoreDatabase() {
 async function exportAsMarkdown() {
   try {
     const result = await invoke<string>('export_as_markdown')
-    message(result, { title: '导出成功' })
+    showMessage(result, { title: '导出成功' })
   } catch (error) {
     console.error('导出失败:', error)
-    message('导出失败: ' + error, { title: '错误' })
+    showMessage('导出失败: ' + error, { title: '错误' })
   }
 }
 
@@ -1830,7 +1835,7 @@ async function saveDefaultAIModel() {
     
     if (!providerConfig) {
       console.error(`Provider config not found for: ${providerId}`);
-      message(`未找到提供商配置: ${providerId}`, { title: '错误' });
+      showMessage(`未找到提供商配置: ${providerId}`, { title: '错误' });
       return;
     }
 
@@ -1839,7 +1844,7 @@ async function saveDefaultAIModel() {
     
     if (!providerForBackend || !modelName) {
         console.error('Provider or model name is missing for the selected default AI model.');
-        message('提供商或模型名称丢失', { title: '错误' });
+        showMessage('提供商或模型名称丢失', { title: '错误' });
         return;
     }
     
@@ -1853,11 +1858,14 @@ async function saveDefaultAIModel() {
     // 同时保存到localStorage，用于快速加载
     localStorage.setItem('defaultAIModel', providerId);
     
-    message('默认AI模型已保存', { title: '成功' });
+    // 发出全局设置变更通知
+    await emit('global-settings-changed', { key: 'defaultAIModel' })
+    
+    showMessage('默认AI模型已保存', { title: '成功' });
 
   } catch (error) {
     console.error('保存默认AI模型失败:', error);
-    message('保存默认AI模型失败: ' + error, { title: '错误' });
+    showMessage('保存默认AI模型失败: ' + error, { title: '错误' });
   }
 }
 
@@ -1899,10 +1907,10 @@ async function cleanExpiredEntries() {
   isCleaningEntries.value = true
   try {
     await invoke('clean_expired_clipboard_entries')
-    message('过期剪贴板条目已清理', { title: '清理成功' })
+    showMessage('过期剪贴板条目已清理', { title: '清理成功' })
   } catch (error) {
     console.error('清理过期剪贴板条目失败:', error)
-    message('清理过期剪贴板条目失败: ' + error, { title: '错误' })
+    showMessage('清理过期剪贴板条目失败: ' + error, { title: '错误' })
   } finally {
     isCleaningEntries.value = false
   }
@@ -1912,10 +1920,10 @@ async function cleanExpiredEntries() {
 async function migrateConfigToDatabase() {
   try {
     const result = await invoke<string>('migrate_config_to_database')
-    message(result, { title: '迁移成功' })
+    showMessage(result, { title: '迁移成功' })
   } catch (error) {
     console.error('迁移配置到数据库失败:', error)
-    message('迁移配置到数据库失败: ' + error, { title: '错误' })
+    showMessage('迁移配置到数据库失败: ' + error, { title: '错误' })
   }
 }
 
@@ -2036,13 +2044,13 @@ async function testApiConnection(providerId: string): Promise<void> {
   
   // 对于非自定义模型，至少需要API Key
   if (providerId !== 'custom' && !provider.api_key) {
-    message('请输入API密钥后再测试', { title: '提示' })
+    showMessage('请输入API密钥后再测试', { title: '提示' })
     return
   }
   
   // 对于自定义模型，至少需要Endpoint和Model Name
   if (providerId === 'custom' && (!provider.api_base || !provider.default_model)) {
-    message('请输入API端点和模型标识符后再测试', { title: '提示' })
+    showMessage('请输入API端点和模型标识符后再测试', { title: '提示' })
     return
   }
   
@@ -2058,7 +2066,7 @@ async function testApiConnection(providerId: string): Promise<void> {
     const response = await testAIConnection(request)
     
     if (response.success) {
-      message(response.message, { title: '连接成功' })
+      showMessage(response.message, { title: '连接成功' })
       
       // 如果返回了模型列表，更新提供商的模型列表
       if (response.models && response.models.length > 0) {
@@ -2068,11 +2076,11 @@ async function testApiConnection(providerId: string): Promise<void> {
         }))
       }
     } else {
-      message(response.message, { title: '连接失败' })
+      showMessage(response.message, { title: '连接失败' })
     }
   } catch (error) {
     console.error('API连接测试失败:', error)
-    message('API连接测试失败: ' + error, { title: '错误' })
+    showMessage('API连接测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingApi.value = false
   }
@@ -2099,11 +2107,11 @@ async function saveModelConfig(): Promise<void> {
     modelSuggestions.value[editingModelType.value as keyof typeof modelSuggestions.value] = [...editingModelList.value]
     try {
       localStorage.setItem('ai-model-suggestions-config', JSON.stringify(modelSuggestions.value))
-      message('模型配置保存成功', { title: '成功' })
+      showMessage('模型配置保存成功', { title: '成功' })
       closeModelConfigModal()
     } catch (error) {
       console.error('保存模型配置失败:', error)
-      message('保存模型配置失败: ' + error, { title: '错误' })
+      showMessage('保存模型配置失败: ' + error, { title: '错误' })
     }
   }
 }
@@ -2195,15 +2203,15 @@ async function checkForUpdates(): Promise<void> {
         body: updateResult.body || '',
         available: true
       })
-      message(`发现新版本 ${updateResult.version}！`, { title: '更新检查' })
+      showMessage(`发现新版本 ${updateResult.version}！`, { title: '更新检查' })
     } else {
       updateStore.setUpdateInfo(null)
-      message('当前已是最新版本！', { title: '更新检查' })
+      showMessage('当前已是最新版本！', { title: '更新检查' })
     }
   } catch (error) {
     console.error('检查更新失败:', error)
     updateStore.setUpdateInfo(null)
-    message('检查更新失败: ' + error, { title: '错误' })
+    showMessage('检查更新失败: ' + error, { title: '错误' })
   } finally {
     updateStore.setChecking(false)
   }
@@ -2228,15 +2236,15 @@ async function checkForUpdatesNoSignature(): Promise<void> {
         body: updateResult.body || '',
         available: true
       })
-      message(`发现新版本 ${updateResult.version}！（无签名验证模式）`, { title: '更新检查' })
+      showMessage(`发现新版本 ${updateResult.version}！（无签名验证模式）`, { title: '更新检查' })
     } else {
       updateStore.setUpdateInfo(null)
-      message('当前已是最新版本！（无签名验证模式）', { title: '更新检查' })
+      showMessage('当前已是最新版本！（无签名验证模式）', { title: '更新检查' })
     }
   } catch (error) {
     console.error('检查更新失败:', error)
     updateStore.setUpdateInfo(null)
-    message('检查更新失败: ' + error, { title: '错误' })
+    showMessage('检查更新失败: ' + error, { title: '错误' })
   } finally {
     updateStore.setChecking(false)
   }
@@ -2262,10 +2270,10 @@ async function testWindowsUpdate(): Promise<void> {
   
   try {
     const result = await invoke('test_windows_update_with_proxy') as string
-    message(result, { title: 'Windows 更新测试' })
+    showMessage(result, { title: 'Windows 更新测试' })
   } catch (error) {
     console.error('Windows 更新测试失败:', error)
-    message('Windows 更新测试失败: ' + error, { title: '错误' })
+    showMessage('Windows 更新测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingWindowsUpdate.value = false
   }
@@ -2279,10 +2287,10 @@ async function testWindowsUpdateNoSignature(): Promise<void> {
   
   try {
     const result = await invoke('test_windows_update_no_signature') as string
-    message(result, { title: '网络诊断测试' })
+    showMessage(result, { title: '网络诊断测试' })
   } catch (error) {
     console.error('网络诊断测试失败:', error)
-    message('网络诊断测试失败: ' + error, { title: '错误' })
+    showMessage('网络诊断测试失败: ' + error, { title: '错误' })
   } finally {
     isTestingWindowsUpdateNoSig.value = false
   }
@@ -2292,10 +2300,10 @@ async function testWindowsUpdateNoSignature(): Promise<void> {
 async function showPlatformInfo(): Promise<void> {
   try {
     const platformInfo = await invoke('get_platform_info') as string
-    message(platformInfo, { title: '平台信息' })
+    showMessage(platformInfo, { title: '平台信息' })
   } catch (error) {
     console.error('获取平台信息失败:', error)
-    message('获取平台信息失败: ' + error, { title: '错误' })
+    showMessage('获取平台信息失败: ' + error, { title: '错误' })
   }
 }
 
@@ -2306,7 +2314,7 @@ function addWhitelistApp() {
   
   // 检查是否已存在
   if (clipboardSettings.value.whitelistApps.includes(appName)) {
-    message(`应用 "${appName}" 已在白名单中`, { title: '提示' })
+    showMessage(`应用 "${appName}" 已在白名单中`, { title: '提示' })
     return
   }
   
@@ -2315,7 +2323,7 @@ function addWhitelistApp() {
   newWhitelistApp.value = ''
   updateClipboardSettings()
   
-  message(`已添加 "${appName}" 到白名单`, { title: '成功' })
+  showMessage(`已添加 "${appName}" 到白名单`, { title: '成功' })
 }
 
 function removeWhitelistApp(index: number) {
@@ -2323,7 +2331,7 @@ function removeWhitelistApp(index: number) {
   clipboardSettings.value.whitelistApps.splice(index, 1)
   updateClipboardSettings()
   
-  message(`已从白名单中移除 "${appName}"`, { title: '成功' })
+  showMessage(`已从白名单中移除 "${appName}"`, { title: '成功' })
 }
 
 function addPresetApp(appName: string) {
@@ -2334,7 +2342,7 @@ function addPresetApp(appName: string) {
   clipboardSettings.value.whitelistApps.push(appName)
   updateClipboardSettings()
   
-  message(`已添加 "${appName}" 到白名单`, { title: '成功' })
+  showMessage(`已添加 "${appName}" 到白名单`, { title: '成功' })
 }
 
 // 新增自定义模型配置管理功能
@@ -2445,12 +2453,12 @@ async function saveCustomModel(): Promise<void> {
       customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : null
     })
 
-    message(editingCustomModelId.value ? '自定义模型配置更新成功' : '自定义模型配置添加成功', { title: '成功' })
+    showMessage(editingCustomModelId.value ? '自定义模型配置更新成功' : '自定义模型配置添加成功', { title: '成功' })
     closeCustomModelModal()
     await loadCustomModels()
   } catch (error) {
     console.error('保存自定义模型配置失败:', error)
-    message('保存自定义模型配置失败: ' + error, { title: '错误' })
+    showMessage('保存自定义模型配置失败: ' + error, { title: '错误' })
   } finally {
     isSavingCustomModel.value = false
   }
@@ -2481,11 +2489,11 @@ async function testCustomModelConnection(): Promise<void> {
       customHeaders: Object.keys(customHeaders).length > 0 ? customHeaders : null
     })
 
-    message(result as string, { title: '测试结果' })
+    showMessage(result as string, { title: '测试结果' })
     
   } catch (error) {
     console.error('测试自定义模型连接失败:', error)
-    message('测试连接失败: ' + error, { title: '错误' })
+    showMessage('测试连接失败: ' + error, { title: '错误' })
   } finally {
     isTestingCustomModel.value = false
   }
@@ -2536,10 +2544,10 @@ async function loadDatabaseInfo(): Promise<void> {
 async function copyDatabasePath(): Promise<void> {
   try {
     await navigator.clipboard.writeText(currentDatabasePath.value)
-    message('数据库路径已复制到剪贴板', { title: '成功' })
+    showMessage('数据库路径已复制到剪贴板', { title: '成功' })
   } catch (error) {
     console.error('复制路径失败:', error)
-    message('复制路径失败', { title: '错误' })
+    showMessage('复制路径失败', { title: '错误' })
   }
 }
 
@@ -2555,14 +2563,14 @@ async function selectDatabaseFile(): Promise<void> {
       await loadDatabaseInfo()
       
       if (result.restart_required) {
-        message('数据库文件已更改，请重启应用以使更改生效', { title: '需要重启' })
+        showMessage('数据库文件已更改，请重启应用以使更改生效', { title: '需要重启' })
       } else {
-        message('数据库文件已更改', { title: '成功' })
+        showMessage('数据库文件已更改', { title: '成功' })
       }
     }
   } catch (error) {
     console.error('选择数据库文件失败:', error)
-    message('选择数据库文件失败: ' + error, { title: '错误' })
+    showMessage('选择数据库文件失败: ' + error, { title: '错误' })
   } finally {
     isChangingDatabase.value = false
   }
@@ -2580,14 +2588,14 @@ async function createNewDatabase(): Promise<void> {
       await loadDatabaseInfo()
       
       if (result.restart_required) {
-        message('新数据库已创建，请重启应用以使更改生效', { title: '需要重启' })
+        showMessage('新数据库已创建，请重启应用以使更改生效', { title: '需要重启' })
       } else {
-        message('新数据库已创建', { title: '成功' })
+        showMessage('新数据库已创建', { title: '成功' })
       }
     }
   } catch (error) {
     console.error('创建新数据库失败:', error)
-    message('创建新数据库失败: ' + error, { title: '错误' })
+    showMessage('创建新数据库失败: ' + error, { title: '错误' })
   } finally {
     isChangingDatabase.value = false
   }
@@ -2614,13 +2622,13 @@ async function resetToDefaultDatabase(): Promise<void> {
     await loadDatabaseInfo()
     
     if (result.restart_required) {
-      message('已重置到默认数据库位置，请重启应用以使更改生效', { title: '需要重启' })
+      showMessage('已重置到默认数据库位置，请重启应用以使更改生效', { title: '需要重启' })
     } else {
-      message('已重置到默认数据库位置', { title: '成功' })
+      showMessage('已重置到默认数据库位置', { title: '成功' })
     }
   } catch (error) {
     console.error('重置数据库位置失败:', error)
-    message('重置数据库位置失败: ' + error, { title: '错误' })
+    showMessage('重置数据库位置失败: ' + error, { title: '错误' })
   } finally {
     isChangingDatabase.value = false
   }
@@ -2669,7 +2677,7 @@ async function loadAIProvidersConfig() {
     }
   } catch (error) {
     console.error('加载AI配置失败:', error)
-    message('加载AI配置失败: ' + error, { title: '错误' })
+    showMessage('加载AI配置失败: ' + error, { title: '错误' })
   } finally {
     isLoadingModels.value = false
   }
@@ -2682,7 +2690,7 @@ async function refreshAIStats() {
     aiStats.value = stats
   } catch (error) {
     console.error('获取AI使用统计失败:', error)
-    message('获取AI使用统计失败: ' + error, { title: '错误' })
+    showMessage('获取AI使用统计失败: ' + error, { title: '错误' })
   }
 }
 
@@ -2726,13 +2734,13 @@ async function saveAIProviderConfig() {
     // 保存所有提供商配置
     await saveAIConfig(aiProviders.value)
     
-    message('AI配置已保存', { title: '成功' })
+    showMessage('AI配置已保存', { title: '成功' })
     
     // 重新加载AI服务
     await reloadAIServices()
   } catch (error) {
     console.error('保存AI配置失败:', error)
-    message('保存AI配置失败: ' + error, { title: '错误' })
+    showMessage('保存AI配置失败: ' + error, { title: '错误' })
   } finally {
     isSavingApiConfig.value = false
   }
@@ -2785,6 +2793,20 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .navbar {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .card-body {
+    padding: 1rem;
+  }
+  .form-control {
+    margin-bottom: 1rem;
+  }
+}
+
 /* Settings页面特有的样式 - 大部分暗色主题样式已移至全局 */
 
 /* 导航按钮优化样式 */

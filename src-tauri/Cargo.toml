@@ -22,7 +22,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.30.0"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
 rusqlite = { version = "0.36.0", features = ["bundled"] }
 uuid = { version = "1.6.1", features = ["v4", "serde"] }
 chrono = { version = "0.4.31", features = ["serde"] }
@@ -31,7 +31,7 @@ thiserror = "2.0.12"
 anyhow = "1.0.75"
 tauri-plugin-dialog = "2.2.1"
 tauri-plugin-fs = "2"
-reqwest = { version = "0.11", features = ["json", "stream"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
 base64 = "0.21"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
@@ -40,13 +40,11 @@ genai = "0.3.0"
 tokio-stream = "0.1.14"
 futures = "0.3"
 tauri-plugin-clipboard-manager = "2"
-arboard = "3.4.0"
 once_cell = "1.19.0"
 pulldown-cmark = "0.9.3"
 printpdf = "0.6.0"
 enigo = "0.5.0"
 blake3 = "1.8.2"
-clipboard-rs = "0.2"
 fs_extra = "1.3.0"
 lru = "0.12"
 regex = "1.0"

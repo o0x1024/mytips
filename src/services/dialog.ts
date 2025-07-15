@@ -116,4 +116,7 @@ export const showConfirm = (message: string, options?: DialogOptions) =>
 export const showAlert = (message: string, options?: AlertOptions) => 
   dialogService.alert(message, options)
 
+export const showMessage = (message: string, options?: AlertOptions) =>
+  dialogService.alert(message, { title: options?.title || '提示', ...options })
+
 export default dialogService 

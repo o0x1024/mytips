@@ -103,6 +103,7 @@
 
         <!-- 底部元数据区域 -->
         <EditorFooter
+          class="editor-footer"
           v-model:tags="localNote.tags"
           :content-text="localNote.content"
           :title-text="localNote.title"
@@ -201,8 +202,6 @@ import 'prismjs/components/prism-csharp'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
-
-
 
 // 简化的语言组件初始化函数
 async function loadPrismLanguages() {
@@ -3528,47 +3527,31 @@ const templateStore = useTipTemplateStore();
 /* NoteEditor特有的样式 */
 
 /* 编辑器区域特殊样式 */
-.editor-container {
-  transition: all 0.3s ease;
+:deep(.markdown-editor),
+:deep(.markdown-preview) {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
 }
 
-.editor-toolbar {
-  border-bottom: 1px solid var(--border-color);
-  background: var(--background-secondary);
-  padding: 8px 16px;
+@media (max-width: 768px) {
+  :deep(.markdown-preview) {
+    display: none;
+  }
+  .editor-footer {
+    display: none;
+  }
+  :deep(.markdown-editor) {
+    width: 100%;
+  }
 }
 
-/* 代码编辑器的特殊样式 */
-.code-editor {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  line-height: 1.6;
-}
-
-/* Markdown预览的特殊样式 */
-.markdown-preview {
-  padding: 20px;
-  max-width: none;
-}
-
-/* 编辑器分割线 */
-.editor-divider {
-  width: 2px;
-  background: var(--border-color);
-  cursor: col-resize;
-  transition: background-color 0.2s;
-}
-
-.editor-divider:hover {
-  background: var(--primary);
-}
-
-/* 全屏模式样式 */
-.fullscreen-editor {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
+:deep(.fullscreen-editor) {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100vw !important;
   height: 100vh !important;
   z-index: 9999 !important;
@@ -3788,7 +3771,8 @@ const templateStore = useTipTemplateStore();
 @media (max-width: 768px) {
 
   :deep(.prose img),
-  :deep(.embedded-image) {
+  :deep(.embedded-image),
+  :deep(.responsive-image) {
     max-height: 50vh;
     /* 在移动设备上限制为50%视口高度 */
     margin: 0.5rem auto;

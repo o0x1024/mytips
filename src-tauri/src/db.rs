@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use uuid::Uuid;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
+use tauri::{AppHandle, Manager};
 
 // 导入加密状态结构
 use crate::api::encryption::EncryptionStatus;
@@ -112,8 +113,8 @@ pub struct DbManager {
 
 impl DbManager {
     // 初始化数据库连接池
-    pub fn init() -> Result<Self> {
-        let db_path = get_db_path()?;
+    pub fn init(app_handle: AppHandle) -> Result<Self> {
+        let db_path = get_db_path(&app_handle)?;
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -1271,9 +1272,9 @@ pub fn clear_session_unlocks(conn: &DbConnection) -> Result<()> {
 // --- 加密相关方法结束 ---
 
 // 获取数据库文件路径
-fn get_db_path() -> Result<PathBuf> {
+fn get_db_path(app_handle: &AppHandle) -> Result<PathBuf> {
     // 首先检查是否有自定义路径设置
-    if let Ok(Some(custom_path_str)) = get_custom_database_path() {
+    if let Ok(Some(custom_path_str)) = get_custom_database_path(app_handle) {
         if !custom_path_str.is_empty() {
             let custom_path = PathBuf::from(custom_path_str);
             if custom_path.exists() {
@@ -1287,17 +1288,18 @@ fn get_db_path() -> Result<PathBuf> {
     
     // 如果没有自定义路径或文件不存在，返回默认路径
     let db_name = "mytips.db";
-    let data_dir = dirs::data_dir().ok_or_else(|| anyhow!("Cannot find data directory"))?;
-    let app_dir = data_dir.join("com.tauri.mytips");
-    fs::create_dir_all(&app_dir)?;
-    Ok(app_dir.join(db_name))
+    let data_dir = app_handle.path().app_data_dir()
+        .map_err(|_| anyhow!("Cannot find data directory"))?;
+    fs::create_dir_all(&data_dir)?;
+    Ok(data_dir.join(db_name))
 }
 
 // 从设置中获取自定义数据库路径
-fn get_custom_database_path() -> Result<Option<String>> {
-    let config_dir = dirs::config_dir().ok_or_else(|| anyhow!("无法确定配置目录"))?;
+fn get_custom_database_path(app_handle: &AppHandle) -> Result<Option<String>> {
+    let config_dir = app_handle.path().app_config_dir()
+        .map_err(|_| anyhow!("无法确定配置目录"))?;
     
-    let config_file = config_dir.join("mytips").join("database_path.txt");
+    let config_file = config_dir.join("database_path.txt");
     
     if config_file.exists() {
         let path = fs::read_to_string(config_file)?;

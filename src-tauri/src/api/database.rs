@@ -3,7 +3,7 @@ use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{command, AppHandle, State};
+use tauri::{command, AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 use crate::db::DbManager;
@@ -24,8 +24,8 @@ pub struct DatabaseOperationResult {
 
 // 获取当前数据库路径
 #[command]
-pub async fn get_current_database_path() -> Result<String, String> {
-    match get_current_db_path() {
+pub async fn get_current_database_path(app: AppHandle) -> Result<String, String> {
+    match get_current_db_path(&app) {
         Ok(path) => Ok(path.to_string_lossy().to_string()),
         Err(e) => Err(format!("获取数据库路径失败: {}", e)),
     }
@@ -33,8 +33,11 @@ pub async fn get_current_database_path() -> Result<String, String> {
 
 // 获取数据库信息
 #[command]
-pub async fn get_database_info(db_manager: State<'_, DbManager>) -> Result<DatabaseInfo, String> {
-    let db_path = get_current_db_path().map_err(|e| format!("获取数据库路径失败: {}", e))?;
+pub async fn get_database_info(
+    app: AppHandle,
+    db_manager: State<'_, DbManager>,
+) -> Result<DatabaseInfo, String> {
+    let db_path = get_current_db_path(&app).map_err(|e| format!("获取数据库路径失败: {}", e))?;
     
     // 获取文件大小
     let file_size = match fs::metadata(&db_path) {
@@ -105,7 +108,7 @@ pub async fn select_database_file(app: AppHandle) -> Result<DatabaseOperationRes
             match rusqlite::Connection::open(&path_buf) {
                 Ok(_) => {
                     // 保存新的数据库路径到设置
-                    if let Err(e) = save_database_path(&path_str) {
+                    if let Err(e) = save_database_path(&app, &path_str) {
                         return Err(format!("保存数据库路径失败: {}", e));
                     }
 
@@ -160,7 +163,7 @@ pub async fn create_new_database(app: AppHandle) -> Result<DatabaseOperationResu
             match create_empty_database(&path_buf) {
                 Ok(_) => {
                     // 保存新的数据库路径到设置
-                    if let Err(e) = save_database_path(&path_str) {
+                    if let Err(e) = save_database_path(&app, &path_str) {
                         return Err(format!("保存数据库路径失败: {}", e));
                     }
 
@@ -181,13 +184,13 @@ pub async fn create_new_database(app: AppHandle) -> Result<DatabaseOperationResu
 
 // 重置到默认数据库位置
 #[command]
-pub async fn reset_to_default_database() -> Result<DatabaseOperationResult, String> {
+pub async fn reset_to_default_database(app: AppHandle) -> Result<DatabaseOperationResult, String> {
     // 删除自定义数据库路径设置
-    if let Err(e) = remove_database_path_setting() {
+    if let Err(e) = remove_database_path_setting(&app) {
         return Err(format!("重置数据库路径失败: {}", e));
     }
 
-    let default_path = get_default_db_path()
+    let default_path = get_default_db_path(&app)
         .map_err(|e| format!("获取默认数据库路径失败: {}", e))?;
 
     Ok(DatabaseOperationResult {
@@ -197,9 +200,9 @@ pub async fn reset_to_default_database() -> Result<DatabaseOperationResult, Stri
 }
 
 // 辅助函数：获取当前数据库路径
-fn get_current_db_path() -> Result<PathBuf> {
+fn get_current_db_path(app: &AppHandle) -> Result<PathBuf> {
     // 首先检查是否有自定义路径设置
-    if let Ok(Some(custom_path)) = get_custom_database_path() {
+    if let Ok(Some(custom_path)) = get_custom_database_path(app) {
         let path = PathBuf::from(custom_path);
         if path.exists() {
             return Ok(path);
@@ -207,14 +210,14 @@ fn get_current_db_path() -> Result<PathBuf> {
     }
 
     // 如果没有自定义路径或文件不存在，返回默认路径
-    get_default_db_path()
+    get_default_db_path(app)
 }
 
 // 获取默认数据库路径
-fn get_default_db_path() -> Result<PathBuf> {
-    let data_dir = dirs::data_dir()
-        .ok_or_else(|| anyhow!("无法确定数据目录"))?
-        .join("mytips");
+fn get_default_db_path(app: &AppHandle) -> Result<PathBuf> {
+    let data_dir = app.path()
+        .app_data_dir()
+        .map_err(|_| anyhow!("无法确定数据目录"))?;
     
     // 确保目录存在
     fs::create_dir_all(&data_dir)?;
@@ -223,10 +226,10 @@ fn get_default_db_path() -> Result<PathBuf> {
 }
 
 // 获取自定义数据库路径设置
-fn get_custom_database_path() -> Result<Option<String>> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow!("无法确定配置目录"))?
-        .join("mytips");
+fn get_custom_database_path(app: &AppHandle) -> Result<Option<String>> {
+    let config_dir = app.path()
+        .app_config_dir()
+        .map_err(|_| anyhow!("无法确定配置目录"))?;
     
     let config_file = config_dir.join("database_path.txt");
     
@@ -239,36 +242,33 @@ fn get_custom_database_path() -> Result<Option<String>> {
 }
 
 // 保存数据库路径设置
-fn save_database_path(path: &str) -> Result<()> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow!("无法确定配置目录"))?
-        .join("mytips");
+fn save_database_path(app: &AppHandle, path: &str) -> Result<()> {
+    let config_dir = app.path()
+        .app_config_dir()
+        .map_err(|_| anyhow!("无法确定配置目录"))?;
     
     // 确保配置目录存在
     fs::create_dir_all(&config_dir)?;
     
     let config_file = config_dir.join("database_path.txt");
     fs::write(config_file, path)?;
-    
     Ok(())
 }
 
-// 删除数据库路径设置
-fn remove_database_path_setting() -> Result<()> {
-    let config_dir = dirs::config_dir()
-        .ok_or_else(|| anyhow!("无法确定配置目录"))?
-        .join("mytips");
+// 删除自定义数据库路径设置
+fn remove_database_path_setting(app: &AppHandle) -> Result<()> {
+    let config_dir = app.path()
+        .app_config_dir()
+        .map_err(|_| anyhow!("无法确定配置目录"))?;
     
     let config_file = config_dir.join("database_path.txt");
-    
     if config_file.exists() {
         fs::remove_file(config_file)?;
     }
-    
     Ok(())
 }
 
-// 创建空数据库
+// 创建一个空的数据库文件
 fn create_empty_database(path: &PathBuf) -> Result<()> {
     // 如果文件存在，先删除
     if path.exists() {

@@ -1,8 +1,9 @@
-use tauri::command;
+use tauri::{command, Manager};
 use tauri_plugin_updater::UpdaterExt;
 use tauri::Emitter;
 use std::time::Duration;
 use crate::api::settings::get_proxy_settings_internal;
+use crate::db::DbManager;
 
 
 #[derive(serde::Serialize)]
@@ -93,9 +94,10 @@ fn is_newer_version(current_version: &str, remote_version: &str) -> bool {
 /// 创建带有全局代理设置的更新器构建器
 async fn create_updater_builder_with_proxy(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::UpdaterBuilder, String> {
     let mut updater_builder = app.updater_builder();
+    let db_manager = app.state::<DbManager>();
     
     // 获取全局代理设置
-    match get_proxy_settings_internal().await {
+    match get_proxy_settings_internal(db_manager.inner()).await {
         Ok(proxy_settings) => {
             if proxy_settings.enabled {
                 let proxy_url = if proxy_settings.auth && !proxy_settings.username.is_empty() {
@@ -222,7 +224,7 @@ pub async fn check_for_updates_with_config(
 /// 这个函数通过手动发送HTTP请求来获取更新信息，绕过Tauri的签名验证
 #[command]
 pub async fn check_for_updates_no_signature(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     timeout_seconds: Option<u64>,
     proxy: Option<String>,
 ) -> Result<UpdateInfo, String> {
@@ -270,7 +272,8 @@ pub async fn check_for_updates_no_signature(
         }
     } else {
         // 尝试使用全局代理设置
-        match get_proxy_settings_internal().await {
+        let db_manager = app.state::<DbManager>();
+        match get_proxy_settings_internal(db_manager.inner()).await {
             Ok(proxy_settings) => {
                 if proxy_settings.enabled {
                     let proxy_url = if proxy_settings.auth && !proxy_settings.username.is_empty() {

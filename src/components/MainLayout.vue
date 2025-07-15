@@ -1,10 +1,68 @@
 <template>
-  <div class="h-screen flex flex-col">
-    <!-- 主体内容区 -->
+  <div class="h-screen flex flex-col bg-base-100">
+    <!-- Mobile Header -->
+    <div v-if="isMobile" class="flex-shrink-0 flex items-center justify-between p-2 bg-base-200 border-b border-base-300 h-14">
+      <button v-if="!selectedNoteId" class="btn btn-ghost btn-square" @click="isSidebarOpenOnMobile = true">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+      <button v-else class="btn btn-ghost btn-square" @click="deselectNote">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <div class="font-bold text-lg">
+        <span v-if="selectedNote">{{ selectedNote.title }}</span>
+        <span v-else>{{ listTitle }}</span>
+      </div>
+      <!-- Placeholder for potential actions -->
+      <div class="w-10"></div>
+    </div>
+
+    <!-- Main Content -->
     <main class="flex-1 flex overflow-hidden relative">
-      <!-- 左侧导航栏 -->
-      <div 
+      <!-- Sidebar for Mobile -->
+      <div v-if="isMobile" 
+           :class="['fixed inset-0 z-40 transition-transform duration-300', isSidebarOpenOnMobile ? 'translate-x-0' : '-translate-x-full']">
+        <div class="absolute inset-0 bg-black/50" @click="isSidebarOpenOnMobile = false"></div>
+        <div class="relative w-64 h-full bg-base-200 shadow-xl">
+          <SideNavBar 
+            :notebooks="notebooks"
+            :tags="storeTags"
+            :search-query="navSearchQuery"
+            :selected-notebook-id="selectedNotebookId || undefined"
+            :selected-tags="selectedTags"
+            :selected-note-id="selectedNoteId"
+            :notes="storeTips"
+            :is-collapsed="false"
+            :is-focus-mode="isFocusMode"
+            :focus-section="focusSection"
+            @select-notebook="selectNotebook($event); handleMobileNav()"
+            @toggle-tag="toggleTag($event); handleMobileNav()"
+            @select-note="handleNoteSelection($event); handleMobileNav()"
+            @add-notebook="showAddNotebookModal = true"
+            @add-tag="showAddTagModal = true"
+            @import="openImportDialog"
+            @add-child-notebook="addChildNotebook"
+            @edit-notebook="editNotebook"
+            @delete-notebook="deleteNotebook"
+            @delete-tag="deleteTag"
+            @search="(query) => navSearchQuery = query"
+            @new-note="createNewNote(); handleMobileNav()"
+            @clipboard="() => { navigateTo('/clipboard'); handleMobileNav(); }"
+            @ai-assistant="() => { navigateTo('/ai-assistant'); handleMobileNav(); }"
+            @settings="() => { navigateTo('/settings'); handleMobileNav(); }"
+            @encrypt-notebook="handleNotebookEncryption"
+            @decrypt-notebook="handleNotebookDecryption"
+          />
+        </div>
+      </div>
+      
+      <!-- Sidebar for Desktop -->
+      <div v-if="!isMobile"
         class="h-full flex-shrink-0 relative sidebar-container sidebar-width"
+        :style="{ width: `${sidebarWidth}px`, display: sidebarCollapsed ? 'none' : 'flex' }"
       >
         <SideNavBar 
           :notebooks="notebooks"
@@ -36,7 +94,6 @@
           @decrypt-notebook="handleNotebookDecryption"
         />
         
-        <!-- 侧边栏拖拽手柄 -->
         <div 
           v-if="!sidebarCollapsed"
           class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
@@ -45,97 +102,136 @@
         ></div>
       </div>
 
-      <!-- 中间笔记列表 -->
-      <div 
-        v-if="(!isFocusMode || focusSection === 'list') && !noteListHidden" 
-        class="h-full flex-shrink-0 relative transition-all duration-300 note-list-container" 
-        :style="{ 
-          width: isFocusMode && focusSection === 'list' ? '100%' : `${noteListWidth}px`
-        }"
-      >
-        <!-- 笔记列表隐藏按钮 - 垂直居中 -->
-        <div class="absolute top-1/2 right-1 transform -translate-y-1/2 z-10">
-          <button 
-            class="btn btn-xs btn-ghost btn-circle opacity-60 hover:opacity-100 shadow-sm"
-            @click="toggleNoteList"
-            title="隐藏笔记列表"
+      <!-- Content Area -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Desktop Layout -->
+        <template v-if="!isMobile">
+          <div 
+            v-if="(!isFocusMode || focusSection === 'list') && !noteListHidden" 
+            class="h-full flex-shrink-0 relative transition-all duration-300 note-list-container" 
+            :style="{ 
+              width: isFocusMode && focusSection === 'list' ? '100%' : `${noteListWidth}px`
+            }"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        </div>
-        
-        <NoteList 
-          :title="listTitle"
-          :loading="storeIsLoading"
-          :selected-note-id="selectedNoteId || undefined"
-          :notebooks="notebooks"
-          :selected-notebook-id="selectedNotebookId || undefined"
-          @select-note="handleNoteSelection"
-          @search="handleListSearch"
-          @new-note="createNewNote"
-          @delete-note="deleteNote"
-          @export-note="exportNote"
-          @move-to-category="moveNoteToCategory"
-          @refresh="refreshNotes"
-          @encrypt-note="handleNoteEncryption"
-          @decrypt-note="handleNoteDecryption"
-          :key="selectedNotebookId || undefined"
-        />
-        
-        <!-- 笔记列表拖拽手柄 -->
-        <div 
-          class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
-          @mousedown="startResizeNoteList"
-          title="拖拽调整笔记列表宽度"
-        ></div>
-      </div>
-      
-      <!-- 笔记列表隐藏时的显示按钮 -->
-      <div 
-        v-if="noteListHidden && !isFocusMode"
-        class="w-8 h-full flex-shrink-0 bg-base-200 border-r border-base-300 flex items-center justify-center relative"
-      >
-        <button 
-          class="btn btn-xs btn-ghost btn-circle rotate-180 opacity-60 hover:opacity-100 shadow-sm"
-          @click="toggleNoteList"
-          title="显示笔记列表"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-      </div>
+            <div class="absolute top-1/2 right-1 transform -translate-y-1/2 z-10">
+              <button 
+                class="btn btn-xs btn-ghost btn-circle opacity-60 hover:opacity-100 shadow-sm"
+                @click="toggleNoteList"
+                title="隐藏笔记列表"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            </div>
+            
+            <NoteList 
+              :title="listTitle"
+              :loading="storeIsLoading"
+              :selected-note-id="selectedNoteId || undefined"
+              :notebooks="notebooks"
+              :selected-notebook-id="selectedNotebookId || undefined"
+              @select-note="handleNoteSelection"
+              @search="handleListSearch"
+              @new-note="createNewNote"
+              @delete-note="deleteNote"
+              @export-note="exportNote"
+              @move-to-category="moveNoteToCategory"
+              @refresh="refreshNotes"
+              @encrypt-note="handleNoteEncryption"
+              @decrypt-note="handleNoteDecryption"
+              :key="selectedNotebookId || undefined"
+            />
+            
+            <div 
+              class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
+              @mousedown="startResizeNoteList"
+              title="拖拽调整笔记列表宽度"
+            ></div>
+          </div>
+          
+          <div 
+            v-if="noteListHidden && !isFocusMode"
+            class="w-8 h-full flex-shrink-0 bg-base-200 border-r border-base-300 flex items-center justify-center relative"
+          >
+            <button 
+              class="btn btn-xs btn-ghost btn-circle rotate-180 opacity-60 hover:opacity-100 shadow-sm"
+              @click="toggleNoteList"
+              title="显示笔记列表"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+          </div>
 
-      <!-- 右侧编辑区域 -->
-      <div 
-        v-if="!isFocusMode || focusSection === 'editor'" 
-        class="h-full flex-1"
-      >
-        <div v-if="selectedNote" class="h-full">
-          <NoteEditor 
-            :note="selectedNote"
-            @update="updateNote"
-            @delete-note="deleteNote"
-            @duplicate-note="duplicateNote"
-            @add-tag="addTagToNote"
-            @remove-tag="removeTagFromNote"
-            @toggle-pin="toggleNotePin"
-            @unlock-note="handleNoteUnlock"
-            @decrypt-note="handleNoteDecryption"
-          />
-        </div>
-        <div v-else class="h-full flex items-center justify-center flex-col p-6 bg-base-200 text-base-content/80">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-          <h2 class="text-2xl font-bold mb-2">选择或创建笔记</h2>
-          <p class="mb-4 text-center max-w-md">
-            在左侧选择一个笔记本，然后从列表中选择一个笔记进行编辑，或者创建一个新笔记开始记录你的想法。
-          </p>
-          <!-- <button class="btn btn-primary" @click="createNewNote">创建新笔记</button> -->
-        </div>
+          <div 
+            v-if="!isFocusMode || focusSection === 'editor'" 
+            class="h-full flex-1"
+          >
+            <div v-if="selectedNote" class="h-full">
+              <NoteEditor 
+                :note="selectedNote"
+                @update="updateNote"
+                @delete-note="deleteNote"
+                @duplicate-note="duplicateNote"
+                @add-tag="addTagToNote"
+                @remove-tag="removeTagFromNote"
+                @toggle-pin="toggleNotePin"
+                @unlock-note="handleNoteUnlock"
+                @decrypt-note="handleNoteDecryption"
+              />
+            </div>
+            <div v-else class="h-full flex items-center justify-center flex-col p-6 bg-base-200 text-base-content/80">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              <h2 class="text-2xl font-bold mb-2">选择或创建笔记</h2>
+              <p class="mb-4 text-center max-w-md">
+                在左侧选择一个笔记本，然后从列表中选择一个笔记进行编辑，或者创建一个新笔记开始记录你的想法。
+              </p>
+            </div>
+          </div>
+        </template>
+        
+        <!-- Mobile Layout -->
+        <template v-else>
+          <!-- Note Editor is shown only if a note is selected -->
+          <div v-if="selectedNoteId && selectedNote" class="h-full w-full">
+            <NoteEditor 
+              :note="selectedNote"
+              @update="updateNote"
+              @delete-note="deleteNote"
+              @duplicate-note="duplicateNote"
+              @add-tag="addTagToNote"
+              @remove-tag="removeTagFromNote"
+              @toggle-pin="toggleNotePin"
+              @unlock-note="handleNoteUnlock"
+              @decrypt-note="handleNoteDecryption"
+            />
+          </div>
+
+          <!-- Note List is shown otherwise -->
+          <div v-else class="h-full w-full">
+            <NoteList 
+              :title="listTitle"
+              :loading="storeIsLoading"
+              :selected-note-id="selectedNoteId || undefined"
+              :notebooks="notebooks"
+              :selected-notebook-id="selectedNotebookId || undefined"
+              @select-note="handleNoteSelection"
+              @search="handleListSearch"
+              @new-note="createNewNote"
+              @delete-note="deleteNote"
+              @export-note="exportNote"
+              @move-to-category="moveNoteToCategory"
+              @refresh="refreshNotes"
+              @encrypt-note="handleNoteEncryption"
+              @decrypt-note="handleNoteDecryption"
+              :key="selectedNotebookId || undefined"
+            />
+          </div>
+        </template>
       </div>
     </main>
 
@@ -252,12 +348,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTipsStore, Tip, Category, TipSummary } from '../stores/tipsStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
 import { showConfirm, showAlert } from '../services/dialog'
+import { useResponsive } from '../composables/useResponsive'
 
 // Components
 import SideNavBar from './SideNavBar.vue'
@@ -283,6 +380,29 @@ const encryptionStore = useEncryptionStore()
 
 // Router
 const router = useRouter()
+
+// --- Responsive state ---
+const { isMobile } = useResponsive()
+const isSidebarOpenOnMobile = ref(false)
+
+
+watch(isMobile, (mobile) => {
+  if (!mobile) {
+    sidebarCollapsed.value = false;
+    isSidebarOpenOnMobile.value = false
+  }
+});
+
+const handleMobileNav = () => {
+  if (isMobile.value) {
+    isSidebarOpenOnMobile.value = false
+  }
+}
+
+const deselectNote = () => {
+  selectedNote.value = null;
+  selectedNoteId.value = null;
+}
 
 // --- Refs for UI state ---
 const sidebarCollapsed = ref(false)
@@ -465,6 +585,10 @@ onMounted(async () => {
   // ... other onMounted logic
 })
 
+onUnmounted(() => {
+  // No longer need to remove resize listener here as it's handled globally
+})
+
 // watch for selection changes to clear search
 watch(selectedNotebookId, () => {
   listSearchQuery.value = ''
@@ -476,27 +600,56 @@ watch(selectedTags, () => {
   navSearchQuery.value = ''
 })
 
+// Helper function to get or create the 'Uncategorized' notebook
+async function getUncategorizedNotebookId(): Promise<string> {
+  let uncategorized = storeCategories.value.find(c => c.name === '未分类');
+  if (uncategorized) {
+    return uncategorized.id;
+  } else {
+    // If it doesn't exist, create it
+    const newCategory = await tipsStore.createCategory('未分类');
+    if (newCategory) {
+      // Manually add the new category to the store to avoid re-fetching
+      storeCategories.value.push(newCategory);
+      await fetchInitialData(); // Rebuild tree after adding category
+      return newCategory.id;
+    } else {
+      showAlert('无法创建“未分类”笔记本，请重试。', { title: '错误' });
+      throw new Error("Failed to create 'Uncategorized' notebook.");
+    }
+  }
+}
 
 
 // Example of an updated method:
 async function createNewNote() {
+  let categoryId = selectedNotebookId.value;
+
+  // If no notebook is selected, assign to 'Uncategorized'
+  if (!categoryId) {
+    try {
+      categoryId = await getUncategorizedNotebookId();
+    } catch (error) {
+      console.error(error);
+      return; // Stop if we can't get the category ID
+    }
+  }
+
   const newNoteData = {
     title: '无标题笔记',
     content: '# 新笔记\n\n在这里开始你的创作...',
-    tip_type: 'markdown', // 添加缺失的字段
-    category_id: selectedNotebookId.value || undefined,
-    tags: selectedTags.value // 直接使用 selectedTags
+    tip_type: 'markdown',
+    category_id: categoryId || undefined,
+    tags: selectedTags.value
   };
 
   const savedNote = await tipsStore.saveTip(newNoteData);
 
-  // 新增: 保存成功后立即更新计数
   if (savedNote && savedNote.category_id) {
     updateNotebookTreeCount(savedNote.category_id, 1);
   }
 
   if (savedNote) {
-    // saveTip 应该返回完整的笔记对象，并已将其添加到store中
     await handleNoteSelection(savedNote);
   } else {
     console.error("Failed to create new note.");
@@ -755,17 +908,24 @@ async function selectNotebook(id: string) {
   selectedTags.value = [] // clear tag selection
   await tipsStore.fetchTipsByCategory(id)
 
-  // 自动选中第一个笔记
-  if (storeTips.value.length > 0) {
-    const firstNoteId = storeTips.value[0].id
-    const note = await tipsStore.fetchTip(firstNoteId)
-    if (note) {
-      selectNote(note)
-    }
-  } else {
-    // 如果笔记本为空，则清除当前选中的笔记
+  if (isMobile.value) {
+    // On mobile, just display the list of notes for the selected notebook.
+    // So we clear the selected note.
     selectedNote.value = null
     selectedNoteId.value = null
+  } else {
+    // On desktop, auto-select the first note.
+    if (storeTips.value.length > 0) {
+      const firstNoteId = storeTips.value[0].id
+      const note = await tipsStore.fetchTip(firstNoteId)
+      if (note) {
+        selectNote(note)
+      }
+    } else {
+      // If the notebook is empty, clear the current selection.
+      selectedNote.value = null
+      selectedNoteId.value = null
+    }
   }
 }
 function toggleTag(id: string) {

@@ -1,6 +1,6 @@
 use crate::clipboard::ClipboardSettings;
 use crate::db::{ClipboardHistory, DbManager, Tip, TipType};
-use arboard::Clipboard;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use chrono::Utc;
 use serde::Serialize;
 use std::sync::Mutex;
@@ -72,7 +72,7 @@ pub fn add_clipboard_entry(
 #[tauri::command]
 pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
     // 尝试获取当前选中文本
-    let selected_text = match crate::clipboard::get_selected_text() {
+    let selected_text = match crate::clipboard::get_selected_text(&app) {
         Some(text) => {
             if text.is_empty() {
                 return Err("没有选中文本".to_string());
@@ -178,11 +178,10 @@ pub async fn create_note_from_history(
 }
 
 #[tauri::command]
-pub fn copy_to_clipboard(text: String) -> Result<(), String> {
-    match Clipboard::new() {
-        Ok(mut clipboard) => clipboard.set_text(text).map_err(|e| e.to_string()),
-        Err(e) => Err(format!("无法访问剪贴板: {}", e)),
-    }
+pub fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    app.clipboard()
+        .write_text(text)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -220,6 +219,7 @@ pub fn save_clipboard_settings(
         .map_err(|e| format!("保存剪贴板设置失败: {}", e))
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 pub fn clean_expired_clipboard_entries(app: tauri::AppHandle) -> Result<(), String> {
     crate::clipboard::clean_expired_entries(&app);

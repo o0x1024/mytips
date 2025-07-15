@@ -1,7 +1,7 @@
 <template>
   <div class="h-full flex flex-col border-r border-base-300 relative">
-    <!-- 顶部区域：笔记统计和快速操作 -->
-    <div class="p-3 border-b border-base-300 bg-base-100">
+    <!-- 顶部区域：笔记统计和快速操作 (仅桌面端显示) -->
+    <div v-if="!isMobile" class="p-3 border-b border-base-300 bg-base-100">
       <!-- 笔记统计信息 -->
       <div class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-2 mt-2">
@@ -382,6 +382,7 @@ import { useTipsStore, TipSummary } from '../stores/tipsStore'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useResponsive } from '../composables/useResponsive'
 
 // 类型定义
 interface Note extends TipSummary {
@@ -417,6 +418,9 @@ const { tips, isLoading: loading, hasMore } = storeToRefs(tipsStore)
 
 // 加密store
 const encryptionStore = useEncryptionStore()
+
+// 响应式
+const { isMobile } = useResponsive()
 
 // 状态
 const searchQuery = ref('')

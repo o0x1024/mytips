@@ -275,36 +275,53 @@
         </div>
       </div>
 
-      <!-- 右侧设置和模式切换 -->
-      <div class="flex items-center gap-1 flex-shrink-0" ref="toolbarRight">
+      <!-- 右侧工具组 -->
+      <div class="flex items-center gap-1 flex-shrink-0 toolbar-right-group" ref="toolbarRight">
         
         <div v-if="isFullscreen" class="text-xs text-base-content/60 mr-2 toolbar-item" data-priority="13">
           <span class="badge badge-primary badge-xs mr-1">全屏</span>
           <span class="toolbar-text">F1:编辑 F2:预览 F3:分屏 ESC:退出</span>
         </div>
 
-        <!-- 编辑模式切换按钮 -->
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isEditOnly }"
-          @click="emit('command', 'set-edit-mode', 'editOnly')" :title="isFullscreen ? '仅编辑 (F1)' : '仅编辑'">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+        <!-- 视图模式 -->
+        <div class="btn-group toolbar-item" data-priority="13">
+          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isEditOnly }" title="仅编辑"
+            @click="emit('command', 'set-edit-mode', 'editOnly')">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+            </svg>
+          </button>
+          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isPreviewMode }"
+            @click="emit('command', 'set-edit-mode', 'preview')" :title="isFullscreen ? '预览 (F2)' : '预览'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isSplitMode }"
+            @click="emit('command', 'set-edit-mode', 'split')" :title="isFullscreen ? '分屏模式 (F3)' : '分屏模式'">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="12" y1="3" x2="12" y2="21"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- 全屏切换按钮 -->
+        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="14" :class="{ 'btn-active': isFullscreen }"
+          title="切换全屏" @click="emit('command', 'toggle-fullscreen')">
+          <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+            <path d="M17 21h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
           </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isPreviewMode }"
-          @click="emit('command', 'set-edit-mode', 'preview')" :title="isFullscreen ? '预览 (F2)' : '预览'">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isSplitMode }"
-          @click="emit('command', 'set-edit-mode', 'split')" :title="isFullscreen ? '分屏模式 (F3)' : '分屏模式'">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="12" y1="3" x2="12" y2="21"></line>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+            <path d="M17 21h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
           </svg>
         </button>
       </div>
@@ -316,34 +333,13 @@
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 defineProps({
-  isFullscreen: {
-    type: Boolean,
-    default: false,
-  },
-  isEditOnly: {
-    type: Boolean,
-    default: false,
-  },
-  isPreviewMode: {
-    type: Boolean,
-    default: false,
-  },
-  isSplitMode: {
-    type: Boolean,
-    default: true,
-  },
-  showToc: {
-    type: Boolean,
-    default: false,
-  },
-  currentHighlightTheme: {
-    type: String,
-    default: 'default',
-  },
-  currentMarkdownTheme: {
-    type: String,
-    default: 'github',
-  },
+  isFullscreen: Boolean,
+  isEditOnly: Boolean,
+  isPreviewMode: Boolean,
+  isSplitMode: Boolean,
+  showToc: Boolean,
+  currentHighlightTheme: String,
+  currentMarkdownTheme: String,
 });
 
 const emit = defineEmits(['command']);

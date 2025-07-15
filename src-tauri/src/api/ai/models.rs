@@ -1,4 +1,4 @@
-use crate::api::settings::get_client_with_proxy;
+use crate::{api::settings::get_client_with_proxy, db::DbManager};
 use base64::{engine::general_purpose, Engine as _};
 use futures::{Stream, StreamExt, FutureExt};
 use genai::{
@@ -24,9 +24,13 @@ pub struct CustomModel {
 }
 
 // 创建GenAI客户端并添加认证
-pub async fn create_genai_client(api_key: String, model_id: &str) -> Result<Client, String> {
+pub async fn create_genai_client(
+    api_key: String,
+    model_id: &str,
+    db_manager: &DbManager,
+) -> Result<Client, String> {
     // 获取代理设置
-    let proxy_settings = crate::api::settings::get_proxy_settings_internal().await?;
+    let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
 
     // 如果代理启用，设置环境变量（这会影响reqwest，而GenAI库内部使用reqwest）
     if proxy_settings.enabled {
@@ -119,9 +123,10 @@ pub async fn send_message_to_ai(
     api_key: String,
     model_id: &str,
     message: String,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
     // 创建genai客户端
-    let client = create_genai_client(api_key, model_id).await?;
+    let client = create_genai_client(api_key, model_id, db_manager).await?;
 
     // 获取适合当前模型的模型名称
     let model_name = get_model_name(model_id, None);
@@ -151,11 +156,12 @@ pub async fn stream_message_from_ai(
     model_id: &str,
     message: String,
     custom_model_name: Option<&str>,
+    db_manager: &DbManager,
 ) -> Result<TextStream, String> {
     println!("启动单消息流式请求: model={}", model_id);
 
     // 创建genai客户端
-    let client = match create_genai_client(api_key, model_id).await {
+    let client = match create_genai_client(api_key, model_id, db_manager).await {
         Ok(client) => client,
         Err(e) => {
             // 如果客户端创建失败，直接返回一个只包含错误消息的流
@@ -216,10 +222,11 @@ pub async fn send_to_custom(
     api_key: String,
     endpoint: String,
     message: String,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
     use serde_json::{json, Value};
 
-    let client = get_client_with_proxy().await?;
+    let client = get_client_with_proxy(db_manager).await?;
 
     // 假设自定义API遵循OpenAI格式
     let payload = json!({
@@ -273,9 +280,10 @@ pub async fn chat_with_history(
     api_key: String,
     model_id: &str,
     messages: Vec<ChatMessage>,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
     // 创建genai客户端
-    let client = create_genai_client(api_key, model_id).await?;
+    let client = create_genai_client(api_key, model_id, db_manager).await?;
 
     // 获取适合当前模型的模型名称
     let model_name = get_model_name(model_id, None);
@@ -302,6 +310,7 @@ pub async fn stream_chat_with_history(
     model_id: &str,
     messages: Vec<ChatMessage>,
     custom_model_name: Option<&str>,
+    db_manager: &DbManager,
 ) -> Result<TextStream, String> {
     println!(
         "启动对话历史流式请求: model={}, messages={}",
@@ -310,7 +319,7 @@ pub async fn stream_chat_with_history(
     );
 
     // 创建genai客户端
-    let client = match create_genai_client(api_key, model_id).await {
+    let client = match create_genai_client(api_key, model_id, db_manager).await {
         Ok(client) => client,
         Err(e) => {
             // 如果客户端创建失败，直接返回一个只包含错误消息的流
@@ -379,10 +388,14 @@ pub async fn stream_chat_with_history(
 }
 
 // 阿里通义千问模型实现 (genai库暂不支持，保留原实现)
-pub async fn send_to_qwen(api_key: String, message: String) -> Result<String, String> {
+pub async fn send_to_qwen(
+    api_key: String,
+    message: String,
+    db_manager: &DbManager,
+) -> Result<String, String> {
     use serde_json::{json, Value};
 
-    let client = get_client_with_proxy().await?;
+    let client = get_client_with_proxy(db_manager).await?;
 
     let payload = json!({
         "model": "qwen-max",
@@ -429,10 +442,11 @@ pub async fn send_to_doubao(
     api_key: String,
     message: String,
     custom_model_name: Option<&str>,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
     use serde_json::{json, Value};
 
-    let client = get_client_with_proxy().await?;
+    let client = get_client_with_proxy(db_manager).await?;
 
     // 豆包API端点
     let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
@@ -492,8 +506,9 @@ pub async fn send_message_with_images_to_ai(
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
-    let client = create_genai_client(api_key, model_id).await?;
+    let client = create_genai_client(api_key, model_id, db_manager).await?;
 
     let model_name = get_model_name(model_id, custom_model_name);
 
@@ -544,8 +559,9 @@ pub async fn stream_message_with_images_from_ai(
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
+    db_manager: &DbManager,
 ) -> Result<TextStream, String> {
-    let client = create_genai_client(api_key, model_id).await?;
+    let client = create_genai_client(api_key, model_id, db_manager).await?;
 
     let model_name = get_model_name(model_id, custom_model_name);
 
@@ -629,9 +645,10 @@ pub async fn create_custom_genai_client(
     model_name: String,
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
+    db_manager: &DbManager,
 ) -> Result<Client, String> {
     // 获取代理设置
-    let proxy_settings = crate::api::settings::get_proxy_settings_internal().await?;
+    let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
 
     // 如果代理启用，设置环境变量
     if proxy_settings.enabled {
@@ -705,6 +722,7 @@ pub async fn send_message_to_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     message: String,
+    db_manager: &DbManager,
 ) -> Result<String, String> {
     // 创建自定义genai客户端
     let client = create_custom_genai_client(
@@ -713,6 +731,7 @@ pub async fn send_message_to_custom_ai(
         model_name.clone(),
         adapter_type,
         custom_headers,
+        db_manager,
     ).await?;
 
     // 创建聊天请求
@@ -739,6 +758,7 @@ pub async fn stream_message_from_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     message: String,
+    db_manager: &DbManager,
 ) -> Result<TextStream, String> {
     println!("启动自定义AI流式请求: endpoint={}, model={}", endpoint_url, model_name);
 
@@ -749,6 +769,7 @@ pub async fn stream_message_from_custom_ai(
         model_name.clone(),
         adapter_type,
         custom_headers,
+        db_manager,
     ).await {
         Ok(client) => client,
         Err(e) => {
@@ -814,6 +835,7 @@ pub async fn stream_chat_with_history_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     messages: Vec<ChatMessage>,
+    db_manager: &DbManager,
 ) -> Result<TextStream, String> {
     println!(
         "启动自定义AI历史对话流式请求: endpoint={}, model={}, messages={}",
@@ -827,6 +849,7 @@ pub async fn stream_chat_with_history_custom_ai(
         model_name.clone(),
         adapter_type,
         custom_headers,
+        db_manager,
     ).await {
         Ok(client) => client,
         Err(e) => {

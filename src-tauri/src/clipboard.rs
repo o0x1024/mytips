@@ -1,4 +1,4 @@
-use arboard::Clipboard;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
@@ -107,7 +107,7 @@ pub fn get_active_process_name() -> Option<String> {
 
 /// 获取当前选中的文本（macOS）
 #[cfg(target_os = "macos")]
-pub fn get_selected_text() -> Option<String> {
+pub fn get_selected_text(app: &AppHandle) -> Option<String> {
     // 标记我们正在模拟复制，防止剪贴板监听器触发
     SIMULATING_COPY.store(true, Ordering::SeqCst);
 
@@ -151,14 +151,13 @@ pub fn get_selected_text() -> Option<String> {
 
 /// 获取当前选中的文本（Windows）
 #[cfg(target_os = "windows")]
-pub fn get_selected_text() -> Option<String> {
+pub fn get_selected_text(app: &AppHandle) -> Option<String> {
     // 标记我们正在模拟复制，防止剪贴板监听器触发
     SIMULATING_COPY.store(true, Ordering::SeqCst);
 
     // 在Windows上模拟Ctrl+C获取选中文本
     // 使用临时剪贴板存储原始内容
-    let mut clipboard = Clipboard::new().ok()?;
-    let original_content = clipboard.get_text().unwrap_or_default();
+    let original_content = app.clipboard().read_text().unwrap_or_default();
 
     // 模拟Ctrl+C按键
     use enigo::{Enigo, Key, Keyboard, Settings};
@@ -195,7 +194,7 @@ pub fn get_selected_text() -> Option<String> {
     thread::sleep(Duration::from_millis(200));
 
     // 获取剪贴板内容（即选中文本）
-    let selected_text = clipboard.get_text().unwrap_or_default();
+    let selected_text = app.clipboard().read_text().unwrap_or_default();
 
     // 处理结果
     let result = if !selected_text.is_empty() && selected_text != original_content {
@@ -206,7 +205,7 @@ pub fn get_selected_text() -> Option<String> {
 
     // 恢复原始剪贴板内容
     if !original_content.is_empty() {
-        let _ = clipboard.set_text(original_content);
+        let _ = app.clipboard().set_text(original_content);
     }
 
     // 延迟一小段时间后重置标记
@@ -220,14 +219,13 @@ pub fn get_selected_text() -> Option<String> {
 
 /// 获取当前选中的文本（Linux）
 #[cfg(target_os = "linux")]
-pub fn get_selected_text() -> Option<String> {
+pub fn get_selected_text(app: &AppHandle) -> Option<String> {
     // 标记我们正在模拟复制，防止剪贴板监听器触发
     SIMULATING_COPY.store(true, Ordering::SeqCst);
 
     // 在Linux上模拟Ctrl+C获取选中文本
     // 使用临时剪贴板存储原始内容
-    let mut clipboard = Clipboard::new().ok()?;
-    let original_content = clipboard.get_text().unwrap_or_default();
+    let original_content = app.clipboard().read_text().unwrap_or_default();
 
     // 模拟Ctrl+C按键
     use enigo::{Enigo, Key, Keyboard, Settings};
@@ -264,7 +262,7 @@ pub fn get_selected_text() -> Option<String> {
     thread::sleep(Duration::from_millis(200));
 
     // 获取剪贴板内容（即选中文本）
-    let selected_text = clipboard.get_text().unwrap_or_default();
+    let selected_text = app.clipboard().read_text().unwrap_or_default();
 
     // 处理结果
     let result = if !selected_text.is_empty() && selected_text != original_content {
@@ -275,7 +273,7 @@ pub fn get_selected_text() -> Option<String> {
 
     // 恢复原始剪贴板内容
     if !original_content.is_empty() {
-        let _ = clipboard.set_text(original_content);
+        let _ = app.clipboard().set_text(original_content);
     }
 
     // 延迟一小段时间后重置标记
@@ -289,7 +287,7 @@ pub fn get_selected_text() -> Option<String> {
 
 /// 通用实现，用于不支持的平台
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-pub fn get_selected_text() -> Option<String> {
+pub fn get_selected_text(_app: &AppHandle) -> Option<String> {
     None
 }
 
@@ -432,6 +430,7 @@ fn is_sensitive_content(content: &str) -> bool {
 }
 
 /// 清理过期的剪贴板条目
+#[cfg(desktop)]
 pub fn clean_expired_entries(app_handle: &AppHandle) {
     let db_manager = app_handle.state::<DbManager>();
     if let Ok(conn) = db_manager.get_conn() {
@@ -458,19 +457,14 @@ pub fn clean_expired_entries(app_handle: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 pub fn start_clipboard_listener(app_handle: AppHandle) {
     thread::spawn(move || {
         // 初始化剪贴板
-        let mut clipboard = match Clipboard::new() {
-            Ok(clipboard) => clipboard,
-            Err(e) => {
-                eprintln!("无法初始化剪贴板监听: {}", e);
-                return;
-            }
-        };
+        let clipboard = app_handle.clipboard();
 
         // 获取初始剪贴板内容
-        let mut last_text = clipboard.get_text().unwrap_or_default();
+        let mut last_text = clipboard.read_text().unwrap_or_default();
         println!("剪贴板监听已启动，初始内容: {}", last_text);
 
         // 用于比较图片内容的哈希值
@@ -530,7 +524,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 
             // 检查文本内容
             let mut has_new_content = false;
-            if let Ok(current_text) = clipboard.get_text() {
+            if let Ok(current_text) = clipboard.read_text() {
                 // 检查内容是否为空或与上次相同
                 if !current_text.is_empty() && current_text != last_text {
                     last_text = current_text.clone();
@@ -632,20 +626,20 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 
             // 检查图片内容（如果启用了图片捕获）
             if settings.capture_images {
-                match clipboard.get_image() {
+                match clipboard.read_image() {
                     Ok(img) => {
                         // 计算图片内容的哈希，用于比较是否发生变化
-                        let image_data = img.bytes.clone();
+                        let image_data = img.rgba();
                         let mut hasher = blake3::Hasher::new();
                         hasher.update(&image_data);
                         let hash = hasher.finalize().to_hex().to_string();
 
                         // 检查图片是否与上次不同
                         if hash != last_image_hash {
-                            println!(
-                                "检测到新的剪贴板图片内容，尺寸: {}x{}",
-                                img.width, img.height
-                            );
+                            // println!(
+                            //     "检测到新的剪贴板图片内容，尺寸: {}x{}",
+                            //     img.size().width, img.size().height
+                            // );
                             last_image_hash = hash;
 
                             // 将图片数据转换为Base64编码的字符串

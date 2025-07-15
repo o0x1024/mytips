@@ -5,6 +5,18 @@ use std::collections::HashMap;
 use tauri::{AppHandle, Manager, State};
 use crate::api::ai::models::{create_genai_client, create_custom_genai_client};
 use genai::{Client, ModelIden};
+use super::{
+    conversations::{add_ai_message, list_ai_messages},
+    models::{
+        self, chat_with_history, stream_chat_with_history, stream_chat_with_history_custom_ai,
+        stream_message_from_ai, stream_message_from_custom_ai, stream_message_with_images_from_ai,
+        CustomModel,
+    },
+    roles::get_ai_role,
+};
+use futures::StreamExt;
+use genai::chat::{ChatMessage, ChatRole};
+use once_cell::sync::Lazy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiServiceInfo {
@@ -85,33 +97,39 @@ pub struct ModelConfig {
 #[tauri::command]
 pub async fn test_ai_connection(
     request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
 ) -> Result<TestConnectionResponse, String> {
     match request.provider.as_str() {
-        "openai" => test_openai_connection(request).await,
-        "anthropic" => test_anthropic_connection(request).await,
-        "gemini" => test_gemini_connection(request).await,
-        "deepseek" => test_deepseek_connection(request).await,
-        "ali" => test_ali_connection(request).await,
-        "doubao" => test_doubao_connection(request).await,
-        "xai" => test_xai_connection(request).await,
-        "custom" => test_custom_connection(request).await,
+        "openai" => test_openai_connection(request, db_manager).await,
+        "anthropic" => test_anthropic_connection(request, db_manager).await,
+        "gemini" => test_gemini_connection(request, db_manager).await,
+        "deepseek" => test_deepseek_connection(request, db_manager).await,
+        "ali" => test_ali_connection(request, db_manager).await,
+        "doubao" => test_doubao_connection(request, db_manager).await,
+        "xai" => test_xai_connection(request, db_manager).await,
+        "custom" => test_custom_connection(request, db_manager).await,
         _ => Err(format!("不支持的提供商: {}", request.provider)),
     }
 }
 
-async fn test_openai_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
+async fn test_openai_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    let api_base = request.api_base.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-    
-    let client = get_client_with_proxy().await?;
-    
+    let api_base = request
+        .api_base
+        .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+
+    let client = get_client_with_proxy(&db_manager).await?;
+
     let response = client
         .get(format!("{}/models", api_base))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
         .map_err(|e| format!("请求OpenAI API失败: {}", e))?;
-    
+
     if !response.status().is_success() {
         let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
         return Ok(TestConnectionResponse {
@@ -120,10 +138,10 @@ async fn test_openai_connection(request: TestConnectionRequest) -> Result<TestCo
             models: None,
         });
     }
-    
+
     let models_response: serde_json::Value = response.json().await
         .map_err(|e| format!("解析OpenAI响应失败: {}", e))?;
-    
+
     let models = models_response["data"]
         .as_array()
         .map(|arr| {
@@ -133,7 +151,7 @@ async fn test_openai_connection(request: TestConnectionRequest) -> Result<TestCo
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: format!("OpenAI API连接成功，找到 {} 个模型", models.len()),
@@ -141,12 +159,17 @@ async fn test_openai_connection(request: TestConnectionRequest) -> Result<TestCo
     })
 }
 
-async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
+async fn test_anthropic_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    let api_base = request.api_base.unwrap_or_else(|| "https://api.anthropic.com".to_string());
-    
-    let client = get_client_with_proxy().await?;
-    
+    let api_base = request
+        .api_base
+        .unwrap_or_else(|| "https://api.anthropic.com".to_string());
+
+    let client = get_client_with_proxy(&db_manager).await?;
+
     // Anthropic API没有列出模型的端点，我们使用消息端点测试连接
     let response = client
         .get(format!("{}/v1/models", api_base))
@@ -155,7 +178,7 @@ async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<Tes
         .send()
         .await
         .map_err(|e| format!("请求Anthropic API失败: {}", e))?;
-    
+
     if !response.status().is_success() {
         let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
         return Ok(TestConnectionResponse {
@@ -164,7 +187,7 @@ async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<Tes
             models: None,
         });
     }
-    
+
     // 提供默认的Claude模型列表
     let default_models = vec![
         "claude-3-5-sonnet-20240620".to_string(),
@@ -175,11 +198,11 @@ async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<Tes
         "claude-2.0".to_string(),
         "claude-instant-1.2".to_string(),
     ];
-    
+
     // 尝试从响应中解析模型列表
     let models_response: serde_json::Value = response.json().await
         .map_err(|e| format!("解析Anthropic响应失败: {}", e))?;
-    
+
     let models = models_response["models"]
         .as_array()
         .map(|arr| {
@@ -188,7 +211,7 @@ async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<Tes
                 .collect::<Vec<_>>()
         })
         .unwrap_or(default_models);
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: format!("Anthropic API连接成功，找到 {} 个模型", models.len()),
@@ -196,11 +219,14 @@ async fn test_anthropic_connection(request: TestConnectionRequest) -> Result<Tes
     })
 }
 
-async fn test_gemini_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
+async fn test_gemini_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    
+
     // 使用GenAI库测试连接
-    let client = match create_genai_client(api_key.clone(), "gemini").await {
+    let client = match create_genai_client(api_key.clone(), "gemini", &db_manager).await {
         Ok(client) => client,
         Err(e) => {
             return Ok(TestConnectionResponse {
@@ -210,7 +236,7 @@ async fn test_gemini_connection(request: TestConnectionRequest) -> Result<TestCo
             });
         }
     };
-    
+
     // 默认的Gemini模型列表
     let default_models = vec![
         "gemini-2.0-flash".to_string(),
@@ -219,7 +245,7 @@ async fn test_gemini_connection(request: TestConnectionRequest) -> Result<TestCo
         "gemini-pro".to_string(),
         "gemini-pro-vision".to_string(),
     ];
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: "Gemini API连接成功".to_string(),
@@ -227,19 +253,24 @@ async fn test_gemini_connection(request: TestConnectionRequest) -> Result<TestCo
     })
 }
 
-async fn test_deepseek_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
+async fn test_deepseek_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    let api_base = request.api_base.unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
-    
-    let client = get_client_with_proxy().await?;
-    
+    let api_base = request
+        .api_base
+        .unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
+
+    let client = get_client_with_proxy(&db_manager).await?;
+
     let response = client
         .get(format!("{}/models", api_base))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
         .map_err(|e| format!("请求DeepSeek API失败: {}", e))?;
-    
+
     if !response.status().is_success() {
         let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
         return Ok(TestConnectionResponse {
@@ -248,10 +279,10 @@ async fn test_deepseek_connection(request: TestConnectionRequest) -> Result<Test
             models: None,
         });
     }
-    
+
     let models_response: serde_json::Value = response.json().await
         .map_err(|e| format!("解析DeepSeek响应失败: {}", e))?;
-    
+
     let models = models_response["data"]
         .as_array()
         .map(|arr| {
@@ -263,7 +294,7 @@ async fn test_deepseek_connection(request: TestConnectionRequest) -> Result<Test
             "deepseek-chat".to_string(),
             "deepseek-coder".to_string(),
         ]);
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: format!("DeepSeek API连接成功，找到 {} 个模型", models.len()),
@@ -271,9 +302,12 @@ async fn test_deepseek_connection(request: TestConnectionRequest) -> Result<Test
     })
 }
 
-async fn test_ali_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    
+async fn test_ali_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
+    let _api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+
     // 通义千问API没有列出模型的端点，我们使用默认模型列表
     let default_models = vec![
         "qwen-max".to_string(),
@@ -281,7 +315,7 @@ async fn test_ali_connection(request: TestConnectionRequest) -> Result<TestConne
         "qwen-turbo".to_string(),
         "qwen-long".to_string(),
     ];
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: "通义千问API密钥已保存".to_string(),
@@ -289,50 +323,57 @@ async fn test_ali_connection(request: TestConnectionRequest) -> Result<TestConne
     })
 }
 
-async fn test_doubao_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    
-    // 使用GenAI库测试连接
-    let client = match create_genai_client(api_key.clone(), "doubao").await {
-        Ok(client) => client,
-        Err(e) => {
-            return Ok(TestConnectionResponse {
-                success: false,
-                message: format!("创建豆包客户端失败: {}", e),
-                models: None,
-            });
-        }
-    };
-    
-    // 默认的豆包模型列表
-    let default_models = vec![
-        "doubao-seed-1.6".to_string(),
-        "doubao-seed-1.6-flash".to_string(),
-        "doubao-seed-1.6-thinking".to_string(),
-        "doubao-1.5-pro-32k".to_string(),
-        "doubao-1.5-pro-4k".to_string(),
-    ];
-    
-    Ok(TestConnectionResponse {
-        success: true,
-        message: "豆包API连接成功".to_string(),
-        models: Some(default_models),
-    })
+async fn test_doubao_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
+    let client = get_client_with_proxy(&db_manager).await?;
+    let response = client
+        .post("https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        .bearer_auth(request.api_key.ok_or("Missing API key")?)
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "model": "Doubao-pro-4k", // a known model for testing
+            "messages": [{"role": "user", "content": "hello"}]
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if response.status().is_success() {
+        let default_models = vec![
+            "doubao-1.5-pro-32k".to_string(),
+            "doubao-1.5-pro-4k".to_string(),
+        ];
+        Ok(TestConnectionResponse {
+            success: true,
+            message: "连接成功".to_string(),
+            models: Some(default_models),
+        })
+    } else {
+        let error_message = response.text().await.unwrap_or_default();
+        Err(format!("连接失败: {}", error_message))
+    }
 }
 
-async fn test_xai_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
+async fn test_xai_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    let api_base = request.api_base.unwrap_or_else(|| "https://api.x.ai/v1".to_string());
-    
-    let client = get_client_with_proxy().await?;
-    
+    let api_base = request
+        .api_base
+        .unwrap_or_else(|| "https://api.x.ai/v1".to_string());
+
+    let client = get_client_with_proxy(&db_manager).await?;
+
     let response = client
         .get(format!("{}/models", api_base))
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
         .map_err(|e| format!("请求xAI API失败: {}", e))?;
-    
+
     if !response.status().is_success() {
         let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
         return Ok(TestConnectionResponse {
@@ -341,10 +382,10 @@ async fn test_xai_connection(request: TestConnectionRequest) -> Result<TestConne
             models: None,
         });
     }
-    
+
     let models_response: serde_json::Value = response.json().await
         .map_err(|e| format!("解析xAI响应失败: {}", e))?;
-    
+
     let models = models_response["data"]
         .as_array()
         .map(|arr| {
@@ -357,7 +398,7 @@ async fn test_xai_connection(request: TestConnectionRequest) -> Result<TestConne
             "grok-3-mini".to_string(),
             "grok-1.5".to_string(),
         ]);
-    
+
     Ok(TestConnectionResponse {
         success: true,
         message: format!("xAI API连接成功，找到 {} 个模型", models.len()),
@@ -365,62 +406,52 @@ async fn test_xai_connection(request: TestConnectionRequest) -> Result<TestConne
     })
 }
 
-async fn test_custom_connection(request: TestConnectionRequest) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
-    let api_base = request.api_base.ok_or_else(|| "缺少API端点".to_string())?;
-    let model = request.model.ok_or_else(|| "缺少模型名称".to_string())?;
-    
-    // 使用自定义GenAI客户端测试连接
-    let client = match create_custom_genai_client(
-        api_base.clone(),
-        api_key.clone(),
-        model.clone(),
-        "openai".to_string(),
-        None,
-    ).await {
-        Ok(client) => client,
-        Err(e) => {
-            return Ok(TestConnectionResponse {
-                success: false,
-                message: format!("创建自定义客户端失败: {}", e),
-                models: None,
-            });
-        }
-    };
-    
-    // 尝试获取模型列表
-    let client_http = get_client_with_proxy().await?;
-    let models_response = client_http
-        .get(format!("{}/models", api_base))
-        .header("Authorization", format!("Bearer {}", api_key))
+async fn test_custom_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, DbManager>,
+) -> Result<TestConnectionResponse, String> {
+    if request.api_base.is_none() {
+        return Err("自定义API端点未设置".to_string());
+    }
+    let endpoint = request.api_base.unwrap();
+    let client = get_client_with_proxy(&db_manager).await?;
+
+    // 根据不同的adapter_type，可能需要不同的测试方法
+    // 这里我们假设一个通用的GET请求可以验证连接
+    let response = client
+        .get(&endpoint)
         .send()
-        .await;
-    
-    let models = match models_response {
-        Ok(response) => {
-            if response.status().is_success() {
-                match response.json::<serde_json::Value>().await {
-                    Ok(json) => {
-                        json["data"].as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
-                                    .collect::<Vec<_>>()
-                            })
-                    },
-                    Err(_) => None
-                }
-            } else {
-                None
-            }
-        },
-        Err(_) => None
-    };
-    
+        .await
+        .map_err(|e| format!("请求自定义API失败: {}", e))?;
+
+    if !response.status().is_success() {
+        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        return Ok(TestConnectionResponse {
+            success: false,
+            message: format!("自定义API连接测试失败: {}", error),
+            models: None,
+        });
+    }
+
+    let models_response: serde_json::Value = response.json().await
+        .map_err(|e| format!("解析自定义响应失败: {}", e))?;
+
+    let models = models_response["data"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![
+            "custom-model-1".to_string(),
+            "custom-model-2".to_string(),
+        ]);
+
     Ok(TestConnectionResponse {
         success: true,
         message: "自定义API连接成功".to_string(),
-        models: models,
+        models: Some(models),
     })
 }
 
@@ -497,7 +528,7 @@ pub async fn get_ai_chat_models(
             is_embedding: false,
         },
     ];
-    
+
     Ok(models)
 }
 
@@ -520,7 +551,7 @@ pub async fn get_ai_embedding_models(
             is_embedding: true,
         },
     ];
-    
+
     Ok(models)
 }
 
@@ -531,16 +562,16 @@ pub async fn get_default_ai_model(
     db_manager: State<'_, DbManager>,
 ) -> Result<Option<ModelInfo>, String> {
     let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    
+
     let key = format!("default_{}_model", model_type);
     let value = db::get_setting(&conn, &key).map_err(|e| e.to_string())?;
-    
+
     if let Some(value_str) = value {
         if let Ok(model_info) = serde_json::from_str::<ModelInfo>(&value_str) {
             return Ok(Some(model_info));
         }
     }
-    
+
     // 返回默认模型
     if model_type == "chat" {
         Ok(Some(ModelInfo {
@@ -570,17 +601,17 @@ pub async fn set_default_ai_model(
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    
+
     let model_info = ModelInfo {
         name: model_name,
         provider,
         is_chat: model_type == "chat",
         is_embedding: model_type == "embedding",
     };
-    
+
     let key = format!("default_{}_model", model_type);
     let value = serde_json::to_string(&model_info).map_err(|e| e.to_string())?;
-    
+
     db::save_setting(&conn, &key, &value).map_err(|e| e.to_string())
 }
 
@@ -611,7 +642,7 @@ pub async fn save_ai_config(
     app: AppHandle,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    
+
     // 保存每个提供商的配置
     for (provider_id, provider_config) in &config.providers {
         // 保存API密钥
@@ -619,32 +650,32 @@ pub async fn save_ai_config(
             let key = format!("{}_api_key", provider_id);
             db::save_setting(&conn, &key, api_key).map_err(|e| e.to_string())?;
         }
-        
+
         // 保存API基础URL
         if let Some(api_base) = &provider_config.api_base {
             let key = format!("{}_api_base", provider_id);
             db::save_setting(&conn, &key, api_base).map_err(|e| e.to_string())?;
         }
-        
+
         // 保存组织ID（如果有）
         if let Some(org) = &provider_config.organization {
             let key = format!("{}_organization", provider_id);
             db::save_setting(&conn, &key, org).map_err(|e| e.to_string())?;
         }
-        
+
         // 保存是否启用
         let key = format!("{}_enabled", provider_id);
         db::save_setting(&conn, &key, &provider_config.enabled.to_string()).map_err(|e| e.to_string())?;
-        
+
         // 保存默认模型
         let key = format!("{}_default_model", provider_id);
         db::save_setting(&conn, &key, &provider_config.default_model).map_err(|e| e.to_string())?;
     }
-    
+
     // 保存完整配置的JSON
     let config_json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
     db::save_setting(&conn, "ai_providers_config", &config_json).map_err(|e| e.to_string())?;
-    
+
     Ok(())
 }
 
@@ -663,7 +694,7 @@ pub async fn get_ai_usage_stats(
         },
         "providers": {}
     });
-    
+
     Ok(stats)
 }
 
@@ -674,18 +705,18 @@ pub async fn reload_ai_services(
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    
+
     // 获取完整配置
     let config_json = db::get_setting(&conn, "ai_providers_config").map_err(|e| e.to_string())?;
-    
+
     if let Some(config_str) = config_json {
         // 解析配置
         let _config: SaveAiConfigRequest = serde_json::from_str(&config_str)
             .map_err(|e| format!("解析AI配置失败: {}", e))?;
-        
+
         // 这里可以实现重新加载服务的逻辑
     }
-    
+
     Ok(())
 }
 
@@ -714,6 +745,6 @@ pub async fn get_ai_service_status(
             active_conversations: 0,
         },
     ];
-    
+
     Ok(statuses)
 } 

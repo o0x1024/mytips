@@ -15,6 +15,7 @@ const isBrowser = typeof window !== 'undefined'
 // 窗口尺寸
 const windowWidth = ref(isBrowser ? window.innerWidth : 0)
 const windowHeight = ref(isBrowser ? window.innerHeight : 0)
+const isMobile = computed(() => windowWidth.value < 768)
 
 // 控制浮动窗口的显示
 const showFloatingChat = ref(false)
@@ -70,6 +71,18 @@ const availableModels = ref([
 
 // 计算聊天窗口位置
 const chatWindowPosition = computed(() => {
+  if (isMobile.value) {
+    return {
+      top: '0px',
+      left: '0px',
+      width: '100vw',
+      height: '100vh',
+      borderRadius: '0px',
+      maxWidth: '100vw',
+      maxHeight: '100vh',
+    }
+  }
+
   const buttonSize = 50; // AI按钮的尺寸
   const margin = 10; // 窗口与屏幕边缘的间距
 
@@ -128,28 +141,21 @@ const getModelName = (modelId: string) => {
   return model ? model.name : '自定义模型'
 }
 
-// 加载默认AI模型（优先使用用户选择，其次全局默认，否则回退 chatgpt）
+// 加载全局默认AI模型
 const loadDefaultModel = async () => {
-  let modelId = 'chatgpt'
+  let modelId = 'chatgpt' // Fallback model
 
-  // 1. 用户本地存储的选择
-  if (isBrowser) {
-    const savedModel = localStorage.getItem('floating-ai-model')
-    if (savedModel && availableModels.value.some(m => m.id === savedModel)) {
-      modelId = savedModel
+  try {
+    const defaultModel = await getDefaultAIModel('chat')
+    if (defaultModel && defaultModel.provider && availableModels.value.some(m => m.id === defaultModel.provider)) {
+      modelId = defaultModel.provider
+    } else if (defaultModel && defaultModel.provider) {
+        console.warn(`FloatingAI: Global default model '${defaultModel.provider}' is not available, using fallback.`)
+    } else {
+        console.log(`FloatingAI: No global default model configured, using fallback.`)
     }
-  }
-
-  // 2. 如果本地无记录，尝试获取全局默认模型
-  if (modelId === 'chatgpt') {
-    try {
-      const defaultModel = await getDefaultAIModel('chat')
-      if (defaultModel && defaultModel.provider && availableModels.value.some(m => m.id === defaultModel.provider)) {
-        modelId = defaultModel.provider
-      }
-    } catch (error) {
-      console.error('FloatingAI: 获取全局默认AI模型失败:', error)
-    }
+  } catch (error) {
+    console.error('FloatingAI: Failed to get global default AI model:', error)
   }
 
   selectedModel.value = modelId
@@ -1127,6 +1133,7 @@ const handleResize = () => {
 
 // 主题观察器引用
 let themeObserver: MutationObserver | null = null
+let unlistenSettingsChanged: (() => void) | null = null;
 
 onMounted(async () => {
   if (isBrowser) {
@@ -1152,6 +1159,16 @@ onMounted(async () => {
     
     // 监听流式输出事件
     await listen('ai-stream-chunk', handleStreamChunk)
+
+    // 监听全局设置变化
+    unlistenSettingsChanged = await listen('global-settings-changed', (event) => {
+      const payload = event.payload as { key: string };
+      if (payload.key === 'defaultAIModel') {
+        console.log('FloatingAI: 检测到全局默认AI模型变更，正在重新加载...');
+        loadDefaultModel();
+      }
+    });
+
     // 新增：监听 Alt+S 全局快捷键
     window.addEventListener('keydown', handleGlobalShortcut)
   }
@@ -1174,6 +1191,11 @@ onUnmounted(() => {
     themeObserver = null
   }
   
+  // 清理设置变化监听器
+  if (unlistenSettingsChanged) {
+    unlistenSettingsChanged();
+  }
+
   // 清理样式元素
   const styleElement = document.getElementById('floating-prism-theme-styles')
   if (styleElement) {
@@ -1201,6 +1223,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
   <div>
     <!-- 浮动AI按钮 -->
     <div 
+      v-if="!isMobile || !showFloatingChat"
       class="floating-ai-button"
       :class="{ 
         'semi-hidden': isButtonHidden,
@@ -1357,17 +1380,19 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
       </div>
 
       <!-- 调整大小手柄 -->
-      <!-- 四边手柄 -->
-      <div class="resize-handle resize-handle-top" @mousedown="startResize($event, 'top')"></div>
-      <div class="resize-handle resize-handle-right" @mousedown="startResize($event, 'right')"></div>
-      <div class="resize-handle resize-handle-bottom" @mousedown="startResize($event, 'bottom')"></div>
-      <div class="resize-handle resize-handle-left" @mousedown="startResize($event, 'left')"></div>
-      
-      <!-- 四角手柄 -->
-      <div class="resize-handle resize-handle-top-left" @mousedown="startResize($event, 'top-left')"></div>
-      <div class="resize-handle resize-handle-top-right" @mousedown="startResize($event, 'top-right')"></div>
-      <div class="resize-handle resize-handle-bottom-left" @mousedown="startResize($event, 'bottom-left')"></div>
-      <div class="resize-handle resize-handle-bottom-right" @mousedown="startResize($event, 'bottom-right')"></div>
+      <template v-if="!isMobile">
+        <!-- 四边手柄 -->
+        <div class="resize-handle resize-handle-top" @mousedown="startResize($event, 'top')"></div>
+        <div class="resize-handle resize-handle-right" @mousedown="startResize($event, 'right')"></div>
+        <div class="resize-handle resize-handle-bottom" @mousedown="startResize($event, 'bottom')"></div>
+        <div class="resize-handle resize-handle-left" @mousedown="startResize($event, 'left')"></div>
+        
+        <!-- 四角手柄 -->
+        <div class="resize-handle resize-handle-top-left" @mousedown="startResize($event, 'top-left')"></div>
+        <div class="resize-handle resize-handle-top-right" @mousedown="startResize($event, 'top-right')"></div>
+        <div class="resize-handle resize-handle-bottom-left" @mousedown="startResize($event, 'bottom-left')"></div>
+        <div class="resize-handle resize-handle-bottom-right" @mousedown="startResize($event, 'bottom-right')"></div>
+      </template>
     </div>
   </div>
 </template>

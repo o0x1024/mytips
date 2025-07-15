@@ -119,7 +119,7 @@ pub async fn send_ai_message(
 
     println!("chat_messages: {:?}", chat_messages);
     // 调用AI
-    let result_str = models::chat_with_history(api_key, model_name, chat_messages).await?;
+    let result_str = models::chat_with_history(api_key, model_name, chat_messages, &db_manager).await?;
 
     Ok(serde_json::json!({ "reply": result_str }))
 }
@@ -207,13 +207,17 @@ pub async fn send_ai_message_stream(
 
     println!("chat_messages: {:?}", chat_messages);
     let emitter_stream_id = stream_id.clone();
+    let app_clone = app.clone();
     let handle = tauri::async_runtime::spawn(async move {
+        let db_manager = app_clone.state::<DbManager>();
         let stream_result = models::stream_chat_with_history(
             api_key,
             &model_name,
             chat_messages,
             None,
-        ).await;
+            db_manager.inner(),
+        )
+        .await;
 
         match stream_result {
             Ok(mut stream) => {
@@ -300,6 +304,7 @@ pub async fn send_ai_message_with_images(
         final_message,
         image_files,
         None,
+        &db_manager,
     )
     .await?;
     Ok(serde_json::json!({ "reply": result_str }))
@@ -348,13 +353,16 @@ pub async fn send_ai_message_with_images_stream(
     };
 
     let emitter_stream_id = stream_id.clone();
+    let app_clone = app.clone();
     let handle = tauri::async_runtime::spawn(async move {
+        let db_manager = app_clone.state::<DbManager>();
         let stream_result = stream_message_with_images_from_ai(
             api_key,
             &model_name,
             final_message,
             image_files,
             None,
+            db_manager.inner(),
         )
         .await;
 
@@ -538,6 +546,7 @@ pub async fn delete_custom_model_config(
 #[tauri::command]
 pub async fn test_custom_model_connection(
     config: CustomModel,
+    db_manager: State<'_, DbManager>,
 ) -> Result<serde_json::Value, String> {
     let result_str = models::send_message_to_custom_ai(
         config.endpoint,
@@ -546,6 +555,7 @@ pub async fn test_custom_model_connection(
         config.adapter_type,
         config.custom_headers,
         "Test connection".to_string(),
+        &db_manager,
     )
     .await?;
 

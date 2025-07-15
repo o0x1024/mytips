@@ -1,8 +1,11 @@
 use reqwest::{Client, Proxy};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tauri::{AppHandle, Manager, State};
+use crate::db::{self, DbManager};
+
 // 代理设置
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProxySettings {
     pub enabled: bool,
     pub r#type: String,
@@ -14,8 +17,8 @@ pub struct ProxySettings {
 }
 
 // 获取带有代理设置的HTTP客户端
-pub async fn get_client_with_proxy() -> Result<Client, String> {
-    let proxy_settings = get_proxy_settings_internal().await?;
+pub async fn get_client_with_proxy(db_manager: &DbManager) -> Result<Client, String> {
+    let proxy_settings = get_proxy_settings_internal(db_manager).await?;
 
     let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
 
@@ -42,109 +45,64 @@ pub async fn get_client_with_proxy() -> Result<Client, String> {
 }
 
 // 内部函数：获取代理设置（不依赖AppHandle）
-pub async fn get_proxy_settings_internal() -> Result<ProxySettings, String> {
-    let app_dir = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
-        .join("mytips");
-    let config_dir = app_dir.join("config");
-    let proxy_file = config_dir.join("proxy_settings.json");
-
-    if !proxy_file.exists() {
-        // 返回默认设置
-        return Ok(ProxySettings {
-            enabled: false,
-            r#type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 10809,
-            auth: false,
-            username: "".to_string(),
-            password: "".to_string(),
-        });
+pub async fn get_proxy_settings_internal(db_manager: &DbManager) -> Result<ProxySettings, String> {
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    
+    match db::get_setting(&conn, "proxy_settings") {
+        Ok(Some(settings_json)) => {
+            serde_json::from_str(&settings_json).map_err(|e| e.to_string())
+        }
+        Ok(None) => {
+            // 返回默认设置
+            Ok(ProxySettings {
+                enabled: false,
+                r#type: "http".to_string(),
+                host: "127.0.0.1".to_string(),
+                port: 10809,
+                auth: false,
+                username: "".to_string(),
+                password: "".to_string(),
+            })
+        }
+        Err(e) => Err(e.to_string()),
     }
-
-    let proxy_json = std::fs::read_to_string(proxy_file).map_err(|e| e.to_string())?;
-    let proxy_settings: ProxySettings =
-        serde_json::from_str(&proxy_json).map_err(|e| e.to_string())?;
-
-    Ok(proxy_settings)
 }
 
-// 保存代理设置
+// 保存代理设置到数据库
 #[tauri::command]
 pub async fn save_proxy_settings(
-    app: tauri::AppHandle,
+    db_manager: State<'_, DbManager>,
     proxy_settings: ProxySettings,
 ) -> Result<(), String> {
-    let app_dir = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
-        .join("mytips");
-    let config_dir = app_dir.join("config");
-
-    // 确保目录存在
-    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-
-    // 保存配置
-    let proxy_file = config_dir.join("proxy_settings.json");
+    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
     let proxy_json = serde_json::to_string(&proxy_settings).map_err(|e| e.to_string())?;
-    std::fs::write(proxy_file, proxy_json).map_err(|e| e.to_string())?;
-
+    db::save_setting(&conn, "proxy_settings", &proxy_json).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-// 获取代理设置
+// 从数据库获取代理设置
 #[tauri::command]
-pub async fn get_proxy_settings(app: tauri::AppHandle) -> Result<ProxySettings, String> {
-    let app_dir = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
-        .join("mytips");
-    let config_dir = app_dir.join("config");
-    let proxy_file = config_dir.join("proxy_settings.json");
-
-    if !proxy_file.exists() {
-        // 返回默认设置
-        return Ok(ProxySettings {
-            enabled: false,
-            r#type: "http".to_string(),
-            host: "127.0.0.1".to_string(),
-            port: 10809,
-            auth: false,
-            username: "".to_string(),
-            password: "".to_string(),
-        });
-    }
-
-    let proxy_json = std::fs::read_to_string(proxy_file).map_err(|e| e.to_string())?;
-    let proxy_settings: ProxySettings =
-        serde_json::from_str(&proxy_json).map_err(|e| e.to_string())?;
-
-    Ok(proxy_settings)
+pub async fn get_proxy_settings(db_manager: State<'_, DbManager>) -> Result<ProxySettings, String> {
+    get_proxy_settings_internal(&db_manager).await
 }
 
 // 测试代理连接
 #[tauri::command]
-pub async fn test_proxy_connection(proxy_settings: ProxySettings) -> Result<String, String> {
+pub async fn test_proxy_connection(
+    db_manager: State<'_, DbManager>,
+    proxy_settings: ProxySettings,
+) -> Result<String, String> {
     if !proxy_settings.enabled {
         return Err("代理未启用".to_string());
     }
 
     // 先保存设置
-    let app_dir = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
-        .join("mytips");
-    let config_dir = app_dir.join("config");
-
-    // 确保目录存在
-    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
-
-    // 保存配置
-    let proxy_file = config_dir.join("proxy_settings.json");
-    let proxy_json = serde_json::to_string(&proxy_settings).map_err(|e| e.to_string())?;
-    std::fs::write(proxy_file, proxy_json).map_err(|e| e.to_string())?;
+    save_proxy_settings(db_manager.clone(), proxy_settings.clone()).await?;
 
     // 获取带有代理的客户端
-    let client = get_client_with_proxy().await?;
+    let client = get_client_with_proxy(&db_manager).await?;
 
-    // 测试连接 (使用google.com作为测试站点)
+    // 测试连接
     let response = client
         .get("https://www.google.com")
         .send()

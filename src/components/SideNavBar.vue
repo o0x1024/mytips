@@ -1,8 +1,8 @@
 <template>
-  <div class="h-full w-full flex flex-col bg-base-200 border-r border-base-300 transition-all duration-300 sidebar-width">
+  <div class="h-full w-full flex flex-col bg-base-200 border-r border-base-300 transition-all duration-300">
     <!-- 顶部标题和折叠按钮 -->
     <div class="p-3 flex items-center justify-between">
-      <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', isCollapsed ? 'opacity-0 w-0 absolute' : 'opacity-100']">
+      <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', (isCollapsed && !isMobile) ? 'opacity-0 w-0 absolute' : 'opacity-100']">
         MyTips
         <!-- 更新Badge -->
         <div v-if="updateStore.hasUpdate" class="badge badge-error badge-xs ml-2 animate-pulse">
@@ -10,24 +10,25 @@
         </div>
       </div>
       <button 
-        :class="['btn btn-sm btn-ghost relative z-10', isCollapsed ? 'btn btn-ghost btn-xs btn-square w-14 flex justify-center tooltip tooltip-righ' : 'ml-auto']" 
+        v-if="!isMobile"
+        :class="['btn btn-sm btn-ghost relative z-10', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-xs btn-square w-14 flex justify-center tooltip tooltip-righ' : 'ml-auto']" 
         @click.stop="toggleCollapse" 
-        :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
+        :title="(isCollapsed && !isMobile) ? '展开侧边栏' : '收起侧边栏'"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path v-if="isCollapsed" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          <path v-if="isCollapsed && !isMobile" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
         <!-- 折叠状态下的更新指示器 -->
-        <div v-if="isCollapsed && updateStore.hasUpdate" class="badge badge-error badge-xs absolute -top-1 -right-1">
+        <div v-if="isCollapsed && !isMobile && updateStore.hasUpdate" class="badge badge-error badge-xs absolute -top-1 -right-1">
           !
         </div>
       </button>
     </div>
 
     <!-- 搜索框 -->
-    <div :class="[isCollapsed ? 'px-2' : 'px-4 mb-2']">
-      <div class="relative transition-all duration-300" v-if="!isCollapsed">
+    <div :class="[(isCollapsed && !isMobile) ? 'px-2' : 'px-4 mb-2']">
+      <div class="relative transition-all duration-300" v-if="!(isCollapsed && !isMobile)">
         <input type="text" placeholder="搜索..." 
                class="input input-bordered input-sm w-full pl-8" 
                v-model="searchQuery" 
@@ -43,7 +44,7 @@
     <div class="overflow-y-auto overflow-x-hidden flex-grow px-2">
       <!-- 笔记本区域 -->
       <div class="mb-1">
-        <div v-if="!isCollapsed" class="flex justify-between items-center mt-2 px-2">
+        <div v-if="!(isCollapsed && !isMobile)" class="flex justify-between items-center mt-2 px-2">
           <span class="text-base font-bold uppercase text-base-content/80 ">笔记本</span>
           <div class="flex gap-1">
             <button class="btn btn-xs btn-ghost" @click="$emit('import')" title="导入文档">
@@ -60,13 +61,13 @@
         </div>
         
         <!-- 笔记本列表 - 展开模式 -->
-        <div v-if="!isCollapsed" class="menu w-full" style="white-space: normal; word-break: break-all;">
+        <div v-if="!(isCollapsed && !isMobile)" class="menu w-full" style="white-space: normal; word-break: break-all;">
           <template v-if="notebooks.length > 0">
             <template v-for="notebook in notebooks" :key="notebook.id">
               <div>
                 <NotebookItem 
                   :notebook="notebook" 
-                  :is-collapsed="isCollapsed"
+                  :is-collapsed="isCollapsed && !isMobile"
                   :selected-id="selectedNotebookId"
                   @select="selectNotebook"
                   @edit="id => $emit('edit-notebook', id)"
@@ -88,8 +89,8 @@
           </div>
         </div>
         
-        <!-- 笔记本列表 - 折叠模式 -->
-        <div v-if="isCollapsed" class="flex flex-col gap-1 my-2 items-center">
+        <!-- 笔记本列表 - 折叠模式 (仅桌面) -->
+        <div v-if="isCollapsed && !isMobile" class="flex flex-col gap-1 my-2 items-center">
           <button 
             class="btn btn-ghost btn-sm btn-square w-14 flex  justify-center tooltip tooltip-right" 
             @click="toggleNotebooksPopup">
@@ -169,7 +170,7 @@
       </div>
 
       <!-- 标签区域 -->
-      <div class="mb-4" v-if="!isCollapsed">
+      <div class="mb-4" v-if="!(isCollapsed && !isMobile)">
         <div class="flex justify-between items-center mb-2 px-2">
           <span class="text-base font-bold uppercase text-base-content/80">标签</span>
           <div class="flex items-center gap-1">
@@ -276,39 +277,39 @@
 
 
     <!-- 底部操作按钮 -->
-    <div class="mt-auto p-2 flex flex-col" :class="{'items-center': isCollapsed}">
+    <div class="mt-auto p-2 flex flex-col" :class="{'items-center': isCollapsed && !isMobile}">
       
       <button 
-        :class="['btn mb-2', isCollapsed ? 'btn-ghost btn-sm btn-square w-14' : 'btn-outline w-full']"
-        :data-tip="isCollapsed ? '临时笔记区' : ''"
+        :class="['btn mb-2', (isCollapsed && !isMobile) ? 'btn-ghost btn-sm btn-square w-14' : 'btn-outline w-full']"
+        :data-tip="(isCollapsed && !isMobile) ? '临时笔记区' : ''"
         @click="$emit('clipboard')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
-        <span v-if="!isCollapsed" class="ml-1">临时笔记区</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">临时笔记区</span>
       </button>
       
       <button 
-        :class="['btn mb-2', isCollapsed ? 'btn btn-ghost btn-sm btn-square w-14  flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
-        :data-tip="isCollapsed ? 'AI助手' : ''"
+        :class="['btn mb-2', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-sm btn-square w-14  flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
+        :data-tip="(isCollapsed && !isMobile) ? 'AI助手' : ''"
         data-tip-class="tooltip-top-layer"
         @click="$emit('ai-assistant')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
-        <span v-if="!isCollapsed" class="ml-1">AI助手</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">AI助手</span>
       </button>
       
       <button 
-        :class="['btn', isCollapsed ? 'btn btn-ghost btn-sm btn-square w-14 flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
-        :data-tip="isCollapsed ? '设置' : ''"
+        :class="['btn', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-sm btn-square w-14 flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
+        :data-tip="(isCollapsed && !isMobile) ? '设置' : ''"
         data-tip-class="tooltip-top-layer"
         @click="$emit('settings')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        <span v-if="!isCollapsed" class="ml-1">设置</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">设置</span>
       </button>
     </div>
   </div>
@@ -320,6 +321,7 @@ import NotebookItem from './NotebookItem.vue'
 import { showConfirm } from '../services/dialog'
 import { useUIStore } from '../stores/uiStore'
 import { useUpdateStore } from '../stores/updateStore'
+import { useResponsive } from '../composables/useResponsive'
 // const encryptionStore = useEncryptionStore()
 
 // 获取UI存储
@@ -381,6 +383,10 @@ const emit = defineEmits([
   'encrypt-notebook',
   'decrypt-notebook'
 ])
+
+// --- Responsive state ---
+const { isMobile } = useResponsive()
+
 
 // 状态
 const isCollapsed = ref(false)
@@ -468,6 +474,7 @@ onMounted(() => {
   
   // 添加全局点击事件监听器来关闭弹出窗口
   document.addEventListener('click', handleDocumentClick);
+
 })
 
 // 组件被keep-alive缓存后重新激活时触发
