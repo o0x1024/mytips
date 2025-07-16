@@ -72,7 +72,7 @@ impl Default for ImportResult {
 
 // 从目录导入（修改为同步API）
 #[tauri::command]
-pub fn import_from_directory(
+pub async fn import_from_directory(
     _app: tauri::AppHandle,
     directory_path: String,
     target_notebook_id: Option<String>,
@@ -81,6 +81,7 @@ pub fn import_from_directory(
 ) -> Result<ImportResult, String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
@@ -89,7 +90,7 @@ pub fn import_from_directory(
         return Err("指定的目录不存在".to_string());
     }
 
-    match process_directory_sync(&conn, &path, target_notebook_id, &options, &mut result) {
+    match process_directory_sync(&conn, &path, target_notebook_id, &options, &mut result).await {
         Ok(_) => {
             result.success = true;
             Ok(result)
@@ -103,7 +104,7 @@ pub fn import_from_directory(
 
 // 从单个文件导入（修改为同步API）
 #[tauri::command]
-pub fn import_markdown_file(
+pub async fn import_markdown_file(
     _app: tauri::AppHandle,
     file_path: String,
     target_notebook_id: String,
@@ -111,6 +112,7 @@ pub fn import_markdown_file(
 ) -> Result<ImportResult, String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
@@ -119,7 +121,7 @@ pub fn import_markdown_file(
         return Err("指定的文件不存在".to_string());
     }
 
-    match import_single_file_sync(&conn, &path, &target_notebook_id, &mut result) {
+    match import_single_file_sync(&conn, &path, &target_notebook_id, &mut result).await {
         Ok(_) => {
             result.success = true;
             Ok(result)
@@ -151,63 +153,65 @@ pub fn get_import_preview(directory_path: String) -> Result<ImportPreview, Strin
 }
 
 // 同步处理目录
-fn process_directory_sync(
-    conn: &crate::db::DbConnection,
-    dir_path: &Path,
+fn process_directory_sync<'a>(
+    conn: &'a crate::db::DbConnection,
+    dir_path: &'a Path,
     parent_notebook_id: Option<String>,
-    options: &ImportOptions,
-    result: &mut ImportResult,
-) -> Result<String> {
-    // 创建或获取笔记本
-    let dir_name = dir_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("未命名文件夹")
-        .to_string();
+    options: &'a ImportOptions,
+    result: &'a mut ImportResult,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
+    Box::pin(async move {
+        // 创建或获取笔记本
+        let dir_name = dir_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("未命名文件夹")
+            .to_string();
 
-    let notebook_id = if let Some(parent_id) = parent_notebook_id {
-        // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
-        let category = crate::db::create_category(conn, &dir_name, Some(&parent_id))
-            .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
-        result.notebooks_created += 1;
-        category.id
-    } else {
-        // 创建顶级笔记本
-        let category = crate::db::create_category(conn, &dir_name, None)
-            .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
-        result.notebooks_created += 1;
-        category.id
-    };
+        let notebook_id = if let Some(parent_id) = parent_notebook_id {
+            // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
+            let category = crate::db::create_category(conn, &dir_name, Some(&parent_id)).await
+                .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
+            result.notebooks_created += 1;
+            category.id
+        } else {
+            // 创建顶级笔记本
+            let category = crate::db::create_category(conn, &dir_name, None).await
+                .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
+            result.notebooks_created += 1;
+            category.id
+        };
 
-    // 处理当前目录下的Markdown文件
-    if let Ok(entries) = fs::read_dir(dir_path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
+        // 处理当前目录下的Markdown文件
+        if let Ok(entries) = fs::read_dir(dir_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
 
-            if path.is_file() && is_markdown_file(&path) {
-                if let Err(e) = import_single_file_sync(conn, &path, &notebook_id, result) {
-                    result
-                        .errors
-                        .push(format!("导入文件 {} 失败: {}", path.display(), e));
-                }
-            } else if path.is_dir() && options.include_subdirs {
-                // 递归处理子目录，将当前笔记本ID作为父ID传递
-                if let Err(e) =
-                    process_directory_sync(conn, &path, Some(notebook_id.clone()), options, result)
-                {
-                    result
-                        .errors
-                        .push(format!("处理目录 {} 失败: {}", path.display(), e));
+                if path.is_file() && is_markdown_file(&path) {
+                    if let Err(e) = import_single_file_sync(conn, &path, &notebook_id, result).await {
+                        result
+                            .errors
+                            .push(format!("导入文件 {} 失败: {}", path.display(), e));
+                    }
+                } else if path.is_dir() && options.include_subdirs {
+                    // 递归处理子目录，将当前笔记本ID作为父ID传递
+                    if let Err(e) =
+                        process_directory_sync(conn, &path, Some(notebook_id.clone()), options, result).await
+                    {
+                        result
+                            .errors
+                            .push(format!("处理目录 {} 失败: {}", path.display(), e));
+                    }
                 }
             }
         }
-    }
 
-    Ok(notebook_id)
+        Ok(notebook_id)
+    })
 }
 
 // 导入单个文件（同步版本）
-fn import_single_file_sync(
+async fn import_single_file_sync(
     conn: &crate::db::DbConnection,
     file_path: &Path,
     notebook_id: &str,
@@ -244,7 +248,7 @@ fn import_single_file_sync(
         };
 
         // 保存笔记
-        match crate::db::save_tip(conn, tip) {
+        match crate::db::save_tip(conn, tip).await {
             Ok(_) => {
                 result.notes_imported += 1;
                 Ok(())
@@ -265,7 +269,7 @@ fn import_single_file_sync(
         };
 
         // 保存笔记
-        match crate::db::save_tip(conn, tip) {
+        match crate::db::save_tip(conn, tip).await {
             Ok(saved_tip) => {
                 // 使用保存后返回的笔记ID来保存图片，确保外键约束
                 let actual_tip_id = saved_tip.id;
@@ -282,7 +286,7 @@ fn import_single_file_sync(
 
                 // 保存图片
                 for (image_id, base64_data) in image_data {
-                    match crate::db::save_image(conn, &actual_tip_id, &image_id, &base64_data) {
+                    match crate::db::save_image(conn, &actual_tip_id, &image_id, &base64_data).await {
                         Ok(_) => {
                             result.images_processed += 1;
                         }

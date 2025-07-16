@@ -20,12 +20,12 @@ pub async fn get_clipboard_history(
     page_size: i64,
     query: Option<String>,
 ) -> Result<ClipboardHistoryPage, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let entries =
         crate::db::get_clipboard_entries_paged(&conn, page, page_size, query.clone())
-            .map_err(|e| e.to_string())?;
+            .await.map_err(|e| e.to_string())?;
     let total = crate::db::get_clipboard_entries_count(&conn, query)
-        .map_err(|e| e.to_string())?;
+        .await.map_err(|e| e.to_string())?;
 
     Ok(ClipboardHistoryPage {
         entries,
@@ -38,23 +38,25 @@ pub async fn get_clipboard_ids_for_last_days(
     days: u32,
     db_manager: State<'_, DbManager>,
 ) -> Result<Vec<i64>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    crate::db::get_clipboard_entry_ids_by_days(&conn, days).map_err(|e| e.to_string())
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    crate::db::get_clipboard_entry_ids_by_days(&conn, days).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn delete_clipboard_entries(
+pub async fn delete_clipboard_entries(
     ids: Vec<i64>,
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::delete_clipboard_entries(&conn, &ids).map_err(|e| e.to_string())
+    crate::db::delete_clipboard_entries(&conn, &ids).await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn add_clipboard_entry(
+pub async fn add_clipboard_entry(
     content: String,
     source: Option<String>,
     db_manager: State<'_, DbManager>,
@@ -65,12 +67,14 @@ pub fn add_clipboard_entry(
 
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::add_clipboard_entry(&conn, &content, source.as_deref()).map_err(|e| e.to_string())
+    crate::db::add_clipboard_entry(&conn, &content, source.as_deref()).await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[tauri::command]
-pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
     // 尝试获取当前选中文本
     let selected_text = match crate::clipboard::get_selected_text(&app) {
         Some(text) => {
@@ -91,10 +95,11 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
     let db_manager: State<'_, DbManager> = app.state();
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
     // 检查是否已经存在相同内容
-    let content_exists = match crate::db::check_clipboard_entry_exists(&conn, &selected_text) {
+    let content_exists = match crate::db::check_clipboard_entry_exists(&conn, &selected_text).await {
         Ok(exists) => exists,
         Err(e) => {
             eprintln!("检查剪贴板内容是否存在失败: {}", e);
@@ -108,7 +113,7 @@ pub fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     // 添加到数据库
-    if let Err(e) = crate::db::add_clipboard_entry(&conn, &selected_text, source.as_deref()) {
+    if let Err(e) = crate::db::add_clipboard_entry(&conn, &selected_text, source.as_deref()).await {
         return Err(format!("添加到临时笔记区失败: {}", e));
     }
 
@@ -133,8 +138,9 @@ pub async fn create_note_from_history(
 
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    let entries = crate::db::get_all_clipboard_entries(&conn).map_err(|e| e.to_string())?;
+    let entries = crate::db::get_all_clipboard_entries(&conn).await.map_err(|e| e.to_string())?;
 
     let selected_entries: Vec<_> = entries
         .into_iter()
@@ -166,7 +172,7 @@ pub async fn create_note_from_history(
         updated_at: chrono::Utc::now().timestamp(),
     };
 
-    crate::db::save_tip(&conn, tip)
+    crate::db::save_tip(&conn, tip).await
         .map_err(|e| e.to_string())
         .map(|t| {
             serde_json::json!({
@@ -178,21 +184,22 @@ pub async fn create_note_from_history(
 }
 
 #[tauri::command]
-pub fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
+pub async fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
     app.clipboard()
         .write_text(text)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn get_clipboard_settings(
+pub async fn get_clipboard_settings(
     db_manager: State<'_, DbManager>,
 ) -> Result<ClipboardSettings, String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
-    match crate::db::get_setting(&conn, "clipboard_settings") {
+    match crate::db::get_setting(&conn, "clipboard_settings").await {
         Ok(Some(settings_json)) => ClipboardSettings::from_json(&settings_json),
         Ok(None) => {
             // 返回默认设置
@@ -203,34 +210,36 @@ pub fn get_clipboard_settings(
 }
 
 #[tauri::command]
-pub fn save_clipboard_settings(
+pub async fn save_clipboard_settings(
     settings: ClipboardSettings,
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
     // 序列化设置
     let settings_json = settings.to_json()?;
 
     // 保存到数据库
-    crate::db::save_setting(&conn, "clipboard_settings", &settings_json)
+    crate::db::save_setting(&conn, "clipboard_settings", &settings_json).await
         .map_err(|e| format!("保存剪贴板设置失败: {}", e))
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-pub fn clean_expired_clipboard_entries(app: tauri::AppHandle) -> Result<(), String> {
-    crate::clipboard::clean_expired_entries(&app);
+pub async fn clean_expired_clipboard_entries(app: tauri::AppHandle) -> Result<(), String> {
+    crate::clipboard::clean_expired_entries(&app).await;
     Ok(())
 }
 
 // 新增清除所有临时笔记的函数
 #[tauri::command]
-pub fn clear_all_clipboard_entries(db_manager: State<'_, DbManager>) -> Result<(), String> {
+pub async fn clear_all_clipboard_entries(db_manager: State<'_, DbManager>) -> Result<(), String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::clear_all_clipboard_entries(&conn).map_err(|e| format!("清除所有临时笔记失败: {}", e))
+    crate::db::clear_all_clipboard_entries(&conn).await.map_err(|e| format!("清除所有临时笔记失败: {}", e))
 }

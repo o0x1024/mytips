@@ -40,7 +40,7 @@ pub async fn get_database_info(
     app: AppHandle,
     db_manager: State<'_, DbManager>,
 ) -> Result<serde_json::Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     // 获取数据库文件大小
     let db_path = get_current_db_path(&app).map_err(|e| format!("获取数据库路径失败: {}", e))?;
@@ -53,18 +53,24 @@ pub async fn get_database_info(
     };
     
     // 获取笔记数量
-    let note_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tips",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+    let note_count: i64 = {
+        let mut rows = conn.query("SELECT COUNT(*) FROM tips", ()).await.map_err(|e| e.to_string())?;
+        if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+            row.get::<i64>(0).map_err(|e| e.to_string())?
+        } else {
+            0
+        }
+    };
     
     // 获取分类数量
-    let category_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM categories",
-        [],
-        |row| row.get(0)
-    ).unwrap_or(0);
+    let category_count: i64 = {
+        let mut rows = conn.query("SELECT COUNT(*) FROM categories", ()).await.map_err(|e| e.to_string())?;
+        if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+            row.get::<i64>(0).map_err(|e| e.to_string())?
+        } else {
+            0
+        }
+    };
     
     // 获取最后修改时间
     let last_modified = match std::fs::metadata(&db_path) {
@@ -114,7 +120,7 @@ pub async fn select_database_file(
     }
 
     // 验证是否为有效的SQLite数据库文件
-    if let Err(e) = validate_sqlite_database(&file_path) {
+    if let Err(e) = validate_sqlite_database(&file_path).await {
         return Err(format!("选择的文件不是有效的SQLite数据库: {}", e));
     }
 
@@ -152,7 +158,7 @@ pub async fn create_new_database(
     };
 
     // 创建新的数据库
-    if let Err(e) = create_empty_database(&file_path) {
+            if let Err(e) = create_empty_database(&file_path).await {
         return Err(format!("创建数据库失败: {}", e));
     }
 
@@ -180,7 +186,7 @@ pub async fn reset_to_default_database(
 
     // 如果默认数据库不存在，创建一个新的
     if !default_path.exists() {
-        if let Err(e) = create_empty_database(&default_path) {
+        if let Err(e) = create_empty_database(&default_path).await {
             return Err(format!("创建默认数据库失败: {}", e));
         }
     }
@@ -259,9 +265,9 @@ async fn test_libsql_connection(url: &str, auth_token: Option<&str>) -> Result<b
 /// 获取同步配置
 #[command]
 pub async fn get_sync_config(db_manager: State<'_, DbManager>) -> Result<serde_json::Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
-    match crate::db::get_sync_config(&conn) {
+    match crate::db::get_sync_config(&conn).await {
         Ok(config) => {
             let config_json = serde_json::json!({
                 "id": config.id,
@@ -301,7 +307,7 @@ pub async fn save_sync_config(
     db_manager: State<'_, DbManager>,
     config: serde_json::Value,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     // 解析JSON配置
     let sync_config = crate::db::SyncConfig {
@@ -319,20 +325,20 @@ pub async fn save_sync_config(
         updated_at: chrono::Utc::now().timestamp_millis(),
     };
     
-    crate::db::save_sync_config(&conn, &sync_config)
+    crate::db::save_sync_config(&conn, &sync_config).await
         .map_err(|e| format!("Failed to save sync config: {}", e))
 }
 
 /// 获取同步状态
 #[command]
 pub async fn get_sync_status(db_manager: State<'_, DbManager>) -> Result<serde_json::Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
-    match crate::db::get_sync_config(&conn) {
+    match crate::db::get_sync_config(&conn).await {
         Ok(config) => {
             // 计算统计信息
-            let total_records = get_total_records(&conn);
-            let synced_records = get_synced_records(&conn);
+            let total_records = get_total_records(&conn).await;
+            let synced_records = get_synced_records(&conn).await;
             
             let status_json = serde_json::json!({
                 "is_enabled": config.sync_mode != crate::db::SyncMode::Offline,
@@ -374,10 +380,10 @@ pub async fn set_sync_mode(
     db_manager: State<'_, DbManager>,
     mode: String,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     // 获取现有配置或创建默认配置
-    let mut config = crate::db::get_sync_config(&conn)
+    let mut config = crate::db::get_sync_config(&conn).await
         .unwrap_or_else(|_| crate::db::SyncConfig {
             id: "default".to_string(),
             remote_url: None,
@@ -401,17 +407,17 @@ pub async fn set_sync_mode(
     }
     
     // 保存配置
-    crate::db::save_sync_config(&conn, &config)
+    crate::db::save_sync_config(&conn, &config).await
         .map_err(|e| format!("Failed to save sync config: {}", e))
 }
 
 /// 手动同步
 #[command]
 pub async fn manual_sync(db_manager: State<'_, DbManager>) -> Result<serde_json::Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     // 获取同步配置
-    let mut config = crate::db::get_sync_config(&conn)
+    let mut config = crate::db::get_sync_config(&conn).await
         .map_err(|e| format!("Failed to get sync config: {}", e))?;
     
     if config.sync_mode == crate::db::SyncMode::Offline {
@@ -423,7 +429,7 @@ pub async fn manual_sync(db_manager: State<'_, DbManager>) -> Result<serde_json:
     }
     
     // 获取统计数据
-    let total_records = get_total_records(&conn);
+    let total_records = get_total_records(&conn).await;
     
     // 释放连接以避免Send问题
     drop(conn);
@@ -432,22 +438,22 @@ pub async fn manual_sync(db_manager: State<'_, DbManager>) -> Result<serde_json:
     match perform_sync_async(&config).await {
         Ok(stats) => {
             // 重新获取连接来更新配置
-            let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+            let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
             
             // 更新最后同步时间
             config.last_sync_at = chrono::Utc::now().timestamp_millis();
             config.is_online = true;
-            let _ = crate::db::save_sync_config(&conn, &config);
+            let _ = crate::db::save_sync_config(&conn, &config).await;
             
             Ok(stats)
         }
         Err(e) => {
             // 重新获取连接来更新配置
-            let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+            let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
             
             // 标记为离线状态
             config.is_online = false;
-            let _ = crate::db::save_sync_config(&conn, &config);
+            let _ = crate::db::save_sync_config(&conn, &config).await;
             
             Err(format!("同步失败: {}", e))
         }
@@ -460,7 +466,7 @@ pub async fn configure_remote_database(
     db_manager: State<'_, DbManager>,
     config: serde_json::Value,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     let remote_url = config["remote_url"].as_str()
         .ok_or("Missing remote_url")?;
@@ -490,7 +496,7 @@ pub async fn configure_remote_database(
     };
     
     // 保存配置
-    crate::db::save_sync_config(&conn, &sync_config)
+    crate::db::save_sync_config(&conn, &sync_config).await
         .map_err(|e| format!("Failed to save sync config: {}", e))?;
     
     // 释放连接
@@ -577,18 +583,28 @@ fn remove_database_path_setting(app: &AppHandle) -> Result<()> {
 }
 
 /// 验证SQLite数据库文件
-fn validate_sqlite_database(path: &PathBuf) -> Result<()> {
-    use rusqlite::Connection;
+async fn validate_sqlite_database(path: &PathBuf) -> Result<()> {
+    use libsql::Builder;
     
     // 尝试打开数据库连接
-    let conn = Connection::open(path)
+    let db = Builder::new_local(path)
+        .build()
+        .await
         .map_err(|e| anyhow!("无法打开数据库文件: {}", e))?;
     
+    let conn = db.connect()
+        .map_err(|e| anyhow!("无法连接到数据库: {}", e))?;
+    
     // 检查是否有基本的表结构
-    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table'")?;
-    let table_names: Vec<String> = stmt.query_map([], |row| {
-        Ok(row.get::<_, String>(0)?)
-    })?.collect::<Result<Vec<_>, _>>()?;
+    let mut rows = conn.query("SELECT name FROM sqlite_master WHERE type='table'", ())
+        .await
+        .map_err(|e| anyhow!("查询表结构失败: {}", e))?;
+    
+    let mut table_names = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|e| anyhow!("读取行失败: {}", e))? {
+        let name: String = row.get(0).map_err(|e| anyhow!("获取表名失败: {}", e))?;
+        table_names.push(name);
+    }
     
     // 检查是否包含我们期望的基本表
     let has_tips = table_names.iter().any(|name| name == "tips");
@@ -602,7 +618,7 @@ fn validate_sqlite_database(path: &PathBuf) -> Result<()> {
 }
 
 /// 创建一个空的数据库文件
-fn create_empty_database(path: &PathBuf) -> Result<()> {
+async fn create_empty_database(path: &PathBuf) -> Result<()> {
     // 如果文件存在，先删除
     if path.exists() {
         fs::remove_file(path)?;
@@ -614,10 +630,12 @@ fn create_empty_database(path: &PathBuf) -> Result<()> {
     }
 
     // 创建新的数据库连接，这会创建文件
-    let conn = rusqlite::Connection::open(path)?;
+    use libsql::Builder;
+    let db = Builder::new_local(path).build().await?;
+    let conn = db.connect()?;
 
     // 创建基本表结构
-    crate::db::create_tables(&conn)?;
+    crate::db::create_tables(&conn).await?;
 
     // 插入默认分类
     let default_categories = vec![
@@ -630,8 +648,8 @@ fn create_empty_database(path: &PathBuf) -> Result<()> {
     for (id, name) in default_categories {
         conn.execute(
             "INSERT OR IGNORE INTO categories (id, name, parent_id) VALUES (?1, ?2, NULL)",
-            [id, name],
-        )?;
+            (id, name, "")
+        ).await?;
     }
 
     Ok(())
@@ -656,16 +674,36 @@ fn format_file_size(bytes: u64) -> String {
 }
 
 /// 获取总记录数
-fn get_total_records(conn: &rusqlite::Connection) -> i64 {
-    let tips_count: i64 = conn.query_row("SELECT COUNT(*) FROM tips", [], |row| row.get(0)).unwrap_or(0);
-    let categories_count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0)).unwrap_or(0);
+async fn get_total_records(conn: &libsql::Connection) -> i64 {
+    let tips_count: i64 = match conn.query("SELECT COUNT(*) FROM tips", ()).await {
+        Ok(mut rows) => {
+            if let Ok(Some(row)) = rows.next().await {
+                row.get::<i64>(0).unwrap_or(0)
+            } else {
+                0
+            }
+        }
+        Err(_) => 0,
+    };
+    
+    let categories_count: i64 = match conn.query("SELECT COUNT(*) FROM categories", ()).await {
+        Ok(mut rows) => {
+            if let Ok(Some(row)) = rows.next().await {
+                row.get::<i64>(0).unwrap_or(0)
+            } else {
+                0
+            }
+        }
+        Err(_) => 0,
+    };
+    
     tips_count + categories_count
 }
 
 /// 获取已同步记录数（这里简化处理，实际应该有同步状态跟踪）
-fn get_synced_records(conn: &rusqlite::Connection) -> i64 {
+async fn get_synced_records(conn: &libsql::Connection) -> i64 {
     // 暂时返回总记录数，实际实现应该跟踪每条记录的同步状态
-    get_total_records(conn)
+    get_total_records(conn).await
 }
 
 /// 执行同步操作

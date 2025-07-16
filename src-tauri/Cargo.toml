@@ -18,12 +18,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-r2d2 = "0.8"
-r2d2_sqlite = "0.30.0"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
-rusqlite = { version = "0.36.0", features = ["bundled"] }
+libsql = { version = "0.9.15", features = ["core", "replication", "remote"] }
 uuid = { version = "1.6.1", features = ["v4", "serde"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 dirs = "6.0.0"

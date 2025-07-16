@@ -561,10 +561,10 @@ pub async fn get_default_ai_model(
     model_type: String,
     db_manager: State<'_, DbManager>,
 ) -> Result<Option<ModelInfo>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     let key = format!("default_{}_model", model_type);
-    let value = db::get_setting(&conn, &key).map_err(|e| e.to_string())?;
+    let value = db::get_setting(&conn, &key).await.map_err(|e| e.to_string())?;
 
     if let Some(value_str) = value {
         if let Ok(model_info) = serde_json::from_str::<ModelInfo>(&value_str) {
@@ -600,7 +600,7 @@ pub async fn set_default_ai_model(
     model_name: String,
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     let model_info = ModelInfo {
         name: model_name,
@@ -612,7 +612,7 @@ pub async fn set_default_ai_model(
     let key = format!("default_{}_model", model_type);
     let value = serde_json::to_string(&model_info).map_err(|e| e.to_string())?;
 
-    db::save_setting(&conn, &key, &value).map_err(|e| e.to_string())
+    db::save_setting(&conn, &key, &value).await.map_err(|e| e.to_string())
 }
 
 // 获取AI配置
@@ -620,9 +620,9 @@ pub async fn set_default_ai_model(
 pub async fn get_ai_config(
     db_manager: State<'_, DbManager>,
 ) -> Result<Option<AiConfigResponse>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
-    let config_json_opt = db::get_setting(&conn, "ai_providers_config").map_err(|e| e.to_string())?;
+    let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
 
     if let Some(config_json) = config_json_opt {
         match serde_json::from_str::<SaveAiConfigRequest>(&config_json) {
@@ -641,40 +641,40 @@ pub async fn save_ai_config(
     db_manager: State<'_, DbManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     // 保存每个提供商的配置
     for (provider_id, provider_config) in &config.providers {
         // 保存API密钥
         if let Some(api_key) = &provider_config.api_key {
             let key = format!("{}_api_key", provider_id);
-            db::save_setting(&conn, &key, api_key).map_err(|e| e.to_string())?;
+            db::save_setting(&conn, &key, api_key).await.map_err(|e| e.to_string())?;
         }
 
         // 保存API基础URL
         if let Some(api_base) = &provider_config.api_base {
             let key = format!("{}_api_base", provider_id);
-            db::save_setting(&conn, &key, api_base).map_err(|e| e.to_string())?;
+            db::save_setting(&conn, &key, api_base).await.map_err(|e| e.to_string())?;
         }
 
         // 保存组织ID（如果有）
         if let Some(org) = &provider_config.organization {
             let key = format!("{}_organization", provider_id);
-            db::save_setting(&conn, &key, org).map_err(|e| e.to_string())?;
+            db::save_setting(&conn, &key, org).await.map_err(|e| e.to_string())?;
         }
 
         // 保存是否启用
         let key = format!("{}_enabled", provider_id);
-        db::save_setting(&conn, &key, &provider_config.enabled.to_string()).map_err(|e| e.to_string())?;
+        db::save_setting(&conn, &key, &provider_config.enabled.to_string()).await.map_err(|e| e.to_string())?;
 
         // 保存默认模型
         let key = format!("{}_default_model", provider_id);
-        db::save_setting(&conn, &key, &provider_config.default_model).map_err(|e| e.to_string())?;
+        db::save_setting(&conn, &key, &provider_config.default_model).await.map_err(|e| e.to_string())?;
     }
 
     // 保存完整配置的JSON
     let config_json = serde_json::to_string(&config).map_err(|e| e.to_string())?;
-    db::save_setting(&conn, "ai_providers_config", &config_json).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, "ai_providers_config", &config_json).await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -704,10 +704,10 @@ pub async fn reload_ai_services(
     app: AppHandle,
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     // 获取完整配置
-    let config_json = db::get_setting(&conn, "ai_providers_config").map_err(|e| e.to_string())?;
+    let config_json = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
 
     if let Some(config_str) = config_json {
         // 解析配置

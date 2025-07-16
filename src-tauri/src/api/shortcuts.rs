@@ -18,14 +18,15 @@ impl Default for ShortcutConfig {
 
 /// 获取全局快捷键配置
 #[tauri::command]
-pub fn get_global_shortcut_config(
+pub async fn get_global_shortcut_config(
     db_manager: State<'_, crate::db::DbManager>,
 ) -> Result<ShortcutConfig, String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
-    match crate::db::get_setting(&conn, "global_shortcut") {
+    match crate::db::get_setting(&conn, "global_shortcut").await {
         Ok(Some(config_str)) => match serde_json::from_str::<ShortcutConfig>(&config_str) {
             Ok(config) => Ok(config),
             Err(e) => {
@@ -43,12 +44,13 @@ pub fn get_global_shortcut_config(
 
 /// 更新全局快捷键配置
 #[tauri::command]
-pub fn update_global_shortcut(
+pub async fn update_global_shortcut(
     db_manager: State<'_, crate::db::DbManager>,
     config: ShortcutConfig,
 ) -> Result<(), String> {
     let conn = db_manager
         .get_conn()
+        .await
         .map_err(|e| format!("Failed to get database connection: {}", e))?;
 
     let config_str = match serde_json::to_string(&config) {
@@ -56,7 +58,7 @@ pub fn update_global_shortcut(
         Err(e) => return Err(format!("Failed to serialize shortcut config: {}", e)),
     };
 
-    match crate::db::save_setting(&conn, "global_shortcut", &config_str) {
+    match crate::db::save_setting(&conn, "global_shortcut", &config_str).await {
         Ok(_) => Ok(()),
         Err(e) => Err(format!("Failed to save global shortcut config: {}", e)),
     }

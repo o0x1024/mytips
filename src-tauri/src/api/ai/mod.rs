@@ -54,8 +54,8 @@ pub async fn send_ai_message(
     conversation_id: Option<String>,
     db_manager: State<'_, DbManager>,
 ) -> Result<Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let config_json_opt = db::get_setting(&conn, "ai_providers_config").map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
     let config_json = config_json_opt.ok_or_else(|| "AI configuration not found in database".to_string())?;
     let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
     let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Configuration for provider '{}' not found", provider_id))?;
@@ -140,8 +140,9 @@ pub async fn send_ai_message_stream(
     let should_cancel = Arc::new(AtomicBool::new(false));
     STREAM_CANCEL_MAP.lock().await.insert(stream_id.clone(), should_cancel.clone());
 
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let config_json = db::get_setting(&conn, "ai_providers_config")
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "AI configuration not found".to_string())?;
 
@@ -279,8 +280,8 @@ pub async fn send_ai_message_with_images(
     _conversation_id: Option<String>,
     db_manager: State<'_, DbManager>,
 ) -> Result<Value, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let config_json_opt = db::get_setting(&conn, "ai_providers_config").map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
     let config_json = config_json_opt.ok_or_else(|| "AI configuration not found in database".to_string())?;
     let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
     let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Configuration for provider '{}' not found", provider_id))?;
@@ -327,8 +328,9 @@ pub async fn send_ai_message_with_images_stream(
     let should_cancel = Arc::new(AtomicBool::new(false));
     STREAM_CANCEL_MAP.lock().await.insert(stream_id.clone(), should_cancel.clone());
 
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let config_json = db::get_setting(&conn, "ai_providers_config")
+        .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "AI configuration not found".to_string())?;
 
@@ -422,7 +424,7 @@ pub async fn migrate_config_to_database(
     db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
     let config_dir = app.path().app_config_dir().unwrap();
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     let api_keys = vec![
         "openai",
@@ -439,7 +441,7 @@ pub async fn migrate_config_to_database(
         let config_file_path = config_dir.join(format!("{}.conf", key));
         if config_file_path.exists() {
             if let Ok(value) = std::fs::read_to_string(config_file_path) {
-                if let Ok(db_value) = crate::db::get_setting(&conn, &key) {
+                if let Ok(db_value) = crate::db::get_setting(&conn, &key).await {
                     if db_value.is_none() || db_value.unwrap_or_default().is_empty() {
                         let encoded_value = general_purpose::STANDARD.encode(value.trim());
                         let _ = crate::db::save_setting(&conn, &key, &encoded_value);
@@ -466,10 +468,10 @@ pub async fn save_custom_model_config(
     let config_str = serde_json::to_string(&config).map_err(|e| e.to_string())?;
     let encoded_key = general_purpose::STANDARD.encode(&config.api_key);
 
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
-    db::save_setting(&conn, &config_key, &config_str).map_err(|e| e.to_string())?;
-    db::save_setting(&conn, &api_key_key, &encoded_key).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, &config_key, &config_str).await.map_err(|e| e.to_string())?;
+    db::save_setting(&conn, &api_key_key, &encoded_key).await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -482,16 +484,16 @@ pub async fn get_custom_model_config(
 ) -> Result<Option<CustomModel>, String> {
     let config_key = format!("custom_model_config_{}", model_id);
     let api_key_key = format!("custom_api_key_{}", model_id);
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
-    let config_str = match db::get_setting(&conn, &config_key).map_err(|e| e.to_string())? {
+    let config_str = match db::get_setting(&conn, &config_key).await.map_err(|e| e.to_string())? {
         Some(s) => s,
         None => return Ok(None),
     };
 
     let mut config: CustomModel = serde_json::from_str(&config_str).map_err(|e| e.to_string())?;
 
-    if let Ok(Some(encoded_key)) = db::get_setting(&conn, &api_key_key) {
+    if let Ok(Some(encoded_key)) = db::get_setting(&conn, &api_key_key).await {
         if let Ok(decoded_key) = general_purpose::STANDARD.decode(encoded_key) {
             if let Ok(api_key) = String::from_utf8(decoded_key) {
                 config.api_key = api_key;
@@ -507,8 +509,8 @@ pub async fn get_custom_model_config(
 pub async fn list_custom_model_configs(
     db_manager: State<'_, DbManager>,
 ) -> Result<Vec<CustomModel>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let config_keys = db::get_settings_by_prefix(&conn, "custom_model_config_")
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let config_keys = db::get_settings_by_prefix(&conn, "custom_model_config_").await
         .map_err(|e| e.to_string())?;
     let mut configs = Vec::new();
 
@@ -534,10 +536,10 @@ pub async fn delete_custom_model_config(
 ) -> Result<(), String> {
     let config_key = format!("custom_model_config_{}", model_id);
     let api_key_key = format!("custom_api_key_{}", model_id);
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
-    db::save_setting(&conn, &config_key, "").map_err(|e| e.to_string())?;
-    db::save_setting(&conn, &api_key_key, "").map_err(|e| e.to_string())?;
+    db::save_setting(&conn, &config_key, "").await.map_err(|e| e.to_string())?;
+    db::save_setting(&conn, &api_key_key, "").await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -574,22 +576,25 @@ pub async fn summarize_clipboard_entries(
         return Err("No entry IDs provided for summarization.".to_string());
     }
 
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     // Create a string of placeholders: "?,?,?"
     let placeholders = entry_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let sql = format!("SELECT content FROM clipboard_history WHERE id IN ({})", placeholders);
     
-    // Convert Vec<i64> to something rusqlite can use with `params_from_iter`
-    let params_from_ids = rusqlite::params_from_iter(entry_ids.iter());
+    // Convert Vec<i64> to Vec<i32> for libsql params
+    let params: Vec<i32> = entry_ids.iter().map(|id| *id as i32).collect();
 
-    let entries: Vec<String> = conn
-        .prepare(&sql)
-        .map_err(|e| e.to_string())?
-        .query_map(params_from_ids, |row| row.get(0))
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<String>, _>>()
+    let mut rows = conn
+        .query(&sql, libsql::params_from_iter(params))
+        .await
         .map_err(|e| e.to_string())?;
+
+    let mut entries = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+        let content: String = row.get(0).map_err(|e| e.to_string())?;
+        entries.push(content);
+    }
 
     let content_to_summarize = entries.join("\n---\n");
     

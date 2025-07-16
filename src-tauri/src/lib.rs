@@ -64,7 +64,8 @@ pub fn run() -> anyhow::Result<()> {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             // Set up the database here
-            let db_manager = DbManager::init(app.handle().clone())?;
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            let db_manager = rt.block_on(DbManager::init(app.handle().clone()))?;
             app.manage(db_manager);
 
             // Start the clipboard listener

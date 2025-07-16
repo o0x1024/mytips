@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::State;
 use uuid::Uuid;
-use rusqlite::{params, OptionalExtension};
+use libsql::params;
 
 // 前端传递的笔记数据
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -79,20 +79,20 @@ pub struct TipSummary {
 // 获取所有笔记
 #[tauri::command]
 pub async fn get_all_tips(db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_all_tips(&conn).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_all_tips(&conn).await.map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
 
         // 获取笔记的图片
-        let images = get_images_for_tip(&conn, &tip.id)?;
+        let images = get_images_for_tip(&conn, &tip.id).await?;
 
         // 检查加密状态
-        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
-        let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").await.unwrap_or(false);
+        let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").await.unwrap_or(false);
         
         // 如果笔记已加密但未解锁，返回占位符内容
         let content = if is_encrypted && !is_unlocked {
@@ -121,14 +121,14 @@ pub async fn get_all_tips(db_manager: State<'_, DbManager>) -> Result<Vec<TipWit
 // 获取所有笔记的摘要
 #[tauri::command]
 pub async fn get_all_tip_summaries(db_manager: State<'_, DbManager>) -> Result<Vec<TipSummary>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_all_tips(&conn).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_all_tips(&conn).await.map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").await.unwrap_or(false);
 
         result.push(TipSummary {
             id: tip.id,
@@ -150,18 +150,18 @@ pub async fn get_all_tip_summaries(db_manager: State<'_, DbManager>) -> Result<V
 // 获取单个笔记
 #[tauri::command]
 pub async fn get_tip(id: String, db_manager: State<'_, DbManager>) -> Result<TipWithTags, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tip = db::get_tip(&conn, &id).map_err(|e| e.to_string())?;
-    let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tip = db::get_tip(&conn, &id).await.map_err(|e| e.to_string())?;
+    let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
 
     // 获取笔记的图片
-    let images = get_images_for_tip(&conn, &tip.id)?;
+    let images = get_images_for_tip(&conn, &tip.id).await?;
 
     let tip_type_str: String = tip.tip_type.into();
 
     // 检查加密状态
-    let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
-    let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").unwrap_or(false);
+    let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").await.unwrap_or(false);
+    let is_unlocked = db::is_item_unlocked(&conn, &tip.id, "note").await.unwrap_or(false);
     
     // 如果笔记已加密但未解锁，返回占位符内容
     let content = if is_encrypted && !is_unlocked {
@@ -189,10 +189,7 @@ pub async fn get_tip(id: String, db_manager: State<'_, DbManager>) -> Result<Tip
 // 保存笔记
 #[tauri::command]
 pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Result<TipWithTags, String> {
-    let mut conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-
-    // 使用事务确保操作的原子性
-    let tx = conn.transaction().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
     let now = Utc::now().timestamp_millis();
     let tip_type_str: String = TipType::try_from(tip_data.tip_type.clone())
@@ -204,17 +201,18 @@ pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Re
     
     // 如果是更新操作，需要获取原始的创建时间
     let created_at = if !is_new_tip {
-        tx.query_row(
-            "SELECT created_at FROM tips WHERE id = ?1",
-            params![&tip_id],
-            |row| row.get(0)
-        ).unwrap_or(now) // 如果找不到（虽然不应该），就用当前时间
+        let mut rows = conn.query("SELECT created_at FROM tips WHERE id = ?1", params![tip_id.clone()]).await.map_err(|e| e.to_string())?;
+        if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+            row.get::<i64>(0).map_err(|e| e.to_string())?
+        } else {
+            now
+        }
     } else {
         now
     };
 
     // 插入或更新笔记
-    tx.execute(
+    conn.execute(
         "INSERT INTO tips (id, title, content, tip_type, language, category_id, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(id) DO UPDATE SET
@@ -225,60 +223,59 @@ pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Re
            category_id = excluded.category_id,
            updated_at = excluded.updated_at",
         params![
-            &tip_id,
-            &tip_data.title,
-            &tip_data.content,
-            &tip_type_str,
-            &tip_data.language,
-            &tip_data.category_id,
+            tip_id.clone(),
+            tip_data.title.clone(),
+            tip_data.content.clone(),
+            tip_type_str.clone(),
+            tip_data.language.clone(),
+            tip_data.category_id.clone(),
             created_at,
             now
         ],
-    ).map_err(|e| e.to_string())?;
+    ).await.map_err(|e| e.to_string())?;
 
     // 更新标签
     // 1. 清除所有旧的标签关联
-    tx.execute("DELETE FROM tip_tags WHERE tip_id = ?1", params![&tip_id])
-        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tip_tags WHERE tip_id = ?1", params![tip_id.clone()])
+        .await.map_err(|e| e.to_string())?;
     
     // 2. 添加新的标签关联
     let mut tags = Vec::new();
     for tag_name in tip_data.tags.iter().filter(|t| !t.trim().is_empty()) {
         // 查找标签是否存在
-        let tag: db::Tag = match tx.query_row(
-            "SELECT id, name FROM tags WHERE name = ?1",
-            params![tag_name],
-            |row| Ok(db::Tag { id: row.get(0)?, name: row.get(1)? })
-        ).optional().map_err(|e| e.to_string())? {
-            Some(t) => t, // 标签已存在
-            None => { // 如果不存在，则创建新标签
+        let tag: db::Tag = {
+            let mut rows = conn.query("SELECT id, name FROM tags WHERE name = ?1", params![tag_name.clone()])
+                .await.map_err(|e| e.to_string())?;
+            if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+                db::Tag { 
+                    id: row.get::<String>(0).map_err(|e| e.to_string())?, 
+                    name: row.get::<String>(1).map_err(|e| e.to_string())? 
+                }
+            } else {
+                // 如果不存在，则创建新标签
                 let new_tag = db::Tag {
                     id: Uuid::new_v4().to_string(),
                     name: tag_name.clone(),
                 };
-                tx.execute(
+                conn.execute(
                     "INSERT INTO tags (id, name) VALUES (?1, ?2)",
-                    params![&new_tag.id, &new_tag.name],
-                ).map_err(|e| e.to_string())?;
+                    params![new_tag.id.clone(), new_tag.name.clone()],
+                ).await.map_err(|e| e.to_string())?;
                 new_tag
             }
         };
 
         // 关联标签和笔记，忽略已存在的关联
-        tx.execute(
+        conn.execute(
             "INSERT OR IGNORE INTO tip_tags (tip_id, tag_id) VALUES (?1, ?2)",
-            params![&tip_id, &tag.id],
-        ).map_err(|e| e.to_string())?;
+            params![tip_id.clone(), tag.id.clone()],
+        ).await.map_err(|e| e.to_string())?;
         
         tags.push(tag);
     }
 
-    // 提交事务
-    tx.commit().map_err(|e| e.to_string())?;
-
-    // 事务提交后，获取图片信息（这是一个独立查询，不影响事务）
-    let final_conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let images = get_images_for_tip(&final_conn, &tip_id)?;
+    // 获取图片信息
+    let images = get_images_for_tip(&conn, &tip_id).await?;
 
     Ok(TipWithTags {
         id: tip_id,
@@ -297,19 +294,19 @@ pub async fn save_tip(tip_data: TipData, db_manager: State<'_, DbManager>) -> Re
 // 删除笔记
 #[tauri::command]
 pub async fn delete_tip(id: String, db_manager: State<'_, DbManager>) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    db::delete_tip(&conn, &id).map_err(|e| e.to_string())
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    db::delete_tip(&conn, &id).await.map_err(|e| e.to_string())
 }
 
 // 搜索笔记
 #[tauri::command]
 pub async fn search_tips(query: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::search_tips(&conn, &query).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::search_tips(&conn, &query).await.map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
         result.push(TipWithTags {
             id: tip.id,
@@ -330,14 +327,14 @@ pub async fn search_tips(query: String, db_manager: State<'_, DbManager>) -> Res
 // 搜索笔记摘要
 #[tauri::command]
 pub async fn search_tips_summary(query: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipSummary>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::search_tips(&conn, &query).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::search_tips(&conn, &query).await.map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").await.unwrap_or(false);
         result.push(TipSummary {
             id: tip.id,
             title: tip.title,
@@ -356,12 +353,12 @@ pub async fn search_tips_summary(query: String, db_manager: State<'_, DbManager>
 // 按分类获取笔记
 #[tauri::command]
 pub async fn get_tips_by_category(category_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_tips_by_category(&conn, &category_id).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_category(&conn, &category_id).await.map_err(|e| e.to_string())?;
     
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
         result.push(TipWithTags {
             id: tip.id,
@@ -382,12 +379,12 @@ pub async fn get_tips_by_category(category_id: String, db_manager: State<'_, DbM
 // 按标签获取笔记
 #[tauri::command]
 pub async fn get_tips_by_tag(tag_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_tips_by_tag(&conn, &tag_id).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_tag(&conn, &tag_id).await.map_err(|e| e.to_string())?;
     
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
         result.push(TipWithTags {
             id: tip.id,
@@ -408,8 +405,8 @@ pub async fn get_tips_by_tag(tag_id: String, db_manager: State<'_, DbManager>) -
 // 实现保存图片的API
 #[tauri::command]
 pub async fn save_tip_image(image_data: ImageData, db_manager: State<'_, DbManager>) -> Result<String, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    db::save_image(&conn, &image_data.tip_id, &image_data.image_id, &image_data.image_data)
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    db::save_image(&conn, &image_data.tip_id, &image_data.image_id, &image_data.image_data).await
         .map_err(|e| e.to_string())?;
     Ok(image_data.image_id)
 }
@@ -422,11 +419,11 @@ pub async fn get_tip_images(
     offset: Option<i32>,
     db_manager: State<'_, DbManager>
 ) -> Result<HashMap<String, String>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let images = if let (Some(l), Some(o)) = (limit, offset) {
-        db::get_tip_images_paginated(&conn, &tip_id, l, o)
+        db::get_tip_images_paginated(&conn, &tip_id, l, o).await
     } else {
-        db::get_tip_images(&conn, &tip_id)
+        db::get_tip_images(&conn, &tip_id).await
     }.map_err(|e| e.to_string())?;
     
     Ok(images.into_iter().collect())
@@ -435,23 +432,23 @@ pub async fn get_tip_images(
 // 实现获取笔记图片总数的API
 #[tauri::command(rename_all = "snake_case")]
 pub async fn get_tip_images_count(tip_id: String, db_manager: State<'_, DbManager>) -> Result<i64, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    db::get_tip_images_count(&conn, &tip_id).map_err(|e| e.to_string())
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    db::get_tip_images_count(&conn, &tip_id).await.map_err(|e| e.to_string())
 }
 
 // 实现删除图片的API
 #[tauri::command]
 pub async fn delete_tip_image(image_id: String, db_manager: State<'_, DbManager>) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    db::delete_image(&conn, &image_id).map_err(|e| e.to_string())
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    db::delete_image(&conn, &image_id).await.map_err(|e| e.to_string())
 }
 
 // 工具函数：获取笔记的所有图片并转换为HashMap
-fn get_images_for_tip(
+async fn get_images_for_tip(
     conn: &db::DbConnection,
     tip_id: &str,
 ) -> Result<Option<HashMap<String, String>>, String> {
-    let images = db::get_tip_images(conn, tip_id).map_err(|e| e.to_string())?;
+    let images = db::get_tip_images(conn, tip_id).await.map_err(|e| e.to_string())?;
 
     if images.is_empty() {
         return Ok(None);
@@ -466,13 +463,13 @@ fn get_images_for_tip(
 }
 
 // 工具函数：分页获取笔记的图片并转换为HashMap
-fn get_images_for_tip_paginated(
+async fn get_images_for_tip_paginated(
     conn: &db::DbConnection,
     tip_id: &str,
     limit: i32,
     offset: i32,
 ) -> Result<Option<HashMap<String, String>>, String> {
-    let images = db::get_tip_images_paginated(conn, tip_id, limit, offset)
+    let images = db::get_tip_images_paginated(conn, tip_id, limit, offset).await
         .map_err(|e| e.to_string())?;
 
     if images.is_empty() {
@@ -489,13 +486,13 @@ fn get_images_for_tip_paginated(
 
 #[tauri::command]
 pub async fn get_tips_by_category_recursive(category_id: String, db_manager: State<'_, DbManager>) -> Result<Vec<TipWithTags>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_tips_by_category_recursive(&conn, &category_id)
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_tips_by_category_recursive(&conn, &category_id).await
         .map_err(|e| e.to_string())?;
     
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
         result.push(TipWithTags {
             id: tip.id,
@@ -519,14 +516,14 @@ pub async fn get_tips_paged(
     page_size: i64,
     db_manager: State<'_, DbManager>
 ) -> Result<Vec<TipSummary>, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tips = db::get_tips_paged(&conn, page, page_size).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tips = db::get_tips_paged(&conn, page, page_size).await.map_err(|e| e.to_string())?;
 
     let mut result = Vec::new();
     for tip in tips {
-        let tags = db::get_tip_tags(&conn, &tip.id).map_err(|e| e.to_string())?;
+        let tags = db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
         let tip_type_str: String = tip.tip_type.into();
-        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").unwrap_or(false);
+        let is_encrypted = db::is_item_encrypted(&conn, &tip.id, "note").await.unwrap_or(false);
 
         result.push(TipSummary {
             id: tip.id,
@@ -546,7 +543,7 @@ pub async fn get_tips_paged(
 
 #[tauri::command]
 pub async fn get_tip_content(id: String, db_manager: State<'_, DbManager>) -> Result<String, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
-    let tip = db::get_tip(&conn, &id).map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tip = db::get_tip(&conn, &id).await.map_err(|e| e.to_string())?;
     Ok(tip.content)
 }

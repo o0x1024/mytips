@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use rusqlite::{params, params_from_iter, Connection};
+use libsql::{params, Connection, Database, Builder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 use uuid::Uuid;
-use r2d2::{Pool, PooledConnection};
-use r2d2_sqlite::SqliteConnectionManager;
 use tauri::{AppHandle, Manager};
+use tokio::sync::Mutex;
 
 // 导入加密状态结构
 use crate::api::encryption::EncryptionStatus;
@@ -49,7 +49,7 @@ impl From<TipType> for String {
 }
 
 // 笔记模型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tip {
     pub id: String,
     pub title: String,
@@ -62,7 +62,7 @@ pub struct Tip {
 }
 
 // 分类模型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Category {
     pub id: String,
     pub name: String,
@@ -70,7 +70,7 @@ pub struct Category {
 }
 
 // 标签模型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tag {
     pub id: String,
     pub name: String,
@@ -102,51 +102,50 @@ pub struct AIRole {
     pub updated_at: i64,
 }
 
-// 数据库连接池别名
-pub type DbPool = Pool<SqliteConnectionManager>;
-pub type DbConnection = PooledConnection<SqliteConnectionManager>;
+// 数据库连接池别名  
+pub type DbPool = Arc<Database>;
+pub type DbConnection = Connection;
 
 // 数据库管理器
 pub struct DbManager {
-    pub pool: DbPool,
+    pub database: DbPool,
 }
 
 impl DbManager {
     // 初始化数据库连接池
-    pub fn init(app_handle: AppHandle) -> Result<Self> {
+    pub async fn init(app_handle: AppHandle) -> Result<Self> {
         let db_path = get_db_path(&app_handle)?;
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let manager = SqliteConnectionManager::file(db_path);
-        let pool = Pool::builder().build(manager)?;
+        let db = Builder::new_local(db_path).build().await?;
+        let database = Arc::new(db);
 
         // 初始化 schema
-        let conn = pool.get()?;
-        init_schema(&conn)?;
+        let conn = database.connect()?;
+        init_schema(&conn).await?;
         
         // 可以在这里初始化默认数据
-        init_default_roles(&conn)?;
+        init_default_roles(&conn).await?;
         
         // 初始化同步相关表结构
-        init_sync_schema(&conn)?;
+        init_sync_schema(&conn).await?;
 
-        Ok(Self { pool })
+        Ok(Self { database })
     }
 
     // 从池中获取一个连接
-    pub fn get_conn(&self) -> Result<DbConnection> {
-        self.pool
-            .get()
-            .map_err(|e| anyhow!("Failed to get db connection from pool: {}", e))
+    pub async fn get_conn(&self) -> Result<DbConnection> {
+        self.database.connect()
+            .map_err(|e| anyhow!("Failed to get db connection: {}", e))
     }
 }
 
 /// 使用给定的连接初始化数据库 schema
-fn init_schema(conn: &Connection) -> Result<()> {
+async fn init_schema(conn: &Connection) -> Result<()> {
     // 启用外键约束
-    conn.execute("PRAGMA foreign_keys = ON", [])?;
+    conn.execute("PRAGMA foreign_keys = ON", ()).await?;
 
     // 创建 tips 表
     conn.execute(
@@ -161,8 +160,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             updated_at INTEGER NOT NULL,
             FOREIGN KEY (category_id) REFERENCES categories (id)
         )",
-        [],
-    )?;
+        (),
+    ).await?;
     
     // 创建 categories 表
     conn.execute(
@@ -171,8 +170,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             name TEXT NOT NULL,
             parent_id TEXT
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 ai_conversations 表
     conn.execute(
@@ -183,8 +182,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 ai_messages 表
     conn.execute(
@@ -196,8 +195,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             timestamp INTEGER NOT NULL,
             FOREIGN KEY(conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 tags 表
     conn.execute(
@@ -205,8 +204,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 tip_tags 表
     conn.execute(
@@ -217,8 +216,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             FOREIGN KEY (tip_id) REFERENCES tips (id) ON DELETE CASCADE,
             FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 clipboard_history 表
     conn.execute(
@@ -228,8 +227,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             source TEXT,
             created_at INTEGER NOT NULL
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建设置表
     conn.execute(
@@ -237,8 +236,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 ai_roles 表
     conn.execute(
@@ -249,8 +248,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )",
-        [],
-    )?;
+            (),
+    ).await?;
 
     // 创建 images 表
     conn.execute(
@@ -261,8 +260,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             created_at INTEGER NOT NULL,
             FOREIGN KEY (tip_id) REFERENCES tips (id) ON DELETE CASCADE
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建 encryption_status 表
     conn.execute(
@@ -276,14 +275,14 @@ fn init_schema(conn: &Connection) -> Result<()> {
             updated_at INTEGER DEFAULT (strftime('%s', 'now')),
             UNIQUE(item_type, item_id)
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建FTS5虚拟表用于全文搜索
-    conn.execute("DROP TRIGGER IF EXISTS tips_after_insert", [])?;
-    conn.execute("DROP TRIGGER IF EXISTS tips_after_delete", [])?;
-    conn.execute("DROP TRIGGER IF EXISTS tips_after_update", [])?;
-    conn.execute("DROP TABLE IF EXISTS tips_fts", [])?;
+    conn.execute("DROP TRIGGER IF EXISTS tips_after_insert", ()).await?;
+    conn.execute("DROP TRIGGER IF EXISTS tips_after_delete", ()).await?;
+    conn.execute("DROP TRIGGER IF EXISTS tips_after_update", ()).await?;
+    conn.execute("DROP TABLE IF EXISTS tips_fts", ()).await?;
     
     conn.execute(
         "CREATE VIRTUAL TABLE IF NOT EXISTS tips_fts USING fts5(
@@ -292,8 +291,8 @@ fn init_schema(conn: &Connection) -> Result<()> {
             content, 
             tokenize = 'porter unicode61'
         )",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 创建触发器，用于在原始表数据发生变化时同步更新FTS表
     // 在插入后更新
@@ -301,51 +300,65 @@ fn init_schema(conn: &Connection) -> Result<()> {
         "CREATE TRIGGER IF NOT EXISTS tips_after_insert AFTER INSERT ON tips BEGIN
             INSERT INTO tips_fts(tip_id, title, content) VALUES (new.id, new.title, new.content);
         END;",
-        [],
-    )?;
+        (),
+    ).await?;
     // 在删除后更新
     conn.execute(
         "CREATE TRIGGER IF NOT EXISTS tips_after_delete AFTER DELETE ON tips BEGIN
             DELETE FROM tips_fts WHERE tip_id = old.id;
         END;",
-        [],
-    )?;
+        (),
+    ).await?;
     // 在更新后更新
     conn.execute(
         "CREATE TRIGGER IF NOT EXISTS tips_after_update AFTER UPDATE ON tips BEGIN
             DELETE FROM tips_fts WHERE tip_id = old.id;
             INSERT INTO tips_fts(tip_id, title, content) VALUES (new.id, new.title, new.content);
         END;",
-        [],
-    )?;
+        (),
+    ).await?;
 
     // 检查FTS表是否为空，如果为空，则从主表同步数据
-    let fts_count: i64 = conn.query_row("SELECT COUNT(*) FROM tips_fts", [], |row| row.get(0))?;
+    let fts_count: i64 = {
+        let mut rows = conn.query("SELECT COUNT(*) FROM tips_fts", ()).await?;
+        if let Some(row) = rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        }
+    };
     if fts_count == 0 {
         conn.execute(
             "INSERT INTO tips_fts(tip_id, title, content) SELECT id, title, content FROM tips",
-            [],
-        )?;
+            (),
+        ).await?;
     }
 
     // 创建索引以提高查询性能
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tips_category_id ON tips(category_id)",
-        [],
-    )?;
+        (),
+    ).await?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tip_tags_tip_id ON tip_tags(tip_id)",
-        [],
-    )?;
+        (),
+    ).await?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_tip_tags_tag_id ON tip_tags(tag_id)",
-        [],
-    )?;
+            (),
+    ).await?;
 
     // 创建一些默认数据（如果是新数据库）
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM categories", [], |row| row.get(0))?;
+    let count: i64 = {
+        let mut rows = conn.query("SELECT COUNT(*) FROM categories", ()).await?;
+        if let Some(row) = rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        }
+    };
 
     if count == 0 {
         // 插入默认分类
@@ -361,7 +374,7 @@ fn init_schema(conn: &Connection) -> Result<()> {
             conn.execute(
                 "INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)",
                 params![category.id, category.name, category.parent_id],
-            )?;
+            ).await?;
         }
     }
 
@@ -369,12 +382,19 @@ fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 /// 公开的函数，用于创建数据库表结构
-pub fn create_tables(conn: &Connection) -> Result<()> {
-    init_schema(conn)
+pub async fn create_tables(conn: &Connection) -> Result<()> {
+    init_schema(conn).await
 }
 
-fn init_default_roles(conn: &Connection) -> Result<()> {
-    let count: i64 = conn.query_row("SELECT COUNT(*) FROM ai_roles", [], |row| row.get(0))?;
+async fn init_default_roles(conn: &Connection) -> Result<()> {
+    let count: i64 = {
+        let mut rows = conn.query("SELECT COUNT(*) FROM ai_roles", ()).await?;
+        if let Some(row) = rows.next().await? {
+            row.get::<i64>(0)?
+        } else {
+            0
+        }
+    };
     if count == 0 {
         let roles = vec![
             ("default", "默认助手", "一个通用的AI助手，可以回答各种问题。"),
@@ -387,7 +407,7 @@ fn init_default_roles(conn: &Connection) -> Result<()> {
             conn.execute(
                 "INSERT INTO ai_roles (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
                 params![id, name, description, now, now],
-            )?;
+            ).await?;
         }
     }
     Ok(())
@@ -398,11 +418,13 @@ fn init_default_roles(conn: &Connection) -> Result<()> {
 // ===============================================
 
 // 获取所有笔记
-pub fn get_all_tips(conn: &DbConnection) -> Result<Vec<Tip>> {
-    let mut stmt = conn.prepare("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips ORDER BY updated_at DESC")?;
-    let tip_iter = stmt.query_map([], |row| {
+pub async fn get_all_tips(conn: &DbConnection) -> Result<Vec<Tip>> {
+    let mut rows = conn.query("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips ORDER BY updated_at DESC", ()).await?;
+    let mut tips = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
-        Ok(Tip {
+        tips.push(Tip {
             id: row.get(0)?,
             title: row.get(1)?,
             content: row.get(2)?,
@@ -411,19 +433,21 @@ pub fn get_all_tips(conn: &DbConnection) -> Result<Vec<Tip>> {
             category_id: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
-        })
-    })?;
-
-    tip_iter.map(|t| t.map_err(|e| anyhow!(e))).collect()
+        });
+    }
+    
+    Ok(tips)
 }
 
 // 分页获取笔记
-pub fn get_tips_paged(conn: &DbConnection, page: i64, page_size: i64) -> Result<Vec<Tip>> {
+pub async fn get_tips_paged(conn: &DbConnection, page: i64, page_size: i64) -> Result<Vec<Tip>> {
     let offset = (page - 1) * page_size;
-    let mut stmt = conn.prepare("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2")?;
-    let tip_iter = stmt.query_map(params![page_size, offset], |row| {
+    let mut rows = conn.query("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2", params![page_size, offset]).await?;
+    let mut tips = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
-        Ok(Tip {
+        tips.push(Tip {
             id: row.get(0)?,
             title: row.get(1)?,
             content: row.get(2)?,
@@ -432,16 +456,17 @@ pub fn get_tips_paged(conn: &DbConnection, page: i64, page_size: i64) -> Result<
             category_id: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
-        })
-    })?;
-
-    tip_iter.map(|t| t.map_err(|e| anyhow!(e))).collect()
+        });
+    }
+    
+    Ok(tips)
 }
 
 // 获取单个笔记
-pub fn get_tip(conn: &DbConnection, id: &str) -> Result<Tip> {
-    let mut stmt = conn.prepare("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips WHERE id = ?")?;
-    let tip = stmt.query_row(params![id], |row| {
+pub async fn get_tip(conn: &DbConnection, id: &str) -> Result<Tip> {
+    let mut rows = conn.query("SELECT id, title, content, tip_type, language, category_id, created_at, updated_at FROM tips WHERE id = ?1", params![id]).await?;
+    
+    if let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
         Ok(Tip {
             id: row.get(0)?,
@@ -453,13 +478,13 @@ pub fn get_tip(conn: &DbConnection, id: &str) -> Result<Tip> {
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
         })
-    })?;
-
-    Ok(tip)
+    } else {
+        Err(anyhow!("Tip not found"))
+    }
 }
 
 // 保存/更新笔记
-pub fn save_tip(conn: &DbConnection, mut tip: Tip) -> Result<Tip> {
+pub async fn save_tip(conn: &DbConnection, mut tip: Tip) -> Result<Tip> {
     tip.updated_at = Utc::now().timestamp_millis();
     let tip_type_str: String = tip.tip_type.into();
 
@@ -474,46 +499,49 @@ pub fn save_tip(conn: &DbConnection, mut tip: Tip) -> Result<Tip> {
            category_id = excluded.category_id,
            updated_at = excluded.updated_at",
         params![
-            tip.id,
-            tip.title,
-            tip.content,
-            tip_type_str,
-            tip.language,
-            tip.category_id,
+            tip.id.clone(),
+            tip.title.clone(),
+            tip.content.clone(),
+            tip_type_str.clone(),
+            tip.language.clone(),
+            tip.category_id.clone(),
             tip.created_at,
             tip.updated_at
         ],
-    )?;
+    ).await?;
 
     Ok(tip)
 }
 
 // 删除笔记
-pub fn delete_tip(conn: &DbConnection, id: &str) -> Result<()> {
-    conn.execute("DELETE FROM tips WHERE id = ?", params![id])?;
+pub async fn delete_tip(conn: &DbConnection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM tips WHERE id = ?", params![id]).await?;
     Ok(())
 }
 
 // 获取所有分类
-pub fn get_all_categories(conn: &DbConnection) -> Result<Vec<Category>> {
-    let mut stmt = conn.prepare("SELECT id, name, parent_id FROM categories")?;
-    let category_iter = stmt.query_map([], |row| {
-        Ok(Category {
+pub async fn get_all_categories(conn: &DbConnection) -> Result<Vec<Category>> {
+    let mut rows = conn.query("SELECT id, name, parent_id FROM categories", ()).await?;
+    let mut categories = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        categories.push(Category {
             id: row.get(0)?,
             name: row.get(1)?,
             parent_id: row.get(2)?,
-        })
-    })?;
-    category_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        });
+    }
+    
+    Ok(categories)
 }
 
 // 创建分类
-pub fn create_category(conn: &DbConnection, name: &str, parent_id: Option<&str>) -> Result<Category> {
+pub async fn create_category(conn: &DbConnection, name: &str, parent_id: Option<&str>) -> Result<Category> {
     let id = Uuid::new_v4().to_string();
     conn.execute(
         "INSERT INTO categories (id, name, parent_id) VALUES (?, ?, ?)",
-        params![id, name, parent_id],
-    )?;
+        params![id.clone(), name, parent_id],
+    ).await?;
 
     Ok(Category {
         id,
@@ -523,11 +551,11 @@ pub fn create_category(conn: &DbConnection, name: &str, parent_id: Option<&str>)
 }
 
 // 更新分类
-pub fn update_category(conn: &DbConnection, id: &str, name: &str) -> Result<Category> {
+pub async fn update_category(conn: &DbConnection, id: &str, name: &str) -> Result<Category> {
     conn.execute(
         "UPDATE categories SET name = ? WHERE id = ?",
         params![name, id],
-    )?;
+    ).await?;
 
     Ok(Category {
         id: id.to_string(),
@@ -537,72 +565,78 @@ pub fn update_category(conn: &DbConnection, id: &str, name: &str) -> Result<Cate
 }
 
 // 删除分类
-pub fn delete_category(conn: &DbConnection, id: &str) -> Result<()> {
+pub async fn delete_category(conn: &DbConnection, id: &str) -> Result<()> {
     // 首先将该分类下的笔记的category_id设为null
     conn.execute(
         "UPDATE tips SET category_id = NULL WHERE category_id = ?",
         params![id],
-    )?;
+    ).await?;
 
     // 然后删除分类
-    conn.execute("DELETE FROM categories WHERE id = ?", params![id])?;
+    conn.execute("DELETE FROM categories WHERE id = ?", params![id]).await?;
 
     Ok(())
 }
 
 // 递归删除分类及其所有子分类和笔记
-pub fn delete_category_recursive(conn: &DbConnection, id: &str) -> Result<()> {
+pub fn delete_category_recursive<'a>(conn: &'a DbConnection, id: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
+    Box::pin(async move {
     // 1. 找到所有子分类
-    let mut stmt = conn.prepare("SELECT id FROM categories WHERE parent_id = ?")?;
-    let child_ids: Vec<String> = stmt
-        .query_map(params![id], |row| row.get(0))?
-        .filter_map(|r| r.ok())
-        .collect();
-
+    let mut rows = conn.query("SELECT id FROM categories WHERE parent_id = ?1", params![id]).await?;
+    let mut child_ids: Vec<String> = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        child_ids.push(row.get(0)?);
+    }
+    
     // 2. 递归删除所有子分类
     for child_id in child_ids {
-        delete_category_recursive(conn, &child_id)?;
+        delete_category_recursive(conn, &child_id).await?;
     }
 
     // 3. 删除该分类下的所有笔记
-    conn.execute("DELETE FROM tips WHERE category_id = ?", params![id])?;
+    conn.execute("DELETE FROM tips WHERE category_id = ?", params![id]).await?; 
 
     // 4. 删除该分类
-    conn.execute("DELETE FROM categories WHERE id = ?", params![id])?;
+    conn.execute("DELETE FROM categories WHERE id = ?", params![id]).await?;
 
     Ok(())
+    })
 }
 
 // 递归获取所有子分类ID（包括自身）
-pub fn get_all_subcategory_ids(conn: &DbConnection, category_id: &str) -> Result<Vec<String>> {
+pub fn get_all_subcategory_ids<'a>(conn: &'a DbConnection, category_id: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Vec<String>>> + Send + 'a>> {
+    Box::pin(async move {
     let mut all_ids = vec![category_id.to_string()];
     
     // 1. 找到所有直接子分类
-    let mut stmt = conn.prepare("SELECT id FROM categories WHERE parent_id = ?")?;
-    let child_ids: Vec<String> = stmt
-        .query_map(params![category_id], |row| row.get(0))?
-        .filter_map(|r| r.ok())
-        .collect();
+    let mut rows = conn.query("SELECT id FROM categories WHERE parent_id = ?1", params![category_id]).await?;
+    let mut child_ids: Vec<String> = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        child_ids.push(row.get(0)?);
+    }
 
     // 2. 递归获取每个子分类的所有子分类
     for child_id in child_ids {
-        let mut child_all_ids = get_all_subcategory_ids(conn, &child_id)?;
+        let mut child_all_ids = get_all_subcategory_ids(conn, &child_id).await?;
         all_ids.append(&mut child_all_ids);
     }
     
     Ok(all_ids)
+    })
 }
 
 // 递归获取分类及其所有子分类下的所有笔记
-pub fn get_tips_by_category_recursive(conn: &DbConnection, category_id: &str) -> Result<Vec<Tip>> {
+pub async fn get_tips_by_category_recursive(conn: &DbConnection, category_id: &str) -> Result<Vec<Tip>> {
     // 获取所有子分类ID（包括自身）
-    let all_category_ids = get_all_subcategory_ids(conn, category_id)?;
+    let all_category_ids = get_all_subcategory_ids(conn, category_id).await?;
     
     let mut all_tips = Vec::new();
     
     // 获取每个分类下的所有笔记
     for cat_id in all_category_ids {
-        let mut tips = get_tips_by_category(conn, &cat_id)?;
+        let mut tips = get_tips_by_category(conn, &cat_id).await?;
         all_tips.append(&mut tips);
     }
     
@@ -610,38 +644,44 @@ pub fn get_tips_by_category_recursive(conn: &DbConnection, category_id: &str) ->
 }
 
 // 获取所有标签
-pub fn get_all_tags(conn: &DbConnection) -> Result<Vec<Tag>> {
-    let mut stmt = conn.prepare("SELECT id, name FROM tags")?;
-    let tag_iter = stmt.query_map([], |row| {
-        Ok(Tag {
+pub async fn get_all_tags(conn: &DbConnection) -> Result<Vec<Tag>> {
+    let mut rows = conn.query("SELECT id, name FROM tags", ()).await?;
+    let mut tags = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        tags.push(Tag {
             id: row.get(0)?,
             name: row.get(1)?,
         })
-    })?;
-
-    tag_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+    
+    Ok(tags)
 }
 
 // 创建标签
-pub fn create_tag(conn: &DbConnection, name: &str) -> Result<Tag> {
+pub async fn create_tag(conn: &DbConnection, name: &str) -> Result<Tag> {
     let id = Uuid::new_v4().to_string();
 
     // 先检查是否已存在
-    let existing =
-        conn.query_row("SELECT id FROM tags WHERE name = ?", params![name], |row| {
-            row.get::<_, String>(0)
-        });
+    let existing = {
+        let mut rows = conn.query("SELECT id FROM tags WHERE name = ?1", params![name]).await?;
+        if let Some(row) = rows.next().await? {
+            Some(row.get::<String>(0)?)
+        } else {
+            None
+        }
+    };
 
     match existing {
-        Ok(existing_id) => Ok(Tag {
+        Some(existing_id) => Ok(Tag {
             id: existing_id,
             name: name.to_string(),
         }),
-        Err(_) => {
+        None => {
             conn.execute(
                 "INSERT INTO tags (id, name) VALUES (?, ?)",
-                params![id, name],
-            )?;
+                params![id.clone(), name],
+            ).await?;
             Ok(Tag {
                 id,
                 name: name.to_string(),
@@ -651,61 +691,67 @@ pub fn create_tag(conn: &DbConnection, name: &str) -> Result<Tag> {
 }
 
 // 为笔记设置标签
-pub fn set_tip_tags(conn: &DbConnection, tip_id: &str, tag_ids: &[String]) -> Result<()> {
+pub async fn set_tip_tags(conn: &DbConnection, tip_id: &str, tag_ids: &[String]) -> Result<()> {
     // 先删除现有关联
-    conn.execute("DELETE FROM tip_tags WHERE tip_id = ?", params![tip_id])?;
+    conn.execute("DELETE FROM tip_tags WHERE tip_id = ?", params![tip_id]).await?;
 
     // 添加新关联
     for tag_id in tag_ids {
         conn.execute(
             "INSERT INTO tip_tags (tip_id, tag_id) VALUES (?, ?)",
-            params![tip_id, tag_id],
-        )?;
+            params![tip_id, tag_id.clone()],
+        ).await?;
     }
     Ok(())
 }
 
 // 删除标签
-pub fn delete_tag(conn: &DbConnection, id: &str) -> Result<()> {
+pub async fn delete_tag(conn: &DbConnection, id: &str) -> Result<()> {
     // 删除标签关联
-    conn.execute("DELETE FROM tip_tags WHERE tag_id = ?", params![id])?;
+    conn.execute("DELETE FROM tip_tags WHERE tag_id = ?", params![id]).await?;
 
     // 删除标签
-    conn.execute("DELETE FROM tags WHERE id = ?", params![id])?;
+    conn.execute("DELETE FROM tags WHERE id = ?", params![id]).await?;
 
     Ok(())
 }
 
 // 获取笔记的所有标签
-pub fn get_tip_tags(conn: &DbConnection, tip_id: &str) -> Result<Vec<Tag>> {
-    let mut stmt = conn.prepare(
+pub async fn get_tip_tags(conn: &DbConnection, tip_id: &str) -> Result<Vec<Tag>> {
+    let mut rows = conn.query(
         "SELECT t.id, t.name FROM tags t
          JOIN tip_tags tt ON t.id = tt.tag_id
          WHERE tt.tip_id = ?",
-    )?;
-    let tag_iter = stmt.query_map(params![tip_id], |row| {
-        Ok(Tag {
+        params![tip_id]
+    ).await?;
+    
+    let mut tags = Vec::new();
+    while let Some(row) = rows.next().await? {
+        tags.push(Tag {
             id: row.get(0)?,
             name: row.get(1)?,
-        })
-    })?;
-    tag_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        });
+    }
+    Ok(tags)
 }
 
 // 搜索笔记
-pub fn search_tips(conn: &DbConnection, query: &str) -> Result<Vec<Tip>> {
-    let mut stmt = conn.prepare(
+pub async fn search_tips(conn: &DbConnection, query: &str) -> Result<Vec<Tip>> {
+    let search_query = format!("%{}%", query);
+    let mut rows = conn.query(
         "SELECT t.id, t.title, t.content, t.tip_type, t.language, t.category_id, t.created_at, t.updated_at
          FROM tips t
          LEFT JOIN tags tg ON t.id = tg.id
          WHERE t.title LIKE ?1 OR t.content LIKE ?1 OR tg.name LIKE ?1
          GROUP BY t.id
          ORDER BY t.updated_at DESC",
-    )?;
-    let query = format!("%{}%", query);
-    let tip_iter = stmt.query_map(params![query], |row| {
+        params![search_query]
+    ).await?;
+    
+    let mut tips = Vec::new();
+    while let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
-        Ok(Tip {
+        tips.push(Tip {
             id: row.get(0)?,
             title: row.get(1)?,
             content: row.get(2)?,
@@ -714,23 +760,26 @@ pub fn search_tips(conn: &DbConnection, query: &str) -> Result<Vec<Tip>> {
             category_id: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
-        })
-    })?;
-
-    tip_iter.map(|t| t.map_err(|e| anyhow!(e))).collect()
+        });
+    }
+    
+    Ok(tips)
 }
 
 // 按分类筛选笔记
-pub fn get_tips_by_category(conn: &DbConnection, category_id: &str) -> Result<Vec<Tip>> {
-    let mut stmt = conn.prepare(
+pub async fn get_tips_by_category(conn: &DbConnection, category_id: &str) -> Result<Vec<Tip>> {
+    let mut rows = conn.query(
         "SELECT id, title, content, tip_type, language, category_id, created_at, updated_at
          FROM tips 
          WHERE category_id = ? 
          ORDER BY updated_at DESC",
-    )?;
-    let tip_iter = stmt.query_map(params![category_id], |row| {
+        params![category_id]
+    ).await?;
+    
+    let mut tips = Vec::new();
+    while let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
-        Ok(Tip {
+        tips.push(Tip {
             id: row.get(0)?,
             title: row.get(1)?,
             content: row.get(2)?,
@@ -739,24 +788,27 @@ pub fn get_tips_by_category(conn: &DbConnection, category_id: &str) -> Result<Ve
             category_id: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
-        })
-    })?;
-
-    tip_iter.map(|t| t.map_err(|e| anyhow!(e))).collect()
+        });
+    }
+    
+    Ok(tips)
 }
 
 // 按标签筛选笔记
-pub fn get_tips_by_tag(conn: &DbConnection, tag_id: &str) -> Result<Vec<Tip>> {
-    let mut stmt = conn.prepare(
+pub async fn get_tips_by_tag(conn: &DbConnection, tag_id: &str) -> Result<Vec<Tip>> {
+    let mut rows = conn.query(
         "SELECT t.id, t.title, t.content, t.tip_type, t.language, t.category_id, t.created_at, t.updated_at
          FROM tips t
          JOIN tip_tags tt ON t.id = tt.tip_id
          WHERE tt.tag_id = ?
          ORDER BY t.updated_at DESC",
-    )?;
-    let tip_iter = stmt.query_map(params![tag_id], |row| {
+        params![tag_id]
+    ).await?;
+    
+    let mut tips = Vec::new();
+    while let Some(row) = rows.next().await? {
         let tip_type_str: String = row.get(3)?;
-        Ok(Tip {
+        tips.push(Tip {
             id: row.get(0)?,
             title: row.get(1)?,
             content: row.get(2)?,
@@ -765,37 +817,41 @@ pub fn get_tips_by_tag(conn: &DbConnection, tag_id: &str) -> Result<Vec<Tip>> {
             category_id: row.get(5)?,
             created_at: row.get(6)?,
             updated_at: row.get(7)?,
-        })
-    })?;
-
-    tip_iter.map(|t| t.map_err(|e| anyhow!(e))).collect()
+        });
+    }
+    
+    Ok(tips)
 }
 
 // 获取分类
-pub fn get_category_by_id(conn: &DbConnection, id: &str) -> Result<Category> {
-    let mut stmt = conn.prepare("SELECT id, name, parent_id FROM categories WHERE id = ?")?;
-    let category = stmt.query_row(params![id], |row| {
+pub async fn get_category_by_id(conn: &DbConnection, id: &str) -> Result<Category> {
+    let mut rows = conn.query("SELECT id, name, parent_id FROM categories WHERE id = ?", params![id]).await?;
+    
+    if let Some(row) = rows.next().await? {
         Ok(Category {
             id: row.get(0)?,
             name: row.get(1)?,
             parent_id: row.get(2)?,
         })
-    })?;
-    Ok(category)
+    } else {
+        Err(anyhow!("Category not found"))
+    }
 }
 
 // 保存图片
-pub fn save_image(conn: &DbConnection, tip_id: &str, image_id: &str, image_data: &str) -> Result<()> {
+pub async fn save_image(conn: &DbConnection, tip_id: &str, image_id: &str, image_data: &str) -> Result<()> {
     let now = Utc::now().timestamp_millis();
 
     // 先检查tip_id是否存在，避免外键约束错误
-    let tip_exists: bool = match conn.query_row(
+    let mut rows = conn.query(
         "SELECT EXISTS(SELECT 1 FROM tips WHERE id = ?)",
         params![tip_id],
-        |row| row.get(0),
-    ) {
-        Ok(exists) => exists,
-        Err(_) => false,
+    ).await?;
+    
+    let tip_exists: bool = if let Some(row) = rows.next().await? {
+        row.get(0)?
+    } else {
+        false
     };
 
     if !tip_exists {
@@ -803,117 +859,133 @@ pub fn save_image(conn: &DbConnection, tip_id: &str, image_id: &str, image_data:
     }
 
     // 保存图片
-    match conn.execute(
+    conn.execute(
         "INSERT INTO images (id, tip_id, image_data, created_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            image_data = excluded.image_data",
         params![image_id, tip_id, image_data, now],
-    ) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(anyhow!("Failed to save image: {}", e)),
-    }
+    ).await?;
+    
+    Ok(())
 }
 
 // 获取笔记的所有图片
-pub fn get_tip_images(conn: &DbConnection, tip_id: &str) -> Result<Vec<(String, String)>> {
-    let mut stmt = conn.prepare(
+pub async fn get_tip_images(conn: &DbConnection, tip_id: &str) -> Result<Vec<(String, String)>> {
+    let mut rows = conn.query(
         "SELECT id, image_data FROM images
          WHERE tip_id = ?
          ORDER BY created_at ASC",
-    )?;
-    let image_iter = stmt.query_map(params![tip_id], |row| Ok((row.get(0)?, row.get(1)?)))?;
-
-    image_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        params![tip_id]
+    ).await?;
+    
+    let mut images = Vec::new();
+    while let Some(row) = rows.next().await? {
+        images.push((row.get(0)?, row.get(1)?));
+    }
+    
+    Ok(images)
 }
 
 // 分页获取笔记的图片
-pub fn get_tip_images_paginated(
+pub async fn get_tip_images_paginated(
     conn: &DbConnection,
     tip_id: &str,
     limit: i32,
     offset: i32,
 ) -> Result<Vec<(String, String)>> {
-    let mut stmt = conn.prepare(
+    let mut rows = conn.query(
         "SELECT id, image_data FROM images
          WHERE tip_id = ?
          ORDER BY created_at ASC
          LIMIT ? OFFSET ?",
-    )?;
-    let image_iter =
-        stmt.query_map(params![tip_id, limit, offset], |row| Ok((row.get(0)?, row.get(1)?)))?;
-
-    image_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        params![tip_id, limit, offset]
+    ).await?;
+    
+    let mut images = Vec::new();
+    while let Some(row) = rows.next().await? {
+        images.push((row.get(0)?, row.get(1)?));
+    }
+    
+    Ok(images)
 }
 
 // 获取笔记的图片总数
-pub fn get_tip_images_count(conn: &DbConnection, tip_id: &str) -> Result<i64> {
-    let count: i64 = conn.query_row(
+pub async fn get_tip_images_count(conn: &DbConnection, tip_id: &str) -> Result<i64> {
+    let mut rows = conn.query(
         "SELECT COUNT(*) FROM images WHERE tip_id = ?",
         params![tip_id],
-        |row| row.get(0),
-    )?;
+    ).await?;
+    
+    let count: i64 = if let Some(row) = rows.next().await? {
+        row.get(0)?
+    } else {
+        0
+    };
+    
     Ok(count)
 }
 
 // 删除笔记的所有图片
-pub fn delete_tip_images(conn: &DbConnection, tip_id: &str) -> Result<()> {
-    conn.execute("DELETE FROM images WHERE tip_id = ?", params![tip_id])?;
-
+pub async fn delete_tip_images(conn: &DbConnection, tip_id: &str) -> Result<()> {
+    conn.execute("DELETE FROM images WHERE tip_id = ?", params![tip_id]).await?;
     Ok(())
 }
 
 // 删除单个图片
-pub fn delete_image(conn: &DbConnection, image_id: &str) -> Result<()> {
-    conn.execute("DELETE FROM images WHERE id = ?", params![image_id])?;
-
+pub async fn delete_image(conn: &DbConnection, image_id: &str) -> Result<()> {
+    conn.execute("DELETE FROM images WHERE id = ?", params![image_id]).await?;
     Ok(())
 }
 
 // --- 剪贴板历史记录相关 ---
 
 // 添加剪贴板条目
-pub fn add_clipboard_entry(conn: &DbConnection, content: &str, source: Option<&str>) -> Result<()> {
+pub async fn add_clipboard_entry(conn: &DbConnection, content: &str, source: Option<&str>) -> Result<()> {
     conn.execute(
         "INSERT INTO clipboard_history (content, source, created_at) VALUES (?, ?, ?)",
         params![content, source, chrono::Utc::now().timestamp()],
-    )?;
+    ).await?;
     Ok(())
 }
 
 // 获取所有剪贴板条目（已弃用，保留以备后用）
 #[allow(dead_code)]
-pub fn get_all_clipboard_entries(conn: &DbConnection) -> Result<Vec<ClipboardHistory>> {
-    let mut stmt = conn.prepare("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC")?;
-    let entry_iter = stmt.query_map([], |row| {
-        Ok(ClipboardHistory {
+pub async fn get_all_clipboard_entries(conn: &DbConnection) -> Result<Vec<ClipboardHistory>> {
+    let mut rows = conn.query("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC", ()).await?;
+    let mut entries = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        entries.push(ClipboardHistory {
             id: row.get(0)?,
             content: row.get(1)?,
             source: row.get(2)?,
             created_at: row.get(3)?,
-        })
-    })?;
-
-    entry_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        });
+    }
+    
+    Ok(entries)
 }
 
 // 根据时间戳获取剪贴板条目
-pub fn get_clipboard_entries_since(conn: &DbConnection, since_timestamp: i64) -> Result<Vec<ClipboardHistory>> {
-    let mut stmt = conn.prepare("SELECT id, content, source, created_at FROM clipboard_history WHERE created_at >= ? ORDER BY created_at DESC")?;
-    let entry_iter = stmt.query_map(params![since_timestamp], |row| {
-        Ok(ClipboardHistory {
+pub async fn get_clipboard_entries_since(conn: &DbConnection, since_timestamp: i64) -> Result<Vec<ClipboardHistory>> {
+    let mut rows = conn.query("SELECT id, content, source, created_at FROM clipboard_history WHERE created_at >= ? ORDER BY created_at DESC", params![since_timestamp]).await?;
+    let mut entries = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        entries.push(ClipboardHistory {
             id: row.get(0)?,
             content: row.get(1)?,
             source: row.get(2)?,
             created_at: row.get(3)?,
-        })
-    })?;
-
-    entry_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        });
+    }
+    
+    Ok(entries)
 }
 
 // 分页获取剪贴板条目
-pub fn get_clipboard_entries_paged(
+pub async fn get_clipboard_entries_paged(
     conn: &DbConnection,
     page: i64,
     page_size: i64,
@@ -921,47 +993,68 @@ pub fn get_clipboard_entries_paged(
 ) -> Result<Vec<ClipboardHistory>> {
     let offset = (page - 1) * page_size;
 
-    let map_row = |row: &rusqlite::Row| {
-        Ok(ClipboardHistory {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            source: row.get(2)?,
-            created_at: row.get(3)?,
-        })
-    };
-
     if let Some(q) = query {
         let search_term = format!("%{}%", q);
-        let mut stmt = conn.prepare("SELECT id, content, source, created_at FROM clipboard_history WHERE content LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?")?;
-        let entries_iter = stmt.query_map(params![search_term, page_size, offset], map_row)?;
-        entries_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        let mut rows = conn.query("SELECT id, content, source, created_at FROM clipboard_history WHERE content LIKE ? ORDER BY created_at DESC LIMIT ? OFFSET ?", params![search_term, page_size, offset]).await?;
+        let mut entries = Vec::new();
+        
+        while let Some(row) = rows.next().await? {
+            entries.push(ClipboardHistory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                created_at: row.get(3)?,
+            });
+        }
+        
+        Ok(entries)
     } else {
-        let mut stmt = conn.prepare("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ? OFFSET ?")?;
-        let entries_iter = stmt.query_map(params![page_size, offset], map_row)?;
-        entries_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        let mut rows = conn.query("SELECT id, content, source, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ? OFFSET ?", params![page_size, offset]).await?;
+        let mut entries = Vec::new();
+        
+        while let Some(row) = rows.next().await? {
+            entries.push(ClipboardHistory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                created_at: row.get(3)?,
+            });
+        }
+        
+        Ok(entries)
     }
 }
 
 // 获取剪贴板条目总数
-pub fn get_clipboard_entries_count(conn: &DbConnection, query: Option<String>) -> Result<i64> {
+pub async fn get_clipboard_entries_count(conn: &DbConnection, query: Option<String>) -> Result<i64> {
     if let Some(q) = query {
         let search_term = format!("%{}%", q);
-        Ok(conn.query_row(
+        let mut rows = conn.query(
             "SELECT COUNT(*) FROM clipboard_history WHERE content LIKE ?",
             params![search_term],
-            |row| row.get(0),
-        )?)
+        ).await?;
+        
+        if let Some(row) = rows.next().await? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(0)
+        }
     } else {
-        Ok(conn.query_row(
+        let mut rows = conn.query(
             "SELECT COUNT(*) FROM clipboard_history",
-            [],
-            |row| row.get(0),
-        )?)
+            (),
+        ).await?;
+        
+        if let Some(row) = rows.next().await? {
+            Ok(row.get(0)?)
+        } else {
+            Ok(0)
+        }
     }
 }
 
 // 删除指定的剪贴板条目
-pub fn delete_clipboard_entries(conn: &DbConnection, ids: &[i64]) -> Result<()> {
+pub async fn delete_clipboard_entries(conn: &DbConnection, ids: &[i64]) -> Result<()> {
     if ids.is_empty() {
         return Ok(());
     }
@@ -969,147 +1062,164 @@ pub fn delete_clipboard_entries(conn: &DbConnection, ids: &[i64]) -> Result<()> 
     let params_sql = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
     let query = format!("DELETE FROM clipboard_history WHERE id IN ({})", params_sql);
     
-    conn.execute(&query, params_from_iter(ids.iter()))?;
+    let values: Vec<libsql::Value> = ids.iter().map(|&id| libsql::Value::from(id)).collect();
+    conn.execute(&query, values).await?;
     Ok(())
 }
 
 // 清除所有剪贴板条目
-pub fn clear_all_clipboard_entries(conn: &DbConnection) -> Result<()> {
-    conn.execute("DELETE FROM clipboard_history", [])?;
+pub async fn clear_all_clipboard_entries(conn: &DbConnection) -> Result<()> {
+    conn.execute("DELETE FROM clipboard_history", ()).await?;
     Ok(())
 }
 
 // 删除过期的剪贴板条目
-pub fn delete_expired_clipboard_entries(conn: &DbConnection, expire_timestamp: i64) -> Result<()> {
+pub async fn delete_expired_clipboard_entries(conn: &DbConnection, expire_timestamp: i64) -> Result<()> {
     conn.execute(
         "DELETE FROM clipboard_history WHERE created_at < ?",
         params![expire_timestamp],
-    )?;
+    ).await?;
     Ok(())
 }
 
 // 检查剪贴板条目是否已存在
-pub fn check_clipboard_entry_exists(conn: &DbConnection, content: &str) -> Result<bool> {
+pub async fn check_clipboard_entry_exists(conn: &DbConnection, content: &str) -> Result<bool> {
     // 查询最近30秒内是否有相同内容的条目
     let now = Utc::now().timestamp();
     let thirty_seconds_ago = now - 30; // 30秒内的条目视为重复
 
-    let count: i64 = conn.query_row(
+    let mut rows = conn.query(
         "SELECT COUNT(*) FROM clipboard_history WHERE content = ? AND created_at > ?",
         params![content, thirty_seconds_ago],
-        |row| row.get(0),
-    )?;
+    ).await?;
+    
+    let count: i64 = if let Some(row) = rows.next().await? {
+        row.get::<i64>(0)?
+    } else {
+        0
+    };
 
     Ok(count > 0)
 }
 
 // 获取剪贴板条目ID列表，基于天数
-pub fn get_clipboard_entry_ids_by_days(
+pub async fn get_clipboard_entry_ids_by_days(
     conn: &DbConnection,
     days: u32,
 ) -> Result<Vec<i64>> {
-    let mut stmt = conn.prepare(
+    let mut rows = conn.query(
         "SELECT id FROM clipboard_history WHERE created_at >= strftime('%s', 'now', ?)",
-    )?;
-    let ids = stmt
-        .query_map([format!("-{} day", days)], |row| row.get(0))?
-        .collect::<Result<Vec<i64>, _>>()?;
+        params![format!("-{} day", days)],
+    ).await?;
+    
+    let mut ids = Vec::new();
+    while let Some(row) = rows.next().await? {
+        ids.push(row.get(0)?);
+    }
+    
     Ok(ids)
 }
 
 // 保存设置
-pub fn save_setting(conn: &DbConnection, key: &str, value: &str) -> Result<()> {
+pub async fn save_setting(conn: &DbConnection, key: &str, value: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO settings (key, value) VALUES (?, ?) 
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
-    )?;
+    ).await?;
     Ok(())
 }
 
 // 获取设置
-pub fn get_setting(conn: &DbConnection, key: &str) -> Result<Option<String>> {
-    let result = conn.query_row(
+pub async fn get_setting(conn: &DbConnection, key: &str) -> Result<Option<String>> {
+    let mut rows = conn.query(
         "SELECT value FROM settings WHERE key = ?",
         params![key],
-        |row| row.get(0),
-    );
-    match result {
-        Ok(value) => Ok(Some(value)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e.into()),
+    ).await?;
+    
+    if let Some(row) = rows.next().await? {
+        Ok(Some(row.get(0)?))
+    } else {
+        Ok(None)
     }
 }
 
 // 获取所有以指定前缀开头的设置键
-pub fn get_settings_by_prefix(conn: &DbConnection, prefix: &str) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT key FROM settings WHERE key LIKE ? AND value != ''"
-    )?;
+pub async fn get_settings_by_prefix(conn: &DbConnection, prefix: &str) -> Result<Vec<String>> {
     let like_prefix = format!("{}%", prefix);
-    let key_iter = stmt.query_map(params![like_prefix], |row| {
-        Ok(row.get(0)?)
-    })?;
-
-    key_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    let mut rows = conn.query(
+        "SELECT key FROM settings WHERE key LIKE ? AND value != ''",
+        params![like_prefix]
+    ).await?;
+    
+    let mut keys = Vec::new();
+    while let Some(row) = rows.next().await? {
+        keys.push(row.get(0)?);
+    }
+    
+    Ok(keys)
 }
 
 
 // --- AI 相关方法 ---
 
 // 获取所有角色
-pub fn get_all_roles(conn: &DbConnection) -> Result<Vec<AIRole>> {
-    let mut stmt = conn.prepare("SELECT id, name, description, created_at, updated_at FROM ai_roles ORDER BY created_at DESC")?;
-    let role_iter = stmt.query_map([], |row| {
-        Ok(AIRole {
+pub async fn get_all_roles(conn: &DbConnection) -> Result<Vec<AIRole>> {
+    let mut rows = conn.query("SELECT id, name, description, created_at, updated_at FROM ai_roles ORDER BY created_at DESC", ()).await?;
+    let mut roles = Vec::new();
+    
+    while let Some(row) = rows.next().await? {
+        roles.push(AIRole {
             id: row.get(0)?,
             name: row.get(1)?,
             description: row.get(2)?,
             created_at: row.get(3)?,
             updated_at: row.get(4)?,
-        })
-    })?;
-
-    role_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        });
+    }
+    
+    Ok(roles)
 }
 
 // 创建角色
-pub fn create_role(conn: &DbConnection, name: &str, description: &str) -> Result<AIRole> {
+pub async fn create_role(conn: &DbConnection, name: &str, description: &str) -> Result<AIRole> {
     let id = Uuid::new_v4().to_string();
     let now = Utc::now().timestamp_millis();
 
     conn.execute(
         "INSERT INTO ai_roles (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-        params![id, name, description, now, now],
-    )?;
+        params![id.clone(), name, description, now, now],
+    ).await?;
     Ok(AIRole { id, name: name.to_string(), description: description.to_string(), created_at: now, updated_at: now })
 }
 
 // 更新角色
-pub fn update_role(conn: &DbConnection, id: &str, name: &str, description: &str) -> Result<AIRole> {
+pub async fn update_role(conn: &DbConnection, id: &str, name: &str, description: &str) -> Result<AIRole> {
     let now = Utc::now().timestamp_millis();
 
     conn.execute(
         "UPDATE ai_roles SET name = ?, description = ?, updated_at = ? WHERE id = ?",
         params![name, description, now, id],
-    )?;
+    ).await?;
     // This is not ideal as created_at is not known here.
     // A full fetch would be better, but for now we return what we can.
     Ok(AIRole { id: id.to_string(), name: name.to_string(), description: description.to_string(), created_at: 0, updated_at: now })
 }
 
 // 删除角色
-pub fn delete_role(conn: &DbConnection, id: &str) -> Result<()> {
-    conn.execute("DELETE FROM ai_roles WHERE id = ?", params![id])?;
+pub async fn delete_role(conn: &DbConnection, id: &str) -> Result<()> {
+    conn.execute("DELETE FROM ai_roles WHERE id = ?", params![id]).await?;
     Ok(())
 }
 
 // 根据ID获取角色
-pub fn get_role_by_id(conn: &DbConnection, id: &str) -> Result<AIRole> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, description, created_at, updated_at FROM ai_roles WHERE id = ?"
-    )?;
-    let role = stmt.query_row(params![id], |row| {
+pub async fn get_role_by_id(conn: &DbConnection, id: &str) -> Result<AIRole> {
+    let mut rows = conn.query(
+        "SELECT id, name, description, created_at, updated_at FROM ai_roles WHERE id = ?",
+        params![id]
+    ).await?;
+    
+    if let Some(row) = rows.next().await? {
         Ok(AIRole {
             id: row.get(0)?,
             name: row.get(1)?,
@@ -1117,71 +1227,74 @@ pub fn get_role_by_id(conn: &DbConnection, id: &str) -> Result<AIRole> {
             created_at: row.get(3)?,
             updated_at: row.get(4)?,
         })
-    })?;
-    Ok(role)
+    } else {
+        Err(anyhow!("Role not found"))
+    }
 }
 
 // --- 加密相关方法 ---
 
 /// 获取所有加密状态
-pub fn get_encryption_statuses(conn: &DbConnection) -> Result<Vec<EncryptionStatus>> {
-    let mut stmt = conn.prepare(
-        "SELECT item_type, item_id, is_encrypted, is_unlocked FROM encryption_status"
-    )?;
+pub async fn get_encryption_statuses(conn: &DbConnection) -> Result<Vec<EncryptionStatus>> {
+    let mut rows = conn.query(
+        "SELECT item_type, item_id, is_encrypted, is_unlocked FROM encryption_status",
+        ()
+    ).await?;
     
-    let status_iter = stmt.query_map([], |row| {
+    let mut statuses = Vec::new();
+    while let Some(row) = rows.next().await? {
         let item_type: String = row.get(0)?;
         let item_id: String = row.get(1)?;
         let is_encrypted: bool = row.get(2)?;
         let is_unlocked: bool = row.get(3)?;
         
-        Ok(EncryptionStatus {
+        statuses.push(EncryptionStatus {
             note_id: if item_type == "note" { Some(item_id.clone()) } else { None },
             notebook_id: if item_type == "notebook" { Some(item_id) } else { None },
             is_encrypted,
             is_unlocked,
         })
-    })?;
+    }
     
-    status_iter.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    Ok(statuses)
 }
 
 /// 检查项目是否已加密
-pub fn is_item_encrypted(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<bool> {
-    let result = conn.query_row(
+pub async fn is_item_encrypted(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<bool> {
+    let mut rows = conn.query(
         "SELECT is_encrypted FROM encryption_status WHERE item_id = ? AND item_type = ?",
         params![item_id, item_type],
-        |row| row.get(0),
-    );
-    match result {
-        Ok(encrypted) => Ok(encrypted),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false), // 如果没有记录，则未加密
-        Err(e) => Err(e.into()),
+    ).await?;
+    
+    if let Some(row) = rows.next().await? {
+        Ok(row.get(0)?)
+    } else {
+        Ok(false) // 如果没有记录，则未加密
     }
 }
 
 /// 检查项目是否已解锁
-pub fn is_item_unlocked(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<bool> {
-    let result = conn.query_row(
+pub async fn is_item_unlocked(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<bool> {
+    let mut rows = conn.query(
         "SELECT is_unlocked FROM encryption_status WHERE item_id = ? AND item_type = ?",
         params![item_id, item_type],
-        |row| row.get(0),
-    );
-    match result {
-        Ok(unlocked) => Ok(unlocked),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(false), // 如果没有记录，则未解锁
-        Err(e) => Err(e.into()),
+    ).await?;
+    
+    if let Some(row) = rows.next().await? {
+        Ok(row.get(0)?)
+    } else {
+        Ok(false) // 如果没有记录，则未解锁
     }
 }
 
 /// 加密笔记
-pub fn encrypt_note(conn: &DbConnection, note_id: &str, encrypted_content: &str) -> Result<()> {
+pub async fn encrypt_note(conn: &DbConnection, note_id: &str, encrypted_content: &str) -> Result<()> {
     // 更新笔记内容为加密内容
     let now = Utc::now().timestamp_millis();
     conn.execute(
         "UPDATE tips SET content = ?, updated_at = ? WHERE id = ?",
         params![encrypted_content, now, note_id],
-    )?;
+    ).await?;
 
     // 更新或插入加密状态
     let status_id = Uuid::new_v4().to_string();
@@ -1194,19 +1307,19 @@ pub fn encrypt_note(conn: &DbConnection, note_id: &str, encrypted_content: &str)
            is_unlocked = excluded.is_unlocked,
            updated_at = excluded.updated_at",
         params![status_id, "note", note_id, true, false, now_seconds, now_seconds],
-    )?;
+    ).await?;
 
     Ok(())
 }
 
 /// 解密笔记
-pub fn decrypt_note(conn: &DbConnection, note_id: &str, decrypted_content: &str) -> Result<()> {
+pub async fn decrypt_note(conn: &DbConnection, note_id: &str, decrypted_content: &str) -> Result<()> {
     // 更新笔记内容为解密内容
     let now = Utc::now().timestamp_millis();
     conn.execute(
         "UPDATE tips SET content = ?, updated_at = ? WHERE id = ?",
         params![decrypted_content, now, note_id],
-    )?;
+    ).await?;
 
     // 更新加密状态
     let now_seconds = Utc::now().timestamp();
@@ -1214,13 +1327,13 @@ pub fn decrypt_note(conn: &DbConnection, note_id: &str, decrypted_content: &str)
         "UPDATE encryption_status SET is_encrypted = ?, is_unlocked = ?, updated_at = ?
          WHERE item_id = ? AND item_type = ?",
         params![false, true, now_seconds, note_id, "note"],
-    )?;
+    ).await?;
 
     Ok(())
 }
 
 /// 标记项目为已解锁（会话级别）
-pub fn mark_item_unlocked(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<()> {
+pub async fn mark_item_unlocked(conn: &DbConnection, item_id: &str, item_type: &str) -> Result<()> {
     let now_seconds = Utc::now().timestamp();
     
     // 如果记录不存在，创建一个新记录
@@ -1232,13 +1345,13 @@ pub fn mark_item_unlocked(conn: &DbConnection, item_id: &str, item_type: &str) -
            is_unlocked = excluded.is_unlocked,
            updated_at = excluded.updated_at",
         params![status_id, item_type, item_id, false, true, now_seconds, now_seconds],
-    )?;
+    ).await?;
 
     Ok(())
 }
 
 /// 加密笔记本
-pub fn encrypt_notebook(conn: &DbConnection, notebook_id: &str) -> Result<()> {
+pub async fn encrypt_notebook(conn: &DbConnection, notebook_id: &str) -> Result<()> {
     let status_id = Uuid::new_v4().to_string();
     let now_seconds = Utc::now().timestamp();
     
@@ -1250,30 +1363,30 @@ pub fn encrypt_notebook(conn: &DbConnection, notebook_id: &str) -> Result<()> {
            is_unlocked = excluded.is_unlocked,
            updated_at = excluded.updated_at",
         params![status_id, "notebook", notebook_id, true, false, now_seconds, now_seconds],
-    )?;
+    ).await?;
 
     Ok(())
 }
 
 /// 解密笔记本
-pub fn decrypt_notebook(conn: &DbConnection, notebook_id: &str) -> Result<()> {
+pub async fn decrypt_notebook(conn: &DbConnection, notebook_id: &str) -> Result<()> {
     let now_seconds = Utc::now().timestamp();
     
     conn.execute(
         "UPDATE encryption_status SET is_encrypted = ?, is_unlocked = ?, updated_at = ?
          WHERE item_id = ? AND item_type = ?",
         params![false, true, now_seconds, notebook_id, "notebook"],
-    )?;
+    ).await?;
 
     Ok(())
 }
 
 /// 清除所有会话级别的解锁状态（应用重启时调用）
-pub fn clear_session_unlocks(conn: &DbConnection) -> Result<()> {
+pub async fn clear_session_unlocks(conn: &DbConnection) -> Result<()> {
     conn.execute(
         "UPDATE encryption_status SET is_unlocked = ? WHERE is_unlocked = ?",
         params![false, true],
-    )?;
+    ).await?;
     Ok(())
 }
 
@@ -1395,7 +1508,7 @@ pub struct ConflictResolution {
 // ===============================================
 
 // 初始化同步相关表结构
-pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
+pub async fn init_sync_schema(conn: &DbConnection) -> Result<()> {
     // 创建同步配置表
     conn.execute(
         "CREATE TABLE IF NOT EXISTS sync_config (
@@ -1410,8 +1523,8 @@ pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         )",
-        []
-    )?;
+        ()
+    ).await?;
 
     // 创建同步状态表
     conn.execute(
@@ -1426,8 +1539,8 @@ pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
             updated_at INTEGER NOT NULL,
             UNIQUE(table_name, record_id, operation)
         )",
-        []
-    )?;
+        ()
+    ).await?;
 
     // 创建数据版本表
     conn.execute(
@@ -1440,8 +1553,8 @@ pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
             created_at INTEGER NOT NULL,
             UNIQUE(table_name, record_id)
         )",
-        []
-    )?;
+        ()
+    ).await?;
 
     // 创建冲突解决表
     conn.execute(
@@ -1453,38 +1566,38 @@ pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
             resolved_by TEXT NOT NULL,
             created_at INTEGER NOT NULL
         )",
-        []
-    )?;
+        ()
+    ).await?;
 
     // 创建索引
     let _ = conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sync_status_table_record ON sync_status(table_name, record_id)",
-        []
-    );
+        ()
+    ).await?;
 
     let _ = conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_sync_status_status ON sync_status(sync_status)",
-        []
-    );
+        ()
+    ).await?;
 
     let _ = conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_data_versions_table_record ON data_versions(table_name, record_id)",
-        []
-    );
+        ()
+    ).await?;
 
     Ok(())
 }
 
 // 简化的同步配置管理（使用设置表）
-pub fn get_sync_config(conn: &DbConnection) -> Result<SyncConfig> {
+pub async fn get_sync_config(conn: &DbConnection) -> Result<SyncConfig> {
     // 尝试从设置表获取同步配置
-    let remote_url = get_setting(conn, "sync_remote_url")?;
-    let auth_token = get_setting(conn, "sync_auth_token")?;
-    let sync_mode_str = get_setting(conn, "sync_mode")?.unwrap_or_else(|| "OFFLINE".to_string());
-    let sync_interval_str = get_setting(conn, "sync_interval")?.unwrap_or_else(|| "300".to_string());
-    let last_sync_at_str = get_setting(conn, "sync_last_sync_at")?.unwrap_or_else(|| "0".to_string());
-    let is_online_str = get_setting(conn, "sync_is_online")?.unwrap_or_else(|| "false".to_string());
-    let auto_sync_enabled_str = get_setting(conn, "sync_auto_sync_enabled")?.unwrap_or_else(|| "true".to_string());
+    let remote_url = get_setting(conn, "sync_remote_url").await?;
+    let auth_token = get_setting(conn, "sync_auth_token").await?;
+    let sync_mode_str = get_setting(conn, "sync_mode").await?.unwrap_or_else(|| "OFFLINE".to_string());
+    let sync_interval_str = get_setting(conn, "sync_interval").await?.unwrap_or_else(|| "300".to_string());
+    let last_sync_at_str = get_setting(conn, "sync_last_sync_at").await?.unwrap_or_else(|| "0".to_string());
+    let is_online_str = get_setting(conn, "sync_is_online").await?.unwrap_or_else(|| "false".to_string());
+    let auto_sync_enabled_str = get_setting(conn, "sync_auto_sync_enabled").await?.unwrap_or_else(|| "true".to_string());
 
     let now = Utc::now().timestamp_millis();
     
@@ -1502,19 +1615,19 @@ pub fn get_sync_config(conn: &DbConnection) -> Result<SyncConfig> {
     })
 }
 
-pub fn save_sync_config(conn: &DbConnection, config: &SyncConfig) -> Result<()> {
+pub async fn save_sync_config(conn: &DbConnection, config: &SyncConfig) -> Result<()> {
     // 保存到设置表
     if let Some(ref remote_url) = config.remote_url {
-        save_setting(conn, "sync_remote_url", remote_url)?;
+        save_setting(conn, "sync_remote_url", remote_url).await?;
     }
     if let Some(ref auth_token) = config.auth_token {
-        save_setting(conn, "sync_auth_token", auth_token)?;
+        save_setting(conn, "sync_auth_token", auth_token).await?;
     }
-    save_setting(conn, "sync_mode", &config.sync_mode.to_string())?;
-    save_setting(conn, "sync_interval", &config.sync_interval.to_string())?;
-    save_setting(conn, "sync_last_sync_at", &config.last_sync_at.to_string())?;
-    save_setting(conn, "sync_is_online", &config.is_online.to_string())?;
-    save_setting(conn, "sync_auto_sync_enabled", &config.auto_sync_enabled.to_string())?;
+    save_setting(conn, "sync_mode", &config.sync_mode.to_string()).await?;
+    save_setting(conn, "sync_interval", &config.sync_interval.to_string()).await?;
+    save_setting(conn, "sync_last_sync_at", &config.last_sync_at.to_string()).await?;
+    save_setting(conn, "sync_is_online", &config.is_online.to_string()).await?;
+    save_setting(conn, "sync_auto_sync_enabled", &config.auto_sync_enabled.to_string()).await?;
     
     Ok(())
 }

@@ -46,9 +46,9 @@ pub async fn get_client_with_proxy(db_manager: &DbManager) -> Result<Client, Str
 
 // 内部函数：获取代理设置（不依赖AppHandle）
 pub async fn get_proxy_settings_internal(db_manager: &DbManager) -> Result<ProxySettings, String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
-    match db::get_setting(&conn, "proxy_settings") {
+    match db::get_setting(&conn, "proxy_settings").await {
         Ok(Some(settings_json)) => {
             serde_json::from_str(&settings_json).map_err(|e| e.to_string())
         }
@@ -74,9 +74,9 @@ pub async fn save_proxy_settings(
     db_manager: State<'_, DbManager>,
     proxy_settings: ProxySettings,
 ) -> Result<(), String> {
-    let conn = db_manager.get_conn().map_err(|e| e.to_string())?;
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let proxy_json = serde_json::to_string(&proxy_settings).map_err(|e| e.to_string())?;
-    db::save_setting(&conn, "proxy_settings", &proxy_json).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, "proxy_settings", &proxy_json).await.map_err(|e| e.to_string())?;
     Ok(())
 }
 
