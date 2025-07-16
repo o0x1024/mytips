@@ -2,6 +2,7 @@
 pub mod api;
 pub mod clipboard;
 pub mod db;
+// pub mod sync; // Temporarily disabled due to compilation errors
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
@@ -208,6 +209,15 @@ pub fn run() -> anyhow::Result<()> {
             api::database::select_database_file,
             api::database::create_new_database,
             api::database::reset_to_default_database,
+            // Remote connection testing
+            test_remote_connection,
+            // Simplified sync APIs
+            api::database::get_sync_config,
+            api::database::save_sync_config,
+            api::database::get_sync_status,
+            api::database::set_sync_mode,
+            api::database::manual_sync,
+            api::database::configure_remote_database,
         ])
         .build(tauri::generate_context!())?
         .run(|_app_handle, event| {

@@ -128,6 +128,9 @@ impl DbManager {
         
         // 可以在这里初始化默认数据
         init_default_roles(&conn)?;
+        
+        // 初始化同步相关表结构
+        init_sync_schema(&conn)?;
 
         Ok(Self { pool })
     }
@@ -363,6 +366,11 @@ fn init_schema(conn: &Connection) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// 公开的函数，用于创建数据库表结构
+pub fn create_tables(conn: &Connection) -> Result<()> {
+    init_schema(conn)
 }
 
 fn init_default_roles(conn: &Connection) -> Result<()> {
@@ -1270,6 +1278,246 @@ pub fn clear_session_unlocks(conn: &DbConnection) -> Result<()> {
 }
 
 // --- 加密相关方法结束 ---
+
+// ===============================================
+// 同步相关数据结构和方法
+// ===============================================
+
+// 同步模式枚举
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum SyncMode {
+    #[serde(rename = "OFFLINE")]
+    Offline,
+    #[serde(rename = "MANUAL")]
+    Manual,
+    #[serde(rename = "AUTO")]
+    Auto,
+}
+
+impl ToString for SyncMode {
+    fn to_string(&self) -> String {
+        match self {
+            SyncMode::Offline => "OFFLINE".to_string(),
+            SyncMode::Manual => "MANUAL".to_string(),
+            SyncMode::Auto => "AUTO".to_string(),
+        }
+    }
+}
+
+impl From<String> for SyncMode {
+    fn from(s: String) -> Self {
+        match s.to_uppercase().as_str() {
+            "AUTO" => SyncMode::Auto,
+            "MANUAL" => SyncMode::Manual,
+            _ => SyncMode::Offline,
+        }
+    }
+}
+
+// 同步状态枚举
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum SyncStatus {
+    Pending,
+    Synced,
+    Failed,
+    Conflict,
+}
+
+// 同步操作枚举
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum SyncOperation {
+    Insert,
+    Update,
+    Delete,
+}
+
+// 冲突解决策略
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum ConflictResolutionStrategy {
+    LocalWins,
+    RemoteWins,
+    Merge,
+    UserChoice,
+}
+
+// 同步配置结构
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncConfig {
+    pub id: String,
+    pub remote_url: Option<String>,
+    pub auth_token: Option<String>,
+    pub sync_mode: SyncMode,
+    pub sync_interval: i64,
+    pub last_sync_at: i64,
+    pub is_online: bool,
+    pub auto_sync_enabled: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+// 同步状态记录
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SyncStatusRecord {
+    pub id: String,
+    pub table_name: String,
+    pub record_id: String,
+    pub operation: SyncOperation,
+    pub sync_status: SyncStatus,
+    pub error_message: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+// 数据版本记录
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DataVersion {
+    pub id: String,
+    pub table_name: String,
+    pub record_id: String,
+    pub version: i64,
+    pub hash: String,
+    pub created_at: i64,
+}
+
+// 冲突解决记录
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConflictResolution {
+    pub id: String,
+    pub table_name: String,
+    pub record_id: String,
+    pub strategy: ConflictResolutionStrategy,
+    pub resolved_by: String,
+    pub created_at: i64,
+}
+
+// ===============================================
+// 同步相关数据库操作函数
+// ===============================================
+
+// 初始化同步相关表结构
+pub fn init_sync_schema(conn: &DbConnection) -> Result<()> {
+    // 创建同步配置表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_config (
+            id TEXT PRIMARY KEY DEFAULT 'default',
+            remote_url TEXT,
+            auth_token TEXT,
+            sync_mode TEXT DEFAULT 'OFFLINE',
+            sync_interval INTEGER DEFAULT 300,
+            last_sync_at INTEGER DEFAULT 0,
+            is_online BOOLEAN DEFAULT FALSE,
+            auto_sync_enabled BOOLEAN DEFAULT TRUE,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )",
+        []
+    )?;
+
+    // 创建同步状态表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sync_status (
+            id TEXT PRIMARY KEY,
+            table_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            sync_status TEXT DEFAULT 'PENDING',
+            error_message TEXT,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(table_name, record_id, operation)
+        )",
+        []
+    )?;
+
+    // 创建数据版本表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS data_versions (
+            id TEXT PRIMARY KEY,
+            table_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            hash TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            UNIQUE(table_name, record_id)
+        )",
+        []
+    )?;
+
+    // 创建冲突解决表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS conflict_resolutions (
+            id TEXT PRIMARY KEY,
+            table_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            strategy TEXT NOT NULL,
+            resolved_by TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        )",
+        []
+    )?;
+
+    // 创建索引
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_status_table_record ON sync_status(table_name, record_id)",
+        []
+    );
+
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sync_status_status ON sync_status(sync_status)",
+        []
+    );
+
+    let _ = conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_data_versions_table_record ON data_versions(table_name, record_id)",
+        []
+    );
+
+    Ok(())
+}
+
+// 简化的同步配置管理（使用设置表）
+pub fn get_sync_config(conn: &DbConnection) -> Result<SyncConfig> {
+    // 尝试从设置表获取同步配置
+    let remote_url = get_setting(conn, "sync_remote_url")?;
+    let auth_token = get_setting(conn, "sync_auth_token")?;
+    let sync_mode_str = get_setting(conn, "sync_mode")?.unwrap_or_else(|| "OFFLINE".to_string());
+    let sync_interval_str = get_setting(conn, "sync_interval")?.unwrap_or_else(|| "300".to_string());
+    let last_sync_at_str = get_setting(conn, "sync_last_sync_at")?.unwrap_or_else(|| "0".to_string());
+    let is_online_str = get_setting(conn, "sync_is_online")?.unwrap_or_else(|| "false".to_string());
+    let auto_sync_enabled_str = get_setting(conn, "sync_auto_sync_enabled")?.unwrap_or_else(|| "true".to_string());
+
+    let now = Utc::now().timestamp_millis();
+    
+    Ok(SyncConfig {
+        id: "default".to_string(),
+        remote_url,
+        auth_token,
+        sync_mode: SyncMode::from(sync_mode_str),
+        sync_interval: sync_interval_str.parse().unwrap_or(300),
+        last_sync_at: last_sync_at_str.parse().unwrap_or(0),
+        is_online: is_online_str.parse().unwrap_or(false),
+        auto_sync_enabled: auto_sync_enabled_str.parse().unwrap_or(true),
+        created_at: now,
+        updated_at: now,
+    })
+}
+
+pub fn save_sync_config(conn: &DbConnection, config: &SyncConfig) -> Result<()> {
+    // 保存到设置表
+    if let Some(ref remote_url) = config.remote_url {
+        save_setting(conn, "sync_remote_url", remote_url)?;
+    }
+    if let Some(ref auth_token) = config.auth_token {
+        save_setting(conn, "sync_auth_token", auth_token)?;
+    }
+    save_setting(conn, "sync_mode", &config.sync_mode.to_string())?;
+    save_setting(conn, "sync_interval", &config.sync_interval.to_string())?;
+    save_setting(conn, "sync_last_sync_at", &config.last_sync_at.to_string())?;
+    save_setting(conn, "sync_is_online", &config.is_online.to_string())?;
+    save_setting(conn, "sync_auto_sync_enabled", &config.auto_sync_enabled.to_string())?;
+    
+    Ok(())
+}
 
 // 获取数据库文件路径
 fn get_db_path(app_handle: &AppHandle) -> Result<PathBuf> {

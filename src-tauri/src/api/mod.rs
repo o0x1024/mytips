@@ -6,6 +6,7 @@ pub mod export;
 pub mod import;
 pub mod settings;
 pub mod shortcuts;
+// pub mod sync; // Temporarily disabled due to compilation errors
 pub mod tags;
 pub mod tips;
 pub mod updater;
@@ -21,6 +22,7 @@ pub use export::*;
 pub use import::*;
 pub use settings::*;
 pub use shortcuts::*;
+// pub use sync::*; // Temporarily disabled due to compilation errors
 pub use tags::*;
 pub use tips::*;
 pub use updater::*;
