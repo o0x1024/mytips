@@ -6,7 +6,7 @@
       <div class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-2 mt-2">
           <h2 class="text-lg font-semibold text-base-content">笔记</h2>
-          <div class="badge badge-outline">{{ filteredNotes.length }}</div>
+          <div class="badge badge-outline">{{ props.totalCount > 0 ? props.totalCount : filteredNotes.length }}</div>
         </div>
         <div class="flex items-center gap-1">
           <!-- 快速新建按钮 -->
@@ -73,7 +73,7 @@
       <div v-if="virtualizer" :style="{ height: `${totalSize}px`, width: '100%', position: 'relative' }">
         <div 
           v-for="virtualRow in virtualItems" 
-          :key="filteredNotes[virtualRow.index].id"
+          :key="filteredNotes[virtualRow.index]?.id || `index-${virtualRow.index}`"
           :data-index="virtualRow.index"
           :ref="el => virtualizer.measureElement(el as Element)"
           :style="{
@@ -115,7 +115,7 @@
         <span class="loading loading-spinner loading-sm"></span>
         <span class="ml-2 text-sm text-base-content/70">加载中...</span>
       </div>
-      <div v-if="!hasMore && filteredNotes.length > 0" class="text-center p-4 text-sm text-base-content/50">
+      <div v-if="!hasMoreTips && filteredNotes.length > 0" class="text-center p-4 text-sm text-base-content/50">
         没有更多笔记了
       </div>
 
@@ -406,6 +406,16 @@ const props = defineProps({
   selectedNotebookId: {
     type: String,
     default: ''
+  },
+  // 新增：从外部传入的笔记数据
+  tips: {
+    type: Array as () => TipSummary[],
+    default: () => []
+  },
+  // 新增：总笔记数量
+  totalCount: {
+    type: Number,
+    default: 0
   }
 })
 
@@ -414,7 +424,12 @@ const emit = defineEmits(['select-note', 'search', 'new-note', 'delete-note', 'e
 
 // Store
 const tipsStore = useTipsStore()
-const { tips, isLoading: loading, hasMore } = storeToRefs(tipsStore)
+const { isLoading: loading, hasMore } = storeToRefs(tipsStore)
+
+// 数据库状态管理
+import { useDatabaseStore } from '../stores/databaseStore'
+const databaseStore = useDatabaseStore()
+const { databaseChangeCounter } = storeToRefs(databaseStore)
 
 // 加密store
 const encryptionStore = useEncryptionStore()
@@ -469,9 +484,17 @@ const internalFilteredNotes = ref([] as Note[])
 
 // 笔记列表更新计算
 watch(
-  () => [tips.value, searchQuery.value, sortField.value, sortOrder.value],
+  () => [props.tips, searchQuery.value, sortField.value, sortOrder.value],
   () => {
-    let result: Note[] = [...tips.value].map(tip => ({ ...tip, isPinned: false }))
+    // 首先去重，避免重复的笔记ID
+    const uniqueTips = new Map<string, TipSummary>()
+    for (const tip of props.tips) {
+      if (tip.id && !uniqueTips.has(tip.id)) {
+        uniqueTips.set(tip.id, tip)
+      }
+    }
+    
+    let result: Note[] = Array.from(uniqueTips.values()).map(tip => ({ ...tip, isPinned: false }))
 
     // 本地搜索过滤（列表内搜索）
     if (searchQuery.value) {
@@ -525,8 +548,30 @@ watch(
   { deep: true }
 )
 
+// 监听数据库切换事件，触发列表刷新
+watch(databaseChangeCounter, (newCount, oldCount) => {
+  if (newCount > oldCount && newCount > 0) {
+    console.log('[NoteList] 检测到数据库切换/同步事件，触发数据刷新')
+    // 触发父组件的refresh事件
+    emit('refresh')
+  }
+})
+
 // 暴露给模板的计算属性
 const filteredNotes = computed(() => internalFilteredNotes.value)
+
+// 计算是否还有更多笔记
+const hasMoreTips = computed(() => {
+  // 如果选中了分类，检查分类浏览数据
+  if (props.selectedNotebookId && tipsStore.currentCategoryBrowse) {
+    const categoryData = tipsStore.currentCategoryBrowse
+    const currentTipsCount = (categoryData.featured_tip ? 1 : 0) + categoryData.tip_summaries.length
+    return currentTipsCount < categoryData.total_tips_count
+  }
+  
+  // 否则使用常规的hasMore
+  return hasMore.value
+})
 
 // 虚拟化
 const virtualizer = useVirtualizer(
@@ -792,8 +837,18 @@ const handleScroll = () => {
   const container = noteListContainer.value
   if (container) {
     const { scrollTop, scrollHeight, clientHeight } = container
-    if (scrollTop + clientHeight >= scrollHeight - 200 && !loading.value && hasMore.value) {
-      tipsStore.fetchTips()
+    if (scrollTop + clientHeight >= scrollHeight - 200 && !loading.value) {
+      // 如果选中了分类，使用分类的加载更多
+      if (props.selectedNotebookId && tipsStore.currentCategoryBrowse) {
+        const categoryData = tipsStore.currentCategoryBrowse
+        const currentTipsCount = (categoryData.featured_tip ? 1 : 0) + categoryData.tip_summaries.length
+        if (currentTipsCount < categoryData.total_tips_count) {
+          tipsStore.loadMoreCategoryTips(props.selectedNotebookId)
+        }
+      } else if (hasMore.value) {
+        // 否则使用常规的分页加载
+        tipsStore.fetchTips()
+      }
     }
   }
 }

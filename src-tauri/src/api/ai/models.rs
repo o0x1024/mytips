@@ -1,4 +1,4 @@
-use crate::{api::settings::get_client_with_proxy, db::DbManager};
+use crate::{api::settings::get_client_with_proxy, db::UnifiedDbManager};
 use base64::{engine::general_purpose, Engine as _};
 use futures::{Stream, StreamExt, FutureExt};
 use genai::{
@@ -27,7 +27,7 @@ pub struct CustomModel {
 pub async fn create_genai_client(
     api_key: String,
     model_id: &str,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
@@ -123,7 +123,7 @@ pub async fn send_message_to_ai(
     api_key: String,
     model_id: &str,
     message: String,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     // 创建genai客户端
     let client = create_genai_client(api_key, model_id, db_manager).await?;
@@ -156,7 +156,7 @@ pub async fn stream_message_from_ai(
     model_id: &str,
     message: String,
     custom_model_name: Option<&str>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
     println!("启动单消息流式请求: model={}", model_id);
 
@@ -222,7 +222,7 @@ pub async fn send_to_custom(
     api_key: String,
     endpoint: String,
     message: String,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     use serde_json::{json, Value};
 
@@ -280,7 +280,7 @@ pub async fn chat_with_history(
     api_key: String,
     model_id: &str,
     messages: Vec<ChatMessage>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     // 创建genai客户端
     let client = create_genai_client(api_key, model_id, db_manager).await?;
@@ -310,7 +310,7 @@ pub async fn stream_chat_with_history(
     model_id: &str,
     messages: Vec<ChatMessage>,
     custom_model_name: Option<&str>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
     println!(
         "启动对话历史流式请求: model={}, messages={}",
@@ -391,7 +391,7 @@ pub async fn stream_chat_with_history(
 pub async fn send_to_qwen(
     api_key: String,
     message: String,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     use serde_json::{json, Value};
 
@@ -442,7 +442,7 @@ pub async fn send_to_doubao(
     api_key: String,
     message: String,
     custom_model_name: Option<&str>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     use serde_json::{json, Value};
 
@@ -506,7 +506,7 @@ pub async fn send_message_with_images_to_ai(
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     let client = create_genai_client(api_key, model_id, db_manager).await?;
 
@@ -559,7 +559,7 @@ pub async fn stream_message_with_images_from_ai(
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
     custom_model_name: Option<&str>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
     let client = create_genai_client(api_key, model_id, db_manager).await?;
 
@@ -645,7 +645,7 @@ pub async fn create_custom_genai_client(
     model_name: String,
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
@@ -722,7 +722,7 @@ pub async fn send_message_to_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     message: String,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     // 创建自定义genai客户端
     let client = create_custom_genai_client(
@@ -758,7 +758,7 @@ pub async fn stream_message_from_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     message: String,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
     println!("启动自定义AI流式请求: endpoint={}, model={}", endpoint_url, model_name);
 
@@ -835,7 +835,7 @@ pub async fn stream_chat_with_history_custom_ai(
     adapter_type: String,
     custom_headers: Option<std::collections::HashMap<String, String>>,
     messages: Vec<ChatMessage>,
-    db_manager: &DbManager,
+    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
     println!(
         "启动自定义AI历史对话流式请求: endpoint={}, model={}, messages={}",

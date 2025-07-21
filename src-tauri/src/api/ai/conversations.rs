@@ -1,4 +1,4 @@
-use crate::db::DbManager;
+use crate::db::UnifiedDbManager;
 use chrono::Utc;
 use libsql::params;
 use serde::{Deserialize, Serialize};
@@ -20,12 +20,12 @@ pub struct Message {
     pub conversation_id: String,
     pub role: String,
     pub content: String,
-    pub timestamp: i64,
+    pub timestamp: i64, // 保持前端兼容性，仍使用timestamp字段名
 }
 
 #[tauri::command]
 pub async fn list_ai_conversations(
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<Conversation>, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let mut rows = conn
@@ -53,12 +53,12 @@ pub async fn list_ai_conversations(
 #[tauri::command]
 pub async fn list_ai_messages(
     conversation_id: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<Message>, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let mut rows = conn
         .query(
-            "SELECT id, conversation_id, role, content, timestamp FROM ai_messages WHERE conversation_id = ? ORDER BY timestamp ASC",
+            "SELECT id, conversation_id, role, content, created_at FROM ai_messages WHERE conversation_id = ? ORDER BY created_at ASC",
             params![conversation_id]
         )
         .await
@@ -71,7 +71,7 @@ pub async fn list_ai_messages(
             conversation_id: row.get::<String>(1).map_err(|e| e.to_string())?,
             role: row.get::<String>(2).map_err(|e| e.to_string())?,
             content: row.get::<String>(3).map_err(|e| e.to_string())?,
-            timestamp: row.get::<i64>(4).map_err(|e| e.to_string())?,
+            timestamp: row.get::<i64>(4).map_err(|e| e.to_string())?, // 从created_at读取但返回为timestamp
         });
     }
 
@@ -82,7 +82,7 @@ pub async fn list_ai_messages(
 pub async fn create_ai_conversation(
     title: String,
     model: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Conversation, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let now = Utc::now().timestamp_millis();
@@ -110,7 +110,7 @@ pub async fn create_ai_conversation(
 #[tauri::command]
 pub async fn delete_ai_conversation(
     conversation_id: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     conn.execute(
@@ -125,7 +125,7 @@ pub async fn delete_ai_conversation(
 #[tauri::command]
 pub async fn clear_ai_conversation(
     conversation_id: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     conn.execute(
@@ -141,7 +141,7 @@ pub async fn clear_ai_conversation(
 pub async fn update_ai_conversation_title(
     conversation_id: String,
     title: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let now = Utc::now().timestamp_millis();
@@ -159,7 +159,7 @@ pub async fn add_ai_message(
     conversation_id: String,
     role: String,
     content: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Message, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let now = Utc::now().timestamp_millis();
@@ -171,7 +171,7 @@ pub async fn add_ai_message(
         timestamp: now,
     };
     conn.execute(
-        "INSERT INTO ai_messages (id, conversation_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO ai_messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
         params![
             message.id.clone(),
             message.conversation_id.clone(),

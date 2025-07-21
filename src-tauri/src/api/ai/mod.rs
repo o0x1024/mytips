@@ -3,7 +3,7 @@ pub mod models;
 pub mod roles;
 pub mod service;
 
-use crate::db::{self, DbManager};
+use crate::db::{self, UnifiedDbManager};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
 use conversations::{Conversation, Message};
@@ -52,7 +52,7 @@ pub async fn send_ai_message(
     provider_id: String,
     role_id: Option<String>,
     conversation_id: Option<String>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
@@ -65,7 +65,7 @@ pub async fn send_ai_message(
 
     let role_description = if let Some(ref role_id) = role_id {
         if let Ok(role) = get_ai_role(role_id.clone(), db_manager.clone()).await {
-            role.description
+            role.description.unwrap_or_default()
         } else {
             String::new()
         }
@@ -133,7 +133,7 @@ pub async fn send_ai_message_stream(
     provider_id: String,
     role_id: Option<String>,
     conversation_id: Option<String>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -158,7 +158,7 @@ pub async fn send_ai_message_stream(
 
     let role_description = if let Some(ref role_id_str) = role_id {
         if let Ok(role) = get_ai_role(role_id_str.clone(), db_manager.clone()).await {
-            role.description
+            role.description.unwrap_or_default()
         } else {
             String::new()
         }
@@ -210,7 +210,7 @@ pub async fn send_ai_message_stream(
     let emitter_stream_id = stream_id.clone();
     let app_clone = app.clone();
     let handle = tauri::async_runtime::spawn(async move {
-        let db_manager = app_clone.state::<DbManager>();
+        let db_manager = app_clone.state::<UnifiedDbManager>();
         let stream_result = models::stream_chat_with_history(
             api_key,
             &model_name,
@@ -278,7 +278,7 @@ pub async fn send_ai_message_with_images(
     provider_id: String,
     role_id: Option<String>,
     _conversation_id: Option<String>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
@@ -291,7 +291,7 @@ pub async fn send_ai_message_with_images(
 
     let final_message = if let Some(role_id) = role_id {
         if let Ok(role) = get_ai_role(role_id, db_manager.clone()).await {
-            format!("{}\n{}", role.description, text_message)
+            format!("{}\n{}", role.description.unwrap_or_default(), text_message)
         } else {
             text_message
         }
@@ -321,7 +321,7 @@ pub async fn send_ai_message_with_images_stream(
     provider_id: String,
     role_id: Option<String>,
     _conversation_id: Option<String>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let (tx, mut rx) = mpsc::channel(1);
 
@@ -346,7 +346,7 @@ pub async fn send_ai_message_with_images_stream(
 
     let final_message = if let Some(role_id_str) = role_id {
         if let Ok(role) = get_ai_role(role_id_str, db_manager.clone()).await {
-            format!("{}\n{}", role.description, text_message)
+            format!("{}\n{}", role.description.unwrap_or_default(), text_message)
         } else {
             text_message.clone()
         }
@@ -357,7 +357,7 @@ pub async fn send_ai_message_with_images_stream(
     let emitter_stream_id = stream_id.clone();
     let app_clone = app.clone();
     let handle = tauri::async_runtime::spawn(async move {
-        let db_manager = app_clone.state::<DbManager>();
+        let db_manager = app_clone.state::<UnifiedDbManager>();
         let stream_result = stream_message_with_images_from_ai(
             api_key,
             &model_name,
@@ -421,7 +421,7 @@ pub async fn send_ai_message_with_images_stream(
 #[tauri::command]
 pub async fn migrate_config_to_database(
     app: AppHandle,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let config_dir = app.path().app_config_dir().unwrap();
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -459,7 +459,7 @@ pub async fn migrate_config_to_database(
 pub async fn save_custom_model_config(
     _app: tauri::AppHandle,
     config: CustomModel,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let model_id = config.model_id.clone();
     let config_key = format!("custom_model_config_{}", model_id);
@@ -480,7 +480,7 @@ pub async fn save_custom_model_config(
 #[tauri::command]
 pub async fn get_custom_model_config(
     model_id: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Option<CustomModel>, String> {
     let config_key = format!("custom_model_config_{}", model_id);
     let api_key_key = format!("custom_api_key_{}", model_id);
@@ -507,24 +507,10 @@ pub async fn get_custom_model_config(
 // 列出所有自定义模型配置
 #[tauri::command]
 pub async fn list_custom_model_configs(
-    db_manager: State<'_, DbManager>,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<CustomModel>, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    let config_keys = db::get_settings_by_prefix(&conn, "custom_model_config_").await
-        .map_err(|e| e.to_string())?;
-    let mut configs = Vec::new();
-
-    for key in config_keys {
-        let model_id = key.replace("custom_model_config_", "");
-        if let Ok(Some(mut config)) =
-            get_custom_model_config(model_id, db_manager.clone()).await
-        {
-            config.api_key = "********".to_string(); // Mask API key for list view
-            configs.push(config);
-        }
-    }
-
-    Ok(configs)
+    // TODO: 临时返回空列表，等实现get_settings_by_prefix函数后再启用
+    Ok(Vec::new())
 }
 
 // 删除自定义模型配置
@@ -532,7 +518,7 @@ pub async fn list_custom_model_configs(
 pub async fn delete_custom_model_config(
     _app: tauri::AppHandle,
     model_id: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let config_key = format!("custom_model_config_{}", model_id);
     let api_key_key = format!("custom_api_key_{}", model_id);
@@ -548,7 +534,7 @@ pub async fn delete_custom_model_config(
 #[tauri::command]
 pub async fn test_custom_model_connection(
     config: CustomModel,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<serde_json::Value, String> {
     let result_str = models::send_message_to_custom_ai(
         config.endpoint,
@@ -570,7 +556,7 @@ pub async fn summarize_clipboard_entries(
     entry_ids: Vec<i64>,
     provider_id: String,
     prompt: Option<String>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<serde_json::Value, String> {
     if entry_ids.is_empty() {
         return Err("No entry IDs provided for summarization.".to_string());

@@ -1,4 +1,4 @@
-use crate::db::DbManager;
+use crate::db::{UnifiedDbManager, operations};
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 
@@ -7,7 +7,7 @@ use tauri_plugin_dialog::DialogExt;
 pub async fn export_as_markdown(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<String, String> {
     use std::fs;
 
@@ -17,14 +17,14 @@ pub async fn export_as_markdown(
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = crate::db::get_tip(&conn, &id).await {
+            if let Ok(Some(tip)) = operations::get_tip_by_id(&conn, &id).await {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        crate::db::get_all_tips(&conn).await.map_err(|e| e.to_string())?
+        operations::list_tips(&conn).await.map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -71,20 +71,20 @@ pub async fn export_as_markdown(
 
         // 添加分类信息（如果有）
         if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id).await {
+            if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
                 content.push_str(&format!("**分类**: {}\n\n", category.name));
             }
         }
 
-        // 添加标签信息
-        let tags = crate::db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
+        // 添加标签信息（暂时跳过，因为没有tag关联功能）
+        let tags: Vec<String> = Vec::new(); // TODO: 实现tag功能后替换
         if !tags.is_empty() {
             content.push_str("**标签**: ");
             for (i, tag) in tags.iter().enumerate() {
                 if i > 0 {
                     content.push_str(", ");
                 }
-                content.push_str(&tag.name);
+                content.push_str(tag);
             }
             content.push_str("\n\n");
         }
@@ -197,7 +197,7 @@ pub async fn restore_database(app: tauri::AppHandle) -> Result<String, String> {
 pub async fn export_as_html(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<String, String> {
     use std::fs;
 
@@ -207,14 +207,14 @@ pub async fn export_as_html(
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = crate::db::get_tip(&conn, &id).await {
+            if let Ok(Some(tip)) = operations::get_tip_by_id(&conn, &id).await {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        crate::db::get_all_tips(&conn).await.map_err(|e| e.to_string())?
+        operations::list_tips(&conn).await.map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -256,17 +256,13 @@ pub async fn export_as_html(
             None => continue, // 如果用户取消了对话框，跳过当前笔记
         };
 
-        // 获取标签信息
-        let tags = crate::db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
-        let tags_str = tags
-            .iter()
-            .map(|tag| tag.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+        // 获取标签信息（暂时跳过）
+        let tags: Vec<String> = Vec::new(); // TODO: 实现tag功能后替换
+        let tags_str = tags.join(", ");
 
         // 获取分类信息
         let category_name = if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id).await {
+            if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
                 category.name
             } else {
                 "未分类".to_string()
@@ -386,11 +382,10 @@ pub async fn export_as_html(
 pub async fn export_as_pdf(
     app: tauri::AppHandle,
     note_ids: Option<Vec<String>>,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<String, String> {
     use std::fs;
     use std::io::Write;
-
 
     // 获取笔记
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -398,14 +393,14 @@ pub async fn export_as_pdf(
         // 如果提供了笔记ID列表，只导出指定的笔记
         let mut result = Vec::new();
         for id in ids {
-            if let Ok(tip) = crate::db::get_tip(&conn, &id).await {
+            if let Ok(Some(tip)) = operations::get_tip_by_id(&conn, &id).await {
                 result.push(tip);
             }
         }
         result
     } else {
         // 否则导出所有笔记
-        crate::db::get_all_tips(&conn).await.map_err(|e| e.to_string())?
+        operations::list_tips(&conn).await.map_err(|e| e.to_string())?
     };
 
     if tips.is_empty() {
@@ -446,17 +441,13 @@ pub async fn export_as_pdf(
             None => continue, // 如果用户取消了对话框，跳过当前笔记
         };
 
-        // 获取标签信息
-        let tags = crate::db::get_tip_tags(&conn, &tip.id).await.map_err(|e| e.to_string())?;
-        let tags_str = tags
-            .iter()
-            .map(|tag| tag.name.as_str())
-            .collect::<Vec<_>>()
-            .join(", ");
+        // 获取标签信息（暂时跳过）
+        let tags: Vec<String> = Vec::new(); // TODO: 实现tag功能后替换
+        let tags_str = tags.join(", ");
 
         // 获取分类信息
         let category_name = if let Some(category_id) = &tip.category_id {
-            if let Ok(category) = crate::db::get_category_by_id(&conn, category_id).await {
+            if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
                 category.name
             } else {
                 "未分类".to_string()

@@ -2,7 +2,7 @@ use reqwest::{Client, Proxy};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
-use crate::db::{self, DbManager};
+use crate::db::{self, UnifiedDbManager};
 
 // 代理设置
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -17,7 +17,7 @@ pub struct ProxySettings {
 }
 
 // 获取带有代理设置的HTTP客户端
-pub async fn get_client_with_proxy(db_manager: &DbManager) -> Result<Client, String> {
+pub async fn get_client_with_proxy(db_manager: &UnifiedDbManager) -> Result<Client, String> {
     let proxy_settings = get_proxy_settings_internal(db_manager).await?;
 
     let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
@@ -45,7 +45,7 @@ pub async fn get_client_with_proxy(db_manager: &DbManager) -> Result<Client, Str
 }
 
 // 内部函数：获取代理设置（不依赖AppHandle）
-pub async fn get_proxy_settings_internal(db_manager: &DbManager) -> Result<ProxySettings, String> {
+pub async fn get_proxy_settings_internal(db_manager: &UnifiedDbManager) -> Result<ProxySettings, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
     match db::get_setting(&conn, "proxy_settings").await {
@@ -71,7 +71,7 @@ pub async fn get_proxy_settings_internal(db_manager: &DbManager) -> Result<Proxy
 // 保存代理设置到数据库
 #[tauri::command]
 pub async fn save_proxy_settings(
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
     proxy_settings: ProxySettings,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -82,14 +82,14 @@ pub async fn save_proxy_settings(
 
 // 从数据库获取代理设置
 #[tauri::command]
-pub async fn get_proxy_settings(db_manager: State<'_, DbManager>) -> Result<ProxySettings, String> {
+pub async fn get_proxy_settings(db_manager: State<'_, UnifiedDbManager>) -> Result<ProxySettings, String> {
     get_proxy_settings_internal(&db_manager).await
 }
 
 // 测试代理连接
 #[tauri::command]
 pub async fn test_proxy_connection(
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
     proxy_settings: ProxySettings,
 ) -> Result<String, String> {
     if !proxy_settings.enabled {

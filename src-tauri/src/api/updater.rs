@@ -3,7 +3,7 @@ use tauri_plugin_updater::UpdaterExt;
 use tauri::Emitter;
 use std::time::Duration;
 use crate::api::settings::get_proxy_settings_internal;
-use crate::db::DbManager;
+use crate::db::UnifiedDbManager;
 
 
 #[derive(serde::Serialize)]
@@ -94,7 +94,7 @@ fn is_newer_version(current_version: &str, remote_version: &str) -> bool {
 /// 创建带有全局代理设置的更新器构建器
 async fn create_updater_builder_with_proxy(app: &tauri::AppHandle) -> Result<tauri_plugin_updater::UpdaterBuilder, String> {
     let mut updater_builder = app.updater_builder();
-    let db_manager = app.state::<DbManager>();
+    let db_manager = app.state::<UnifiedDbManager>();
     
     // 获取全局代理设置
     match get_proxy_settings_internal(db_manager.inner()).await {
@@ -272,7 +272,7 @@ pub async fn check_for_updates_no_signature(
         }
     } else {
         // 尝试使用全局代理设置
-        let db_manager = app.state::<DbManager>();
+        let db_manager = app.state::<UnifiedDbManager>();
         match get_proxy_settings_internal(db_manager.inner()).await {
             Ok(proxy_settings) => {
                 if proxy_settings.enabled {

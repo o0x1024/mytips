@@ -1,11 +1,21 @@
 use crate::clipboard::ClipboardSettings;
-use crate::db::{ClipboardHistory, DbManager, Tip, TipType};
+use crate::db::{UnifiedDbManager, models::{Tip, TipType}, operations};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use chrono::Utc;
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{Emitter, Manager, State};
+use tauri::{Emitter, Manager, AppHandle};
 use uuid::Uuid;
+use libsql::params;
+
+// 临时的剪贴板历史结构体
+#[derive(Serialize, Clone)]
+pub struct ClipboardHistory {
+    pub id: i64,
+    pub content: String,
+    pub source: Option<String>,
+    pub created_at: i64,
+}
 
 #[derive(Serialize)]
 pub struct ClipboardHistoryPage {
@@ -13,65 +23,157 @@ pub struct ClipboardHistoryPage {
     total: i64,
 }
 
+// 辅助函数：获取统一数据库管理器
+async fn get_unified_manager(app: &AppHandle) -> Result<UnifiedDbManager, String> {
+    if let Some(manager) = app.try_state::<UnifiedDbManager>() {
+        Ok((*manager.inner()).clone())
+    } else {
+        // 如果没有找到，尝试创建
+        UnifiedDbManager::new(app.clone()).await
+            .map_err(|e| format!("Failed to create unified manager: {}", e))
+    }
+}
+
 #[tauri::command]
 pub async fn get_clipboard_history(
-    db_manager: State<'_, DbManager>,
+    app: AppHandle,
     page: i64,
     page_size: i64,
     query: Option<String>,
 ) -> Result<ClipboardHistoryPage, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    let entries =
-        crate::db::get_clipboard_entries_paged(&conn, page, page_size, query.clone())
-            .await.map_err(|e| e.to_string())?;
-    let total = crate::db::get_clipboard_entries_count(&conn, query)
-        .await.map_err(|e| e.to_string())?;
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
+        .get_conn()
+        .await
+        .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
-    Ok(ClipboardHistoryPage {
-        entries,
-        total,
-    })
+    // 计算偏移量
+    let offset = page * page_size;
+    
+    // 获取总数和条目
+    let (total, entries) = if let Some(query) = query {
+        // 搜索模式
+        let search_query = format!("%{}%", query);
+        
+        // 获取总数
+        let mut total_rows = conn.query(
+            "SELECT COUNT(*) FROM clipboard_history WHERE content LIKE ?1",
+            params![search_query.clone()]
+        ).await.map_err(|e| format!("Failed to get total count: {}", e))?;
+        
+        let total: i64 = if let Some(row) = total_rows.next().await.map_err(|e| format!("Failed to read total: {}", e))? {
+            row.get(0).map_err(|e| format!("Failed to parse total: {}", e))?
+        } else {
+            0
+        };
+        
+        // 获取条目
+        let mut rows = conn.query(
+            "SELECT id, content, source, created_at FROM clipboard_history 
+             WHERE content LIKE ?1 
+             ORDER BY created_at DESC 
+             LIMIT ?2 OFFSET ?3",
+            params![search_query, page_size, offset]
+        ).await.map_err(|e| format!("Failed to query clipboard history: {}", e))?;
+        
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| format!("Failed to read row: {}", e))? {
+            entries.push(ClipboardHistory {
+                id: row.get(0).map_err(|e| format!("Failed to parse id: {}", e))?,
+                content: row.get(1).map_err(|e| format!("Failed to parse content: {}", e))?,
+                source: row.get(2).map_err(|e| format!("Failed to parse source: {}", e))?,
+                created_at: row.get(3).map_err(|e| format!("Failed to parse created_at: {}", e))?,
+            });
+        }
+        
+        (total, entries)
+    } else {
+        // 正常分页模式
+        // 获取总数
+        let mut total_rows = conn.query(
+            "SELECT COUNT(*) FROM clipboard_history",
+            ()
+        ).await.map_err(|e| format!("Failed to get total count: {}", e))?;
+        
+        let total: i64 = if let Some(row) = total_rows.next().await.map_err(|e| format!("Failed to read total: {}", e))? {
+            row.get(0).map_err(|e| format!("Failed to parse total: {}", e))?
+        } else {
+            0
+        };
+        
+        // 获取条目
+        let mut rows = conn.query(
+            "SELECT id, content, source, created_at FROM clipboard_history 
+             ORDER BY created_at DESC 
+             LIMIT ?1 OFFSET ?2",
+            params![page_size, offset]
+        ).await.map_err(|e| format!("Failed to query clipboard history: {}", e))?;
+        
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next().await.map_err(|e| format!("Failed to read row: {}", e))? {
+            entries.push(ClipboardHistory {
+                id: row.get(0).map_err(|e| format!("Failed to parse id: {}", e))?,
+                content: row.get(1).map_err(|e| format!("Failed to parse content: {}", e))?,
+                source: row.get(2).map_err(|e| format!("Failed to parse source: {}", e))?,
+                created_at: row.get(3).map_err(|e| format!("Failed to parse created_at: {}", e))?,
+            });
+        }
+        
+        (total, entries)
+    };
+
+    Ok(ClipboardHistoryPage { entries, total })
 }
 
 #[tauri::command]
 pub async fn get_clipboard_ids_for_last_days(
     days: u32,
-    db_manager: State<'_, DbManager>,
+    app: AppHandle,
 ) -> Result<Vec<i64>, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    crate::db::get_clipboard_entry_ids_by_days(&conn, days).await.map_err(|e| e.to_string())
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
+        .get_conn()
+        .await
+        .map_err(|e| format!("Failed to get db connection: {}", e))?;
+
+    // 计算N天前的时间戳（毫秒）
+    let now = Utc::now();
+    let days_ago = now - chrono::Duration::days(days as i64);
+    let cutoff_timestamp = days_ago.timestamp_millis();
+
+    let mut rows = conn.query(
+        "SELECT id FROM clipboard_history WHERE created_at >= ?1 ORDER BY created_at DESC",
+        params![cutoff_timestamp]
+    ).await.map_err(|e| e.to_string())?;
+
+    let mut ids = Vec::new();
+    while let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+        ids.push(row.get(0).map_err(|e| e.to_string())?);
+    }
+
+    Ok(ids)
 }
 
 #[tauri::command]
 pub async fn delete_clipboard_entries(
     ids: Vec<i64>,
-    db_manager: State<'_, DbManager>,
+    app: AppHandle,
 ) -> Result<(), String> {
-    let conn = db_manager
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::delete_clipboard_entries(&conn, &ids).await.map_err(|e| e.to_string())?;
-    Ok(())
-}
 
-#[tauri::command]
-pub async fn add_clipboard_entry(
-    content: String,
-    source: Option<String>,
-    db_manager: State<'_, DbManager>,
-) -> Result<(), String> {
-    if content.is_empty() {
-        return Err("Content cannot be empty".to_string());
+    for id in ids {
+        operations::delete_clipboard_entry(&conn, id).await
+            .map_err(|e| format!("Failed to delete clipboard entry {}: {}", id, e))?;
     }
 
-    let conn = db_manager
-        .get_conn()
-        .await
-        .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::add_clipboard_entry(&conn, &content, source.as_deref()).await.map_err(|e| e.to_string())?;
     Ok(())
 }
+
+
 
 #[tauri::command]
 pub async fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), String> {
@@ -92,30 +194,17 @@ pub async fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), Str
     println!("来源: {:?}", source);
 
     // 获取数据库连接
-    let db_manager: State<'_, DbManager> = app.state();
-    let conn = db_manager
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
-    // 检查是否已经存在相同内容
-    let content_exists = match crate::db::check_clipboard_entry_exists(&conn, &selected_text).await {
-        Ok(exists) => exists,
-        Err(e) => {
-            eprintln!("检查剪贴板内容是否存在失败: {}", e);
-            false // 如果检查失败，继续尝试添加
-        }
-    };
-
-    if content_exists {
-        println!("相同内容已存在，跳过添加");
-        return Ok(());
-    }
-
     // 添加到数据库
-    if let Err(e) = crate::db::add_clipboard_entry(&conn, &selected_text, source.as_deref()).await {
-        return Err(format!("添加到临时笔记区失败: {}", e));
-    }
+    operations::add_clipboard_entry(&conn, &selected_text, source.as_deref()).await
+        .map_err(|e| format!("Failed to add selection to clipboard: {}", e))?;
+
+    println!("选中文本已添加到临时笔记区");
 
     // 通知前端更新
     let app_handle = app.clone();
@@ -130,57 +219,89 @@ pub async fn add_selection_to_clipboard(app: tauri::AppHandle) -> Result<(), Str
 #[tauri::command]
 pub async fn create_note_from_history(
     ids: Vec<i64>,
-    db_manager: State<'_, DbManager>,
+    app: AppHandle,
 ) -> Result<serde_json::Value, String> {
     if ids.is_empty() {
         return Err("No clipboard entries selected".to_string());
     }
 
-    let conn = db_manager
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    let entries = crate::db::get_all_clipboard_entries(&conn).await.map_err(|e| e.to_string())?;
 
-    let selected_entries: Vec<_> = entries
-        .into_iter()
-        .filter(|e| ids.contains(&e.id))
-        .collect();
-    if selected_entries.is_empty() {
-        return Err("No valid clipboard entries found".to_string());
+    // 获取选中的剪贴板条目内容
+    let mut contents = Vec::new();
+    for id in &ids {
+        let mut rows = conn.query(
+            "SELECT content, source, created_at FROM clipboard_history WHERE id = ?1",
+            params![id]
+        ).await.map_err(|e| e.to_string())?;
+
+        if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
+            let content: String = row.get(0).map_err(|e| e.to_string())?;
+            let source: Option<String> = row.get(1).map_err(|e| e.to_string())?;
+            let created_at: i64 = row.get(2).map_err(|e| e.to_string())?;
+            
+            let formatted_content = if let Some(src) = source {
+                format!("{}\n\n---\n来源：{}\n时间：{}", 
+                    content, 
+                    src, 
+                    chrono::DateTime::from_timestamp_millis(created_at)
+                        .unwrap_or_default()
+                        .format("%Y-%m-%d %H:%M:%S")
+                )
+            } else {
+                format!("{}\n\n---\n时间：{}", 
+                    content,
+                    chrono::DateTime::from_timestamp_millis(created_at)
+                        .unwrap_or_default()
+                        .format("%Y-%m-%d %H:%M:%S")
+                )
+            };
+            contents.push(formatted_content);
+        }
     }
 
-    let content = selected_entries
-        .iter()
-        .map(|e| {
-            if let Some(ref source) = e.source {
-                format!("// 来源: {}\n{}\n\n", source, e.content)
-            } else {
-                format!("{}\n\n", e.content)
-            }
-        })
-        .collect::<String>();
+    if contents.is_empty() {
+        return Err("No content found for selected entries".to_string());
+    }
 
+    // 合并内容
+    let combined_content = contents.join("\n\n---\n\n");
+    let title = if contents.len() == 1 {
+        "来自临时笔记的内容".to_string()
+    } else {
+        format!("来自临时笔记的内容 ({} 项)", contents.len())
+    };
+
+    let now = Utc::now().timestamp_millis();
     let tip = Tip {
         id: Uuid::new_v4().to_string(),
-        title: "来自临时笔记的内容".to_string(),
-        content,
+        title: title.clone(),
+        content: combined_content.clone(),
         tip_type: TipType::Markdown,
         language: None,
         category_id: None,
-        created_at: chrono::Utc::now().timestamp(),
-        updated_at: chrono::Utc::now().timestamp(),
+        created_at: now,
+        updated_at: now,
+        version: Some(1),
+        last_synced_at: Some(0),
+        sync_hash: None,
+        is_encrypted: Some(false),
+        encryption_key_id: None,
+        encrypted_content: None,
     };
 
-    crate::db::save_tip(&conn, tip).await
-        .map_err(|e| e.to_string())
-        .map(|t| {
-            serde_json::json!({
-                "id": t.id,
-                "title": t.title,
-                "content": t.content
-            })
-        })
+    operations::create_tip(&conn, &tip).await
+        .map_err(|e| e.to_string())?;
+    
+    Ok(serde_json::json!({
+        "id": tip.id,
+        "title": tip.title,
+        "content": combined_content
+    }))
 }
 
 #[tauri::command]
@@ -192,39 +313,57 @@ pub async fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<()
 
 #[tauri::command]
 pub async fn get_clipboard_settings(
-    db_manager: State<'_, DbManager>,
+    app: AppHandle,
 ) -> Result<ClipboardSettings, String> {
-    let conn = db_manager
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
-    match crate::db::get_setting(&conn, "clipboard_settings").await {
-        Ok(Some(settings_json)) => ClipboardSettings::from_json(&settings_json),
-        Ok(None) => {
-            // 返回默认设置
+    match crate::db::operations::get_setting(&conn, "clipboard_settings").await {
+        Ok(Some(settings_str)) => {
+            match ClipboardSettings::from_json(&settings_str) {
+                Ok(settings) => Ok(settings),
+                Err(e) => {
+                    eprintln!("Failed to parse clipboard settings: {}", e);
+                    Ok(ClipboardSettings::default())
+                }
+            }
+        },
+        Ok(None) => Ok(ClipboardSettings::default()),
+        Err(e) => {
+            eprintln!("Failed to get clipboard settings: {}", e);
             Ok(ClipboardSettings::default())
         }
-        Err(e) => Err(format!("获取剪贴板设置失败: {}", e)),
     }
 }
 
 #[tauri::command]
 pub async fn save_clipboard_settings(
+    app: AppHandle,
     settings: ClipboardSettings,
-    db_manager: State<'_, DbManager>,
 ) -> Result<(), String> {
-    let conn = db_manager
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
 
-    // 序列化设置
-    let settings_json = settings.to_json()?;
+    let settings_str = settings.to_json()
+        .map_err(|e| format!("Failed to serialize clipboard settings: {}", e))?;
 
-    // 保存到数据库
-    crate::db::save_setting(&conn, "clipboard_settings", &settings_json).await
-        .map_err(|e| format!("保存剪贴板设置失败: {}", e))
+    crate::db::operations::save_setting(&conn, "clipboard_settings", &settings_str).await
+        .map_err(|e| format!("Failed to save clipboard settings: {}", e))?;
+
+    // 同时更新监听状态
+    if settings.enable_monitoring {
+        crate::clipboard::MONITORING_ENABLED.store(true, std::sync::atomic::Ordering::SeqCst);
+    } else {
+        crate::clipboard::MONITORING_ENABLED.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    Ok(())
 }
 
 #[cfg(desktop)]
@@ -234,12 +373,18 @@ pub async fn clean_expired_clipboard_entries(app: tauri::AppHandle) -> Result<()
     Ok(())
 }
 
-// 新增清除所有临时笔记的函数
+// 清除所有临时笔记的函数
 #[tauri::command]
-pub async fn clear_all_clipboard_entries(db_manager: State<'_, DbManager>) -> Result<(), String> {
-    let conn = db_manager
+pub async fn clear_all_clipboard_entries(app: AppHandle) -> Result<(), String> {
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager
         .get_conn()
         .await
         .map_err(|e| format!("Failed to get db connection: {}", e))?;
-    crate::db::clear_all_clipboard_entries(&conn).await.map_err(|e| format!("清除所有临时笔记失败: {}", e))
+
+    conn.execute("DELETE FROM clipboard_history", ())
+        .await
+        .map_err(|e| format!("Failed to clear clipboard history: {}", e))?;
+
+    Ok(())
 }

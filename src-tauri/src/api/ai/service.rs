@@ -1,5 +1,5 @@
 use crate::api::settings::get_client_with_proxy;
-use crate::db::{self, DbManager};
+use crate::db::{self, UnifiedDbManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, Manager, State};
@@ -97,7 +97,7 @@ pub struct ModelConfig {
 #[tauri::command]
 pub async fn test_ai_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     match request.provider.as_str() {
         "openai" => test_openai_connection(request, db_manager).await,
@@ -114,7 +114,7 @@ pub async fn test_ai_connection(
 
 async fn test_openai_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
     let api_base = request
@@ -161,7 +161,7 @@ async fn test_openai_connection(
 
 async fn test_anthropic_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
     let api_base = request
@@ -221,7 +221,7 @@ async fn test_anthropic_connection(
 
 async fn test_gemini_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
 
@@ -255,7 +255,7 @@ async fn test_gemini_connection(
 
 async fn test_deepseek_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
     let api_base = request
@@ -304,7 +304,7 @@ async fn test_deepseek_connection(
 
 async fn test_ali_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let _api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
 
@@ -325,7 +325,7 @@ async fn test_ali_connection(
 
 async fn test_doubao_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let client = get_client_with_proxy(&db_manager).await?;
     let response = client
@@ -358,7 +358,7 @@ async fn test_doubao_connection(
 
 async fn test_xai_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
     let api_base = request
@@ -408,7 +408,7 @@ async fn test_xai_connection(
 
 async fn test_custom_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     if request.api_base.is_none() {
         return Err("自定义API端点未设置".to_string());
@@ -559,7 +559,7 @@ pub async fn get_ai_embedding_models(
 #[tauri::command]
 pub async fn get_default_ai_model(
     model_type: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Option<ModelInfo>, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
@@ -598,7 +598,7 @@ pub async fn set_default_ai_model(
     model_type: String,
     provider: String,
     model_name: String,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
@@ -618,7 +618,7 @@ pub async fn set_default_ai_model(
 // 获取AI配置
 #[tauri::command]
 pub async fn get_ai_config(
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Option<AiConfigResponse>, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
@@ -638,7 +638,7 @@ pub async fn get_ai_config(
 #[tauri::command]
 pub async fn save_ai_config(
     config: SaveAiConfigRequest,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
     app: AppHandle,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -702,7 +702,7 @@ pub async fn get_ai_usage_stats(
 #[tauri::command]
 pub async fn reload_ai_services(
     app: AppHandle,
-    db_manager: State<'_, DbManager>,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 

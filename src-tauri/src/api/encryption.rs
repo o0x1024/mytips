@@ -1,4 +1,4 @@
-use crate::db::{self, DbManager};
+use crate::db::{UnifiedDbManager, operations};
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
@@ -127,185 +127,92 @@ fn verify_password(encrypted_json: &str, password: &str) -> bool {
 
 // Tauri命令实现
 
-/// 获取所有加密状态
+// TODO: 加密功能暂时禁用，等相关数据库操作实现后再启用
+
+/// 获取所有加密状态 - 临时禁用
 #[tauri::command]
 pub async fn get_encryption_statuses(
-    db_manager: State<'_, DbManager>,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<EncryptionStatus>, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    match db::get_encryption_statuses(&conn).await {
-        Ok(statuses) => Ok(statuses),
-        Err(e) => Err(format!("获取加密状态失败: {}", e)),
-    }
+    // TODO: 临时返回空列表，等加密功能实现后再启用
+    Ok(Vec::new())
 }
 
-/// 加密笔记
+/// 加密笔记 - 临时禁用
 #[tauri::command]
 pub async fn encrypt_note(
-    note_id: String,
-    password: String,
-    db_manager: State<'_, DbManager>,
+    _note_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    let note = match db::get_tip(&conn, &note_id).await {
-        Ok(note) => note,
-        Err(e) => return Err(format!("获取笔记失败: {}", e)),
-    };
-    
-    if db::is_item_encrypted(&conn, &note_id, "note").await.unwrap_or(false) {
-        return Err("笔记已经加密".to_string());
-    }
-    
-    let encrypted_content = match encrypt_data(&note.content, &password) {
-        Ok(content) => content,
-        Err(e) => return Err(format!("加密失败: {}", e)),
-    };
-    
-    match db::encrypt_note(&conn, &note_id, &encrypted_content).await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("保存加密笔记失败: {}", e)),
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 解密笔记
+/// 解密笔记 - 临时禁用
 #[tauri::command]
 pub async fn decrypt_note(
-    note_id: String,
-    password: String,
-    db_manager: State<'_, DbManager>,
+    _note_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    let note = match db::get_tip(&conn, &note_id).await {
-        Ok(note) => note,
-        Err(e) => return Err(format!("获取笔记失败: {}", e)),
-    };
-    
-    if !db::is_item_encrypted(&conn, &note_id, "note").await.unwrap_or(false) {
-        return Err("笔记未加密".to_string());
-    }
-    
-    let decrypted_content = match decrypt_data(&note.content, &password) {
-        Ok(content) => content,
-        Err(e) => return Err(format!("解密失败: {}", e)),
-    };
-    
-    match db::decrypt_note(&conn, &note_id, &decrypted_content).await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("保存解密笔记失败: {}", e)),
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 解锁笔记（临时解密，不改变加密状态）
+/// 解锁笔记 - 临时禁用
 #[tauri::command]
 pub async fn unlock_note(
-    note_id: String,
-    password: String,
-    db_manager: State<'_, DbManager>,
+    _note_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    let note = match db::get_tip(&conn, &note_id).await {
-        Ok(note) => note,
-        Err(e) => return Err(format!("获取笔记失败: {}", e)),
-    };
-    
-    if !db::is_item_encrypted(&conn, &note_id, "note").await.unwrap_or(false) {
-        return Err("笔记未加密".to_string());
-    }
-    
-    if verify_password(&note.content, &password) {
-        match db::mark_item_unlocked(&conn, &note_id, "note").await {
-            Ok(_) => Ok(true),
-            Err(e) => Err(format!("标记解锁状态失败: {}", e)),
-        }
-    } else {
-        Err("密码错误".to_string())
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 加密笔记本
+/// 加密笔记本 - 临时禁用
 #[tauri::command]
 pub async fn encrypt_notebook(
-    notebook_id: String,
-    password: String, // 密码参数暂时未使用，但保留以备将来使用
-    db_manager: State<'_, DbManager>,
+    _notebook_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-
-    // 为了简单起见，我们只是在数据库中标记笔记本为加密状态
-    // 实际应用中可能需要加密笔记本的元数据或所有相关笔记
-    if db::is_item_encrypted(&conn, &notebook_id, "notebook").await.unwrap_or(false) {
-        return Err("笔记本已经加密".to_string());
-    }
-
-    match db::encrypt_notebook(&conn, &notebook_id).await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("加密笔记本失败: {}", e)),
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 解密笔记本
+/// 解密笔记本 - 临时禁用
 #[tauri::command]
 pub async fn decrypt_notebook(
-    notebook_id: String,
-    password: String, // 密码参数暂时未使用
-    db_manager: State<'_, DbManager>,
+    _notebook_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    if !db::is_item_encrypted(&conn, &notebook_id, "notebook").await.unwrap_or(false) {
-        return Err("笔记本未加密".to_string());
-    }
-
-    // 这里假设密码验证成功，实际应用中需要验证
-    match db::decrypt_notebook(&conn, &notebook_id).await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("解密笔记本失败: {}", e)),
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 解锁笔记本
+/// 解锁笔记本 - 临时禁用
 #[tauri::command]
 pub async fn unlock_notebook(
-    notebook_id: String,
-    password: String,
-    db_manager: State<'_, DbManager>,
+    _notebook_id: String,
+    _password: String,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-
-    if !db::is_item_encrypted(&conn, &notebook_id, "notebook").await.unwrap_or(false) {
-        return Err("笔记本未加密".to_string());
-    }
-
-    // 假设密码验证成功
-    match db::mark_item_unlocked(&conn, &notebook_id, "notebook").await {
-        Ok(_) => Ok(true),
-        Err(e) => Err(format!("解锁笔记本失败: {}", e)),
-    }
+    Err("加密功能暂未实现".to_string())
 }
 
-/// 获取已解锁笔记的内容
+/// 获取已解锁笔记的内容 - 临时禁用
 #[tauri::command]
 pub async fn get_unlocked_note_content(
     note_id: String,
-    password: String,
-    db_manager: State<'_, DbManager>,
+    _password: String,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<String, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     
-    let note = match db::get_tip(&conn, &note_id).await {
-        Ok(note) => note,
-        Err(e) => return Err(format!("获取笔记失败: {}", e)),
-    };
+    // 临时直接返回笔记内容，不处理加密
+    let note = operations::get_tip_by_id(&conn, &note_id).await
+        .map_err(|e| format!("获取笔记失败: {}", e))?
+        .ok_or("笔记不存在")?;
     
-    if !db::is_item_encrypted(&conn, &note_id, "note").await.unwrap_or(false) {
-        return Ok(note.content);
-    }
-    
-    decrypt_data(&note.content, &password).map_err(|e| e.to_string())
+    Ok(note.content)
 }
 
 /// 加密任意数据
@@ -317,15 +224,13 @@ pub async fn encrypt_data_cmd(
     encrypt_data(&data, &password).map_err(|e| e.to_string())
 }
 
-/// 清除会话解锁状态
+/// 清除会话解锁状态 - 临时禁用
 #[tauri::command]
 pub async fn clear_session_unlocks(
-    db_manager: State<'_, DbManager>,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<bool, String> {
-    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    db::clear_session_unlocks(&conn).await
-        .map(|_| true)
-        .map_err(|e| format!("清除会话解锁状态失败: {}", e))
+    // TODO: 临时禁用，等加密功能实现后再启用
+    Ok(true)
 }
 
 #[cfg(test)]

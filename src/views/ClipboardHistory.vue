@@ -491,7 +491,6 @@ let unlisten: (() => void) | null = null;
 // 设置事件监听器
 async function setupEventListeners() {
   unlisten = await listen('new-clipboard-entry', async () => {
-    console.log('New clipboard entry detected, refreshing history...');
     if (currentPage.value === 1) {
       await fetchHistory();
     }
@@ -509,7 +508,7 @@ function removeEventListeners() {
 const fetchHistory = async () => {
   try {
     const result = await invoke<ClipboardHistoryPage>('get_clipboard_history', {
-      page: currentPage.value,
+      page: currentPage.value - 1, // 前端页码从1开始，后端从0开始，所以需要减1
       pageSize: pageSize,
       query: searchQuery.value || null,
     });
@@ -874,12 +873,10 @@ onMounted(async () => {
 });
 
 onActivated(async () => {
-  console.log('ClipboardHistory组件被激活');
   await fetchHistory();
 });
 
 onDeactivated(() => {
-  console.log('ClipboardHistory组件被停用');
 });
 
 onUnmounted(() => {

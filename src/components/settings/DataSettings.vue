@@ -7,8 +7,7 @@
     </div>
     
     <template v-else>
-
-              <!-- 数据库配置卡片 -->
+      <!-- 数据库配置卡片 -->
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
           <h2 class="card-title text-primary mb-4">
@@ -18,104 +17,107 @@
             数据库配置
           </h2>
 
-          <!-- 数据库类型选择 -->
+          <!-- 数据库模式选择 -->
           <div class="form-control mb-6">
             <label class="label">
-              <span class="label-text font-medium">数据库类型</span>
+              <span class="label-text font-medium">数据库模式</span>
+              <span v-if="isLoadingStatus" class="loading loading-spinner loading-sm"></span>
             </label>
-            <div class="flex gap-4">
-              <label class="label cursor-pointer gap-3">
-                <input 
-                  type="radio" 
-                  name="database-type" 
-                  class="radio radio-primary" 
-                  value="local"
-                  v-model="databaseType"
-                />
-                <span class="label-text">本地数据库（默认）</span>
-              </label>
-              <label class="label cursor-pointer gap-3">
-                <input 
-                  type="radio" 
-                  name="database-type" 
-                  class="radio radio-primary" 
-                  value="remote"
-                  v-model="databaseType"
-                />
-                <span class="label-text">远程数据库</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 本地数据库信息 -->
-          <div v-if="databaseType === 'local'" class="space-y-4">
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">当前数据库路径</span>
-              </label>
-              <div class="join">
-                <input 
-                  type="text" 
-                  :value="currentDatabasePath" 
-                  readonly 
-                  class="input input-bordered join-item flex-1 bg-base-200"
-                  :title="currentDatabasePath"
-                />
-                <button 
-                  class="btn btn-outline join-item" 
-                  @click="copyDatabasePath"
-                  title="复制路径"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                </button>
+            
+            <!-- 当前模式状态 -->
+            <div v-if="databaseStatus" class="alert mb-4">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">📊</span>
+                <div>
+                  <div class="font-semibold">
+                    当前模式: {{ availableModes.find(m => m.value === currentDatabaseMode)?.label || currentDatabaseMode }}
+                  </div>
+                  <div class="text-sm opacity-70">
+                    {{ availableModes.find(m => m.value === currentDatabaseMode)?.description }}
+                  </div>
+                </div>
+              </div>
+              <div class="flex gap-2 ml-auto">
+                <div class="badge" :class="databaseStatus.is_connected ? 'badge-success' : 'badge-error'">
+                  {{ databaseStatus.is_connected ? '已连接' : '未连接' }}
+                </div>
+                <div v-if="databaseStore.supportsSync" 
+                     class="badge" 
+                     :class="databaseStatus?.sync_status?.is_online ? 'badge-primary' : 'badge-warning'">
+                  {{ databaseStatus?.sync_status?.is_online ? '同步可用' : '同步离线' }}
+                </div>
               </div>
             </div>
 
+            <!-- 模式选择卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div v-for="mode in availableModes.filter(m => m.supported)" 
+                   :key="mode.value"
+                   class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-all"
+                   :class="{ 'border-2 border-primary': currentDatabaseMode === mode.value }"
+                   @click="() => currentDatabaseMode === mode.value ? null : switchDatabaseMode(mode.value)">
+                <div class="card-body p-4">
+                  <div class="flex items-center gap-3">
+                    <div class="flex-1">
+                      <h3 class="font-semibold">{{ mode.label }}</h3>
+                      <p class="text-sm opacity-70">{{ mode.description }}</p>
+                    </div>
+                    <div v-if="currentDatabaseMode === mode.value" class="badge badge-primary">当前</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 快速操作按钮 -->
             <div class="flex gap-2 flex-wrap">
               <button 
-                class="btn btn-sm btn-outline" 
-                @click="selectDatabaseFile"
-                :disabled="isOperationInProgress"
-              >
-                选择数据库文件
+                v-if="currentDatabaseMode !== 'embedded_replica' && hasRemoteConfig"
+                class="btn btn-primary btn-sm"
+                @click="switchToEmbeddedReplicaMode"
+                :disabled="isOperationInProgress">
+                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+                切换到嵌入式副本模式（推荐）
               </button>
+              
               <button 
-                class="btn btn-sm btn-outline btn-secondary" 
-                @click="createNewDatabase"
-                :disabled="isOperationInProgress"
-              >
-                创建新数据库
+                v-if="databaseStore.supportsSync"
+                class="btn btn-outline btn-sm"
+                @click="performDatabaseSync"
+                :disabled="isOperationInProgress">
+                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+                立即同步
               </button>
+              
               <button 
-                class="btn btn-sm btn-outline btn-info" 
-                @click="resetToDefaultDatabase"
-                :disabled="isOperationInProgress"
-              >
-                重置为默认位置
+                class="btn btn-outline btn-sm"
+                @click="testCurrentDatabaseConnection"
+                :disabled="isOperationInProgress">
+                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+                测试连接
               </button>
-            </div>
-
-            <!-- 数据库信息显示 -->
-            <div v-if="databaseInfo" class="stats shadow bg-base-200">
-              <div class="stat">
-                <div class="stat-title">文件大小</div>
-                <div class="stat-value text-sm">{{ databaseInfo.size }}</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">笔记数量</div>
-                <div class="stat-value text-sm">{{ databaseInfo.noteCount }}</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">分类数量</div>
-                <div class="stat-value text-sm">{{ databaseInfo.categoryCount }}</div>
-              </div>
+              
+              <button 
+                v-if="currentDatabaseMode === 'embedded_replica' || currentDatabaseMode === 'local'"
+                class="btn btn-outline btn-info btn-sm"
+                @click="optimizeDatabaseWAL"
+                :disabled="isOperationInProgress">
+                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+                优化WAL文件
+              </button>
+              
+              <button 
+                v-if="currentDatabaseMode === 'local'"
+                class="btn btn-outline btn-warning btn-sm"
+                @click="cleanupLocalDatabaseFiles"
+                :disabled="isOperationInProgress">
+                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+                清理数据库文件
+              </button>
             </div>
           </div>
 
           <!-- 远程数据库配置 -->
-          <div v-else class="space-y-4">
+          <div class="space-y-4">
             <div class="form-control">
               <label class="label">
                 <span class="label-text">远程数据库URL</span>
@@ -135,13 +137,16 @@
 
             <div class="form-control">
               <label class="label">
-                <span class="label-text">认证令牌（可选）</span>
+                <span class="label-text">认证令牌</span>
+                <span v-if="isLocalDevUrl" class="label-text-alt text-info">
+                  (本地环境可选)
+                </span>
               </label>
               <div class="join">
                 <input 
                   :type="showSyncToken ? 'text' : 'password'"
                   v-model="syncConfig.auth_token" 
-                  placeholder="输入认证令牌（可留空）"
+                  :placeholder="isLocalDevUrl ? '本地开发环境可以为空' : '输入认证令牌'"
                   class="input input-bordered join-item flex-1"
                   :disabled="isOperationInProgress"
                   v-if="syncConfig"
@@ -160,303 +165,84 @@
                   </svg>
                 </button>
               </div>
-              <label class="label">
-                <span class="label-text-alt">认证令牌可选，部分数据库配置可能不需要</span>
-              </label>
             </div>
 
             <div class="flex gap-2">
               <button 
                 class="btn btn-primary btn-sm" 
-                @click="testSyncConnection"
+                @click="testAndSaveRemoteConfig"
                 :disabled="!canTestSync || isTestingSync"
               >
                 <span v-if="isTestingSync" class="loading loading-spinner loading-sm mr-2"></span>
-                {{ isTestingSync ? '测试中...' : '测试连接' }}
-              </button>
-              <button 
-                class="btn btn-success btn-sm" 
-                @click="setupRemoteDatabase"
-                :disabled="!canTestSync || isOperationInProgress"
-              >
-                <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                {{ isOperationInProgress ? '设置中...' : '设置远程数据库' }}
+                {{ isTestingSync ? '测试中...' : '测试并保存配置' }}
               </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 数据同步模式卡片 -->
-      <div class="card bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h2 class="card-title text-primary mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            数据同步模式
-          </h2>
-
-          <!-- 同步状态显示 -->
-          <div v-if="databaseType === 'remote'" class="alert mb-6" :class="{
-            'alert-success': syncStatus.is_enabled && syncStatus.is_online,
-            'alert-error': syncStatus.is_enabled && !syncStatus.is_online,
-            'alert-info': !syncStatus.is_enabled
-          }">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div>
-              <h3 class="font-bold">
-                {{ syncStatus.is_enabled ? (syncStatus.is_online ? '远程数据库已连接' : '远程数据库连接失败') : '远程数据库未配置' }}
-              </h3>
-              <div v-if="syncStatus.stats" class="text-sm mt-1">
-                总记录数: {{ syncStatus.stats.total_records }} | 已同步: {{ syncStatus.stats.synced_records }} | 上次同步: {{ formatSyncTime(syncStatus.last_sync_time) }}
+          <!-- 数据库信息显示 -->
+          <div v-if="databaseInfo" class="mt-4 space-y-4">
+            <!-- 基本信息统计 -->
+            <div class="stats shadow bg-base-200">
+              <div class="stat">
+                <div class="stat-title">数据库大小</div>
+                <div class="stat-value text-sm">{{ databaseInfo.size }}</div>
+                <div v-if="databaseInfo.mode_description" class="stat-desc">{{ databaseInfo.mode_description }}</div>
               </div>
-            </div>
-          </div>
-
-          <!-- 同步模式卡片 -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <!-- 纯离线模式 -->
-            <div class="card bg-base-200 border-2 transition-all cursor-pointer hover:shadow-md" 
-                 :class="{ 'border-primary bg-primary/10': syncConfig?.sync_mode === 'OFFLINE' }"
-                 @click="selectSyncMode('OFFLINE')">
-              <div class="card-body p-4">
-                <div class="flex items-center gap-3 mb-2">
-                  <div class="w-3 h-3 rounded-full bg-gray-500"></div>
-                  <h3 class="card-title text-sm">纯离线模式</h3>
-                </div>
-                <p class="text-xs text-base-content/70 mb-3">
-                  完全使用本地数据库，不进行任何网络同步操作，适合注重隐私或网络受限的环境。
-                </p>
-                <div class="text-xs text-base-content/60">
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    数据完全本地化
-                  </div>
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    无网络依赖
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    隐私性最高
+              <div class="stat">
+                <div class="stat-title">笔记数量</div>
+                <div class="stat-value text-sm">{{ databaseInfo.noteCount }}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-title">分类数量</div>
+                <div class="stat-value text-sm">{{ databaseInfo.categoryCount }}</div>
+              </div>
+              <div v-if="databaseInfo.isRemote" class="stat">
+                <div class="stat-title">在线状态</div>
+                <div class="stat-value text-sm">
+                  <div class="badge" :class="databaseInfo.isOnline ? 'badge-success' : 'badge-error'">
+                    {{ databaseInfo.isOnline ? '在线' : '离线' }}
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- 手动同步模式 -->
-            <div class="card bg-base-200 border-2 transition-all cursor-pointer hover:shadow-md"
-                 :class="{ 'border-warning bg-warning/10': syncConfig?.sync_mode === 'MANUAL' }"
-                 @click="selectSyncMode('MANUAL')">
-              <div class="card-body p-4">
-                <div class="flex items-center gap-3 mb-2">
-                  <div class="w-3 h-3 rounded-full bg-warning"></div>
-                  <h3 class="card-title text-sm">手动同步模式</h3>
+            <!-- 数据库路径信息 -->
+            <div v-if="databaseInfo.database_path" class="alert alert-info">
+              <div class="flex-1 min-w-0">
+                <div class="font-semibold text-sm mb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M8 5a2 2 0 012-2h2a2 2 0 012 2v0H8v0z" />
+                  </svg>
+                  数据库路径
                 </div>
-                <p class="text-xs text-base-content/70 mb-3">
-                  本地保存远程数据副本，用户主动触发同步操作，适合对同步时机有特殊要求的场景。
-                </p>
-                <div class="text-xs text-base-content/60">
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    手动控制同步时机
+                <div class="bg-base-100 rounded-lg border p-3 space-y-2">
+                  <div class="text-xs font-mono break-all leading-relaxed select-all 
+                              bg-base-200 p-2 rounded border-l-4 border-primary
+                              hover:bg-base-300 transition-colors cursor-text
+                              min-h-[2.5rem] flex items-center"
+                       :title="'点击选择全部 • ' + databaseInfo.database_path">
+                    {{ databaseInfo.database_path }}
                   </div>
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    本地副本可离线使用
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    节省网络流量
+                  <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center text-xs opacity-70 gap-1">
+                    <span>最后修改: {{ databaseInfo.lastModified }}</span>
+                    <span class="text-primary font-medium">{{ databaseInfo.size }}</span>
                   </div>
                 </div>
               </div>
-            </div>
-
-            <!-- 自动同步模式 -->
-            <div class="card bg-base-200 border-2 transition-all cursor-pointer hover:shadow-md"
-                 :class="{ 'border-success bg-success/10': syncConfig?.sync_mode === 'AUTO' }"
-                 @click="selectSyncMode('AUTO')">
-              <div class="card-body p-4">
-                <div class="flex items-center gap-3 mb-2">
-                  <div class="w-3 h-3 rounded-full bg-success"></div>
-                  <h3 class="card-title text-sm">自动同步模式</h3>
-                </div>
-                <p class="text-xs text-base-content/70 mb-3">
-                  定期自动同步本地和远程数据，确保数据实时性，适合多设备协作或实时备份需求。
-                </p>
-                <div class="text-xs text-base-content/60">
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    数据实时同步
-                  </div>
-                  <div class="flex items-center gap-1 mb-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    多设备数据一致
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                    </svg>
-                    自动备份保护
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 自动同步配置 -->
-          <div v-if="syncConfig?.sync_mode === 'AUTO'" class="mt-6 p-4 bg-base-200 rounded-lg">
-            <h4 class="font-medium mb-3">自动同步配置</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="form-control">
-                <label class="label">
-                  <span class="label-text">同步间隔 (秒)</span>
-                </label>
-                <input 
-                  type="number" 
-                  v-model.number="syncConfig.sync_interval"
-                  v-if="syncConfig" 
-                  min="30"
-                  max="3600"
-                  class="input input-bordered input-sm"
-                  :disabled="isOperationInProgress"
-                />
-                <label class="label">
-                  <span class="label-text-alt">建议300秒以上</span>
-                </label>
-              </div>
-              <div class="form-control">
-                <label class="label cursor-pointer justify-start gap-4">
-                  <span class="label-text">启用自动同步</span>
-                  <input 
-                    type="checkbox" 
-                    class="toggle toggle-success toggle-sm" 
-                    v-model="syncConfig.auto_sync_enabled"
-                    v-if="syncConfig"
-                    :disabled="isOperationInProgress"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <!-- 应用同步设置按钮 -->
-          <div v-if="databaseType === 'remote'" class="mt-6">
-            <button 
-              class="btn btn-primary" 
-              @click="applySyncSettings"
-              :disabled="!canApplySyncSettings || isOperationInProgress"
-            >
-              <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-              </svg>
-              {{ isOperationInProgress ? '应用中...' : '应用同步设置' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-
-
-      <!-- 数据操作卡片 -->
-      <div v-if="databaseType === 'remote' && syncStatus.is_enabled" class="card bg-base-100 shadow-lg">
-        <div class="card-body">
-          <h2 class="card-title text-primary mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            同步操作
-          </h2>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button 
-              class="btn btn-info" 
-              @click="manualSync"
-              :disabled="isOperationInProgress"
-            >
-              <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {{ isOperationInProgress ? '同步中...' : '立即同步' }}
-            </button>
-            
-            <button 
-              class="btn btn-secondary" 
-              @click="showConflictDialog"
-              :disabled="isOperationInProgress"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              处理冲突
-            </button>
-            
-            <button 
-              class="btn btn-accent" 
-              @click="showSyncHistoryDialog"
-              :disabled="isOperationInProgress"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              同步历史
-            </button>
-          </div>
-
-          <!-- 高级操作 -->
-          <div class="collapse collapse-arrow bg-base-200 mt-4">
-            <input type="checkbox" />
-            <div class="collapse-title text-sm font-medium">
-              高级同步操作
-            </div>
-            <div class="collapse-content">
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="flex-none ml-3">
                 <button 
-                  class="btn btn-error btn-outline btn-sm" 
-                  @click="resetSyncStatus"
-                  :disabled="isOperationInProgress"
+                  class="btn btn-ghost btn-xs tooltip tooltip-left"
+                  @click="copyDatabasePath"
+                  data-tip="复制路径"
                 >
-                  重置同步状态
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
                 </button>
-                <button 
-                  class="btn btn-warning btn-outline btn-sm" 
-                  @click="reinitializeRemoteDatabase"
-                  :disabled="isOperationInProgress"
-                >
-                  重新初始化远程库
-                </button>
-                <button 
-                  class="btn btn-warning btn-sm" 
-                  @click="disableSync"
-                  :disabled="isOperationInProgress"
-                >
-                  禁用远程同步
-                </button>
-              </div>
-              <div class="text-xs text-base-content/70 mt-2">
-                注意：这些操作可能导致数据丢失，请谨慎使用
               </div>
             </div>
           </div>
@@ -473,23 +259,11 @@
             数据备份与恢复
           </h2>
 
-          <!-- 同步提醒 -->
-          <div v-if="syncStatus.is_enabled" class="alert alert-warning mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <div class="text-sm">
-              <div class="font-medium">同步已启用提醒</div>
-              <div>进行备份/恢复操作时，建议先禁用同步以避免数据冲突</div>
-            </div>
-          </div>
-
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <button 
               class="btn btn-outline" 
               @click="backupDatabase"
               :disabled="isOperationInProgress"
-              :class="{ 'btn-warning': syncStatus.is_enabled }"
             >
               <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -502,7 +276,6 @@
               class="btn btn-outline" 
               @click="restoreDatabase"
               :disabled="isOperationInProgress"
-              :class="{ 'btn-warning': syncStatus.is_enabled }"
             >
               <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -548,253 +321,357 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { showMessage, showConfirm } from '../../services/dialog'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import SyncHistoryDialog from '../dialogs/SyncHistoryDialog.vue'
+import { useDatabaseStore } from '../../stores/databaseStore'
+import { DatabaseService } from '../../services/databaseService'
+import type { LegacySyncConfig } from '../../types/database'
 
-// 数据库类型选择
-const databaseType = ref('local')
+// 使用数据库store
+const databaseStore = useDatabaseStore()
 
-// 统一的操作状态管理
+// 数据库模式管理（从store获取）
+const currentDatabaseMode = computed(() => databaseStore.currentMode)
+const availableModes = computed(() => databaseStore.availableModes)
+const databaseStatus = computed(() => databaseStore.databaseStatus)
+
+// 操作状态管理
 const isOperationInProgress = ref(false)
 const isInitializing = ref(true)
+const isLoadingStatus = ref(false)
+const isTestingSync = ref(false)
+const showSyncToken = ref(false)
+const showConflictResolutionDialog = ref(false)
+const showSyncHistoryDialogVisible = ref(false)
 
-// 数据库路径管理相关变量
-const currentDatabasePath = ref('')
+// 数据库信息
 const databaseInfo = ref<{
   size: string
   noteCount: number
   categoryCount: number
   lastModified: string
+  database_path?: string
+  mode_description?: string
+  isRemote?: boolean
+  isOnline?: boolean
 } | null>(null)
 
-// 同步相关状态
-const syncStatus = ref({
-  is_enabled: false,
-  is_online: false,
-  sync_mode: 'OFFLINE',
-  last_sync_time: 0,
-  stats: null as any
-})
-
-const syncConfig = ref({
-  remote_url: 'http://127.0.0.1:8888',
+// 同步配置
+const syncConfig = ref<LegacySyncConfig>({
+  remote_url: '',
   auth_token: '',
-  sync_mode: 'OFFLINE',
+  sync_mode: 'OFFLINE' as const,
   sync_interval: 300,
-  auto_sync_enabled: true
+  auto_sync_enabled: true,
+  is_online: false
 })
-
-const showSyncToken = ref(false)
-const isTestingSync = ref(false)
-const showConflictResolutionDialog = ref(false)
-const showSyncHistoryDialogVisible = ref(false)
 
 // 计算属性
 const canTestSync = computed(() => {
   return syncConfig.value?.remote_url?.trim() !== ''
 })
 
-const canApplySyncSettings = computed(() => {
-  return databaseType.value === 'remote' && 
-         syncConfig.value?.remote_url?.trim() !== '' && 
-         syncConfig.value?.sync_mode !== 'OFFLINE'
+const isLocalDevUrl = computed(() => {
+  const url = syncConfig.value?.remote_url?.trim() || ''
+  return url.startsWith('http://127.0.0.1') || 
+         url.startsWith('http://localhost') ||
+         url.startsWith('https://127.0.0.1') ||
+         url.startsWith('https://localhost')
 })
 
-// 监听数据库类型变化
-watch(databaseType, (newType) => {
-  if (!syncConfig.value) return
+const hasRemoteConfig = computed(() => {
+  const hasUrl = syncConfig.value?.remote_url?.trim() !== ''
+  if (!hasUrl) return false
   
-  if (newType === 'local') {
-    syncConfig.value.sync_mode = 'OFFLINE'
-  } else if (newType === 'remote' && syncConfig.value.sync_mode === 'OFFLINE') {
-    syncConfig.value.sync_mode = 'MANUAL'
+  const hasToken = syncConfig.value?.auth_token?.trim() !== ''
+  
+  // 本地开发环境允许空token
+  if (isLocalDevUrl.value) {
+    return true
   }
+  
+  // 生产环境需要token
+  return hasToken
 })
 
-// 格式化同步时间
-function formatSyncTime(timestamp: number): string {
-  if (!timestamp) return '从未同步'
-  return new Date(timestamp).toLocaleString('zh-CN')
-}
+// === 数据库状态管理 ===
 
-// 选择同步模式
-function selectSyncMode(mode: string) {
-  if (!syncConfig.value) return
-  
-  if (databaseType.value === 'local' && mode !== 'OFFLINE') {
-    showMessage('本地数据库只支持离线模式', { title: '提示' })
-    return
-  }
-  syncConfig.value.sync_mode = mode
-}
-
-// 数据库路径管理相关方法
-async function loadCurrentDatabasePath(): Promise<void> {
+/**
+ * 加载数据库状态
+ */
+async function loadDatabaseStatus() {
+  isLoadingStatus.value = true
   try {
-    const path = await invoke('get_current_database_path') as string
-    currentDatabasePath.value = path
-    await loadDatabaseInfo()
-  } catch (error) {
-    console.error('Failed to get current database path:', error)
-  }
-}
-
-async function loadDatabaseInfo(): Promise<void> {
-  try {
-    const info = await invoke('get_database_info') as {
-      size: string
-      note_count: number
-      category_count: number
-      last_modified: string
+    const status = await databaseStore.loadStatus(true)
+    
+    // 更新数据库信息
+    if (status?.database_info) {
+      databaseInfo.value = {
+        size: status.database_info.size,
+        noteCount: status.database_info.note_count,
+        categoryCount: status.database_info.category_count,
+        lastModified: status.database_info.last_modified,
+        database_path: status.database_info.database_path,
+        mode_description: status.database_info.mode_description,
+        isRemote: databaseStore.supportsSync,
+        isOnline: status.is_connected
+      }
     }
     
-    databaseInfo.value = {
-      size: info.size,
-      noteCount: info.note_count,
-      categoryCount: info.category_count,
-      lastModified: new Date(info.last_modified).toLocaleString('zh-CN')
-    }
+    console.log('Database status loaded:', status)
   } catch (error) {
-    console.error('Failed to get database info:', error)
-    databaseInfo.value = null
+    console.error('Failed to load database status:', error)
+    showMessage('加载数据库状态失败: ' + error, { title: '错误' })
+  } finally {
+    isLoadingStatus.value = false
   }
 }
 
-async function copyDatabasePath(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(currentDatabasePath.value)
-    showMessage('数据库路径已复制到剪贴板', { title: '成功' })
-  } catch (error) {
-    console.error('Failed to copy path:', error)
-    showMessage('复制路径失败', { title: '错误' })
-  }
-}
-
-// 统一的数据库操作处理
-async function handleDatabaseOperation(operation: () => Promise<any>, confirmMessage?: string): Promise<void> {
+/**
+ * 切换数据库模式
+ */
+async function switchDatabaseMode(mode: string, params?: any) {
   if (isOperationInProgress.value) return
   
-  // 如果启用了同步，先提醒用户
-  if (syncStatus.value.is_enabled && confirmMessage) {
-    const confirmed = await showConfirm(
-      confirmMessage + '\n\n注意：此操作将自动禁用同步功能，操作后需要重新配置同步设置。',
-      { title: '确认操作', confirmText: '继续', cancelText: '取消' }
-    )
-    if (!confirmed) return
+  const modeOption = availableModes.value.find(m => m.value === mode)
+  if (!modeOption) {
+    showMessage('不支持的数据库模式', { title: '错误' })
+    return
   }
+  
+  const confirmed = await showConfirm(
+    `确定要切换到${modeOption.label}吗？\n\n${modeOption.description}`,
+    {
+      title: '切换数据库模式',
+      confirmText: '切换',
+      cancelText: '取消'
+    }
+  )
+  
+  if (!confirmed) return
   
   isOperationInProgress.value = true
   try {
-    const result = await operation()
+    const result = await databaseStore.switchMode(mode, params || syncConfig.value)
+    showMessage(`${result}\n\n笔记本和笔记数据已自动刷新。`, { title: '切换成功' })
+    await loadDatabaseStatus()
+  } catch (error) {
+    console.error('Failed to switch database mode:', error)
+    showMessage('切换数据库模式失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
+/**
+ * 切换到嵌入式副本模式（推荐）
+ */
+async function switchToEmbeddedReplicaMode() {
+  
+  // 检查是否有远程配置信息
+  if (!hasRemoteConfig.value) {
+    const url = syncConfig.value?.remote_url?.trim() || ''
     
-    // 如果操作涉及数据库文件更改，重新加载相关信息
-    if (result?.path) {
-      currentDatabasePath.value = result.path
-      await loadDatabaseInfo()
-      // 自动禁用同步
-      if (syncStatus.value.is_enabled) {
+    let message = '请先配置远程数据库信息：\n\n1. 输入远程数据库URL'
+    
+    if (url === '') {
+      message += ' (例如: libsql://your-db.turso.io 或 http://127.0.0.1:8888)'
+    }
+    
+    if (!isLocalDevUrl.value) {
+      message += '\n2. 输入认证令牌'
+      message += '\n3. 点击"测试并保存配置"'
+      message += '\n4. 再尝试切换到嵌入式副本模式'
+    } else {
+      message += '\n2. 对于本地开发环境，认证令牌可以为空'
+      message += '\n3. 点击"测试并保存配置"（可选）'
+      message += '\n4. 再尝试切换到嵌入式副本模式'
+    }
+    
+    showMessage(message, { title: '需要先配置远程数据库' })
+    return
+  }
+  
+  // 构建完整的嵌入式副本模式参数
+  const embeddedReplicaParams = {
+    remote_url: syncConfig.value.remote_url,
+    auth_token: syncConfig.value.auth_token,
+    sync_interval: syncConfig.value.sync_interval || 300,
+    sync_interval_seconds: syncConfig.value.sync_interval || 300,
+    local_path: undefined, // 使用默认本地路径
+    read_your_writes: true, // 启用读写一致性
+    auto_sync_enabled: true
+  }
+  
+  try {
+    await switchDatabaseMode('embedded_replica', embeddedReplicaParams)
+  } catch (error) {
+    // 如果错误提到WAL索引，提供清理选项
+    const errorMessage = String(error)
+    if (errorMessage.includes('wal_index') || errorMessage.includes('WAL') || errorMessage.includes('schema verification failure')) {
+      const shouldCleanup = await showConfirm(
+        '切换失败，可能由于数据库文件状态不一致导致。\n\n是否要自动清理数据库文件后重试？\n\n清理操作是安全的，通常能解决此类问题。',
+        {
+          title: '数据库切换失败',
+          confirmText: '清理并重试',
+          cancelText: '取消'
+        }
+      )
+      
+      if (shouldCleanup) {
+        isOperationInProgress.value = true
         try {
-          // 临时跳过禁用同步操作，等待完整实现
-          await loadSyncStatus()
-          showMessage('数据库已更改，同步功能已自动禁用', { title: '提醒' })
-        } catch (error) {
-          console.error('Failed to disable sync:', error)
+          // 执行清理
+          const cleanupResult = await DatabaseService.cleanupLocalDatabaseFiles()
+          console.log('Cleanup result:', cleanupResult)
+          
+          // 短暂延时后重试
+          await new Promise(resolve => setTimeout(resolve, 500))
+          
+          // 清理后重试
+          await switchDatabaseMode('embedded_replica', embeddedReplicaParams)
+        } catch (retryError) {
+          console.error('Retry after cleanup failed:', retryError)
+          showMessage('重试失败: ' + retryError, { title: '错误' })
+        } finally {
+          isOperationInProgress.value = false
         }
       }
-    }
-    
-    if (result?.restart_required) {
-      showMessage('操作完成，请重启应用以使更改生效', { title: '需要重启' })
-    } else if (typeof result === 'string') {
-      showMessage(result, { title: '操作成功' })
     } else {
-      showMessage('操作完成', { title: '成功' })
+      showMessage('切换数据库模式失败: ' + error, { title: '错误' })
     }
-  } catch (error) {
-    console.error('Database operation failed:', error)
-    showMessage('操作失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
   }
 }
 
-async function selectDatabaseFile(): Promise<void> {
-  await handleDatabaseOperation(
-    () => invoke('select_database_file'),
-    '确定要选择新的数据库文件吗？'
-  )
-}
-
-async function createNewDatabase(): Promise<void> {
-  await handleDatabaseOperation(
-    () => invoke('create_new_database'),
-    '确定要创建新的数据库吗？'
-  )
-}
-
-async function resetToDefaultDatabase(): Promise<void> {
-  await handleDatabaseOperation(
-    () => invoke('reset_to_default_database'),
-    '确定要重置到默认数据库位置吗？'
-  )
-}
-
-// 远程数据库设置
-async function setupRemoteDatabase() {
-  if (!canTestSync.value || !syncConfig.value) return
+/**
+ * 执行数据库同步
+ */
+async function performDatabaseSync() {
+  if (isOperationInProgress.value) return
+  
+  if (!databaseStore.supportsSync) {
+    showMessage('当前数据库模式不支持同步', { title: '提示' })
+    return
+  }
   
   isOperationInProgress.value = true
   try {
-    // 先测试连接
-    const testResult = await invoke('test_remote_connection', {
-      remoteUrl: syncConfig.value.remote_url,
-      authToken: syncConfig.value.auth_token
-    })
-    
-    if (!testResult) {
-      showMessage('远程数据库连接失败，请检查URL和令牌！', { title: '连接失败' })
-      return
-    }
-    
-    // 创建远程数据库表结构并同步本地数据
-    await invoke('configure_remote_database', {
-      config: {
-        remote_url: syncConfig.value.remote_url,
-        auth_token: syncConfig.value.auth_token,
-        sync_mode: 'MANUAL', // 设置时默认为手动模式
-        sync_interval: 300,
-        auto_sync_enabled: false
-      }
-    })
-    
-    showMessage('远程数据库设置成功！本地数据已同步到远程。', { title: '设置成功' })
-    databaseType.value = 'remote'
-    syncConfig.value.sync_mode = 'MANUAL'
-    await loadSyncStatus()
+    const result = await databaseStore.sync()
+    showMessage(`${result}\n\n笔记本和笔记数据已自动刷新。`, { title: '同步成功' })
+    await loadDatabaseStatus()
   } catch (error) {
-    console.error('Setup remote database failed:', error)
-    showMessage('设置远程数据库失败: ' + error, { title: '错误' })
+    console.error('Database sync failed:', error)
+    showMessage('数据库同步失败: ' + error, { title: '错误' })
   } finally {
     isOperationInProgress.value = false
   }
 }
 
-// 同步相关方法
-async function testSyncConnection() {
+/**
+ * 测试数据库连接
+ */
+async function testCurrentDatabaseConnection() {
+  if (isOperationInProgress.value) return
+  
+  isOperationInProgress.value = true
+  try {
+    const connected = await databaseStore.testConnection()
+    if (connected) {
+      showMessage('数据库连接正常', { title: '连接测试' })
+    } else {
+      showMessage('数据库连接失败', { title: '连接测试' })
+    }
+  } catch (error) {
+    console.error('Connection test failed:', error)
+    showMessage('连接测试失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
+/**
+ * 清理本地数据库文件
+ */
+async function cleanupLocalDatabaseFiles() {
+  if (isOperationInProgress.value) return
+  
+  const confirmed = await showConfirm(
+    '确定要清理本地数据库文件吗？\n\n这将删除WAL和SHM等临时文件，可以解决数据库切换时的WAL索引错误。\n\n操作是安全的，不会删除主数据库文件中的数据。',
+    {
+      title: '清理数据库文件',
+      confirmText: '清理',
+      cancelText: '取消'
+    }
+  )
+  
+  if (!confirmed) return
+  
+  isOperationInProgress.value = true
+  try {
+    const result = await DatabaseService.cleanupLocalDatabaseFiles()
+    showMessage(result, { title: '清理完成' })
+  } catch (error) {
+    console.error('Cleanup failed:', error)
+    showMessage('清理失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
+/**
+ * 优化WAL文件
+ */
+async function optimizeDatabaseWAL() {
+  if (isOperationInProgress.value) return
+  
+  const confirmed = await showConfirm(
+    '确定要优化WAL文件吗？\n\n优化WAL文件可以提高数据库性能，但需要较长时间。\n\n操作是安全的，不会删除主数据库文件中的数据。',
+    {
+      title: '优化WAL文件',
+      confirmText: '优化',
+      cancelText: '取消'
+    }
+  )
+  
+  if (!confirmed) return
+  
+  isOperationInProgress.value = true
+  try {
+         const result = await DatabaseService.optimizeDatabaseWAL()
+    showMessage(result, { title: '优化完成' })
+  } catch (error) {
+    console.error('WAL optimization failed:', error)
+    showMessage('WAL优化失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
+// === 远程配置管理 ===
+
+/**
+ * 测试并保存远程配置
+ */
+async function testAndSaveRemoteConfig() {
   if (!canTestSync.value || !syncConfig.value) return
   
   isTestingSync.value = true
   try {
     const result = await invoke('test_remote_connection', {
-      remoteUrl: syncConfig.value.remote_url,
-      authToken: syncConfig.value.auth_token
+      remote_url: syncConfig.value.remote_url,
+      auth_token: syncConfig.value.auth_token
     })
     
     if (result) {
-      showMessage('远程数据库连接测试成功！', { title: '测试成功' })
+      // 保存配置
+      await invoke('save_sync_config', { config: syncConfig.value })
+      showMessage('远程数据库连接测试成功，配置已保存！', { title: '测试成功' })
+      
+      // 刷新状态
+      await loadDatabaseStatus()
     } else {
       showMessage('远程数据库连接测试失败，请检查URL和令牌！', { title: '测试失败' })
     }
@@ -806,166 +683,13 @@ async function testSyncConnection() {
   }
 }
 
-async function applySyncSettings() {
-  if (!canApplySyncSettings.value || !syncConfig.value) return
-  
-  isOperationInProgress.value = true
-  try {
-    await invoke('save_sync_config', { config: syncConfig.value })
-    await invoke('set_sync_mode', { mode: syncConfig.value.sync_mode })
-    
-    showMessage('同步设置已应用！', { title: '设置成功' })
-    await loadSyncStatus()
-  } catch (error) {
-    console.error('Apply sync settings failed:', error)
-    showMessage('应用同步设置失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
-  }
-}
-
-async function disableSync() {
-  const confirmed = await showConfirm('确定要禁用远程同步吗？', {
-    title: '确认禁用',
-    confirmText: '禁用',
-    cancelText: '取消'
-  })
-  
-  if (!confirmed) return
-  
-  isOperationInProgress.value = true
-  try {
-    await invoke('set_sync_mode', { mode: 'OFFLINE' })
-    if (syncConfig.value) {
-      syncConfig.value.sync_mode = 'OFFLINE'
-      await invoke('save_sync_config', { config: syncConfig.value })
-    }
-    
-    showMessage('远程同步已禁用！', { title: '禁用成功' })
-    databaseType.value = 'local'
-    await loadSyncStatus()
-  } catch (error) {
-    console.error('Disable sync failed:', error)
-    showMessage('禁用同步失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
-  }
-}
-
-async function manualSync() {
-  isOperationInProgress.value = true
-  try {
-    await invoke('manual_sync') as any
-    showMessage('手动同步完成！', { title: '同步成功' })
-    await loadSyncStatus()
-  } catch (error) {
-    console.error('Manual sync failed:', error)
-    showMessage('手动同步失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
-  }
-}
-
-function showConflictDialog() {
-  showConflictResolutionDialog.value = true
-}
-
-function showSyncHistoryDialog() {
-  showSyncHistoryDialogVisible.value = true
-}
-
-async function resetSyncStatus() {
-  const confirmed = await showConfirm('确定要重置同步状态吗？这将清除所有同步记录。', {
-    title: '确认重置',
-    confirmText: '重置',
-    cancelText: '取消'
-  })
-  
-  if (!confirmed) return
-  
-  isOperationInProgress.value = true
-  try {
-    // 重置同步配置到默认状态
-    syncConfig.value = {
-      remote_url: 'http://127.0.0.1:8888',
-      auth_token: '',
-      sync_mode: 'OFFLINE',
-      sync_interval: 300,
-      auto_sync_enabled: true
-    }
-    await invoke('save_sync_config', { config: syncConfig.value })
-    await invoke('set_sync_mode', { mode: 'OFFLINE' })
-    
-    showMessage('同步状态已重置！', { title: '重置成功' })
-    databaseType.value = 'local'
-    await loadSyncStatus()
-  } catch (error) {
-    console.error('Reset sync status failed:', error)
-    showMessage('重置同步状态失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
-  }
-}
-
-async function reinitializeRemoteDatabase() {
-  const confirmed = await showConfirm('确定要重新初始化远程数据库吗？这将清空远程数据库并重新同步所有本地数据。', {
-    title: '确认重新初始化',
-    confirmText: '重新初始化',
-    cancelText: '取消'
-  })
-  
-  if (!confirmed) return
-  
-  isOperationInProgress.value = true
-  try {
-    // 重新配置远程数据库
-    await invoke('configure_remote_database', {
-      config: {
-        remote_url: syncConfig.value.remote_url,
-        auth_token: syncConfig.value.auth_token,
-        sync_mode: syncConfig.value.sync_mode,
-        sync_interval: syncConfig.value.sync_interval,
-        auto_sync_enabled: syncConfig.value.auto_sync_enabled
-      }
-    })
-    
-    showMessage('远程数据库已重新初始化！', { title: '重新初始化成功' })
-    await loadSyncStatus()
-  } catch (error) {
-    console.error('Reinitialize remote database failed:', error)
-    showMessage('重新初始化远程数据库失败: ' + error, { title: '错误' })
-  } finally {
-    isOperationInProgress.value = false
-  }
-}
-
-async function loadSyncStatus() {
-  try {
-    const status = await invoke('get_sync_status') as any
-    syncStatus.value = status
-    
-    // 根据同步状态设置数据库类型
-    if (syncStatus.value.is_enabled) {
-      databaseType.value = 'remote'
-    } else {
-      databaseType.value = 'local'
-    }
-  } catch (error) {
-    console.error('Load sync status failed:', error)
-    // 使用默认状态作为回退
-    syncStatus.value = {
-      is_enabled: false,
-      is_online: false,
-      sync_mode: 'OFFLINE',
-      last_sync_time: 0,
-      stats: null
-    }
-  }
-}
-
+/**
+ * 加载同步配置
+ */
 async function loadSyncConfig() {
   try {
     const config = await invoke('get_sync_config') as any
+    
     if (config) {
       syncConfig.value = config
     } else {
@@ -975,64 +699,122 @@ async function loadSyncConfig() {
         auth_token: '',
         sync_mode: 'OFFLINE',
         sync_interval: 300,
-        auto_sync_enabled: true
+        auto_sync_enabled: true,
+        is_online: false
       }
     }
+    
   } catch (error) {
     console.error('Load sync config failed:', error)
     // 使用默认配置作为回退
     syncConfig.value = {
-      remote_url: 'http://127.0.0.1:8888',
+      remote_url: '',
       auth_token: '',
       sync_mode: 'OFFLINE',
       sync_interval: 300,
-      auto_sync_enabled: true
+      auto_sync_enabled: true,
+      is_online: false
     }
   }
 }
 
-// 数据操作方法
-async function backupDatabase() {
-  // 如果启用了同步，提醒用户
-  if (syncStatus.value.is_enabled) {
-    const confirmed = await showConfirm(
-      '检测到同步功能已启用。建议先禁用同步后再进行备份，以确保数据一致性。\n\n是否继续备份？',
-      { title: '同步提醒', confirmText: '继续备份', cancelText: '取消' }
-    )
-    if (!confirmed) return
+// === 辅助函数 ===
+
+
+
+/**
+ * 复制数据库路径到剪贴板
+ */
+async function copyDatabasePath() {
+  if (!databaseInfo.value?.database_path) {
+    showMessage('数据库路径为空', { title: '提示' })
+    return
   }
-  
-  await handleDatabaseOperation(() => invoke('backup_database'))
+  try {
+    await invoke('copy_to_clipboard', { text: databaseInfo.value.database_path })
+    showMessage('数据库路径已复制到剪贴板！', { title: '复制成功' })
+  } catch (error) {
+    console.error('Failed to copy database path:', error)
+    showMessage('复制数据库路径失败: ' + error, { title: '错误' })
+  }
+}
+
+
+
+// === 数据操作方法 ===
+
+async function backupDatabase() {
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('backup_database') as string
+    showMessage(result, { title: '备份成功' })
+  } catch (error) {
+    console.error('Backup failed:', error)
+    showMessage('备份失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
 }
 
 async function restoreDatabase() {
-  // 强制确认恢复操作
   const confirmed = await showConfirm(
-    '恢复数据库将覆盖当前所有数据，此操作不可撤销！\n\n' +
-    (syncStatus.value.is_enabled ? '同步功能将被自动禁用。\n\n' : '') +
-    '确定要继续吗？',
+    '恢复数据库将覆盖当前所有数据，此操作不可撤销！确定要继续吗？',
     { title: '确认恢复', confirmText: '确认恢复', cancelText: '取消' }
   )
   
   if (!confirmed) return
   
-  await handleDatabaseOperation(() => invoke('restore_database'))
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('restore_database') as string
+    showMessage(result, { title: '恢复成功' })
+    await loadDatabaseStatus()
+  } catch (error) {
+    console.error('Restore failed:', error)
+    showMessage('恢复失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
 }
 
 async function exportAsMarkdown() {
-  await handleDatabaseOperation(() => invoke('export_as_markdown'))
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('export_as_markdown') as string
+    showMessage(result, { title: '导出成功' })
+  } catch (error) {
+    console.error('Export failed:', error)
+    showMessage('导出失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
 }
 
 async function migrateConfigToDatabase() {
-  await handleDatabaseOperation(() => invoke('migrate_config_to_database'))
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('migrate_config_to_database') as string
+    showMessage(result, { title: '迁移成功' })
+  } catch (error) {
+    console.error('Migration failed:', error)
+    showMessage('迁移失败: ' + error, { title: '错误' })
+  } finally {
+    isOperationInProgress.value = false
+  }
 }
 
 // 组件挂载时加载设置
 onMounted(async () => {
   try {
-    await loadCurrentDatabasePath()
-    await loadSyncStatus()
-    await loadSyncConfig()
+    // 加载数据库状态和配置
+    await Promise.all([
+      loadDatabaseStatus(),
+      loadSyncConfig()
+    ])
+  
+    
+  } catch (error) {
+    console.error('[DataSettings] Initialization failed:', error)
   } finally {
     isInitializing.value = false
   }
@@ -1076,5 +858,45 @@ onMounted(async () => {
 
 .stats .stat-value {
   font-size: 1rem;
+}
+
+/* 数据库路径显示优化 */
+.alert.alert-info {
+  @apply border-info/20 bg-info/5;
+}
+
+/* 路径文本框样式 */
+.select-all {
+  user-select: all;
+  -webkit-user-select: all;
+  -moz-user-select: all;
+  -ms-user-select: all;
+}
+
+/* 工具提示样式 */
+.tooltip:before {
+  @apply text-xs;
+}
+
+/* 响应式文本 */
+@media (max-width: 640px) {
+  .font-mono {
+    word-break: break-all;
+    overflow-wrap: break-word;
+  }
+  
+  .text-xs {
+    line-height: 1.4;
+  }
+}
+
+/* 复制按钮动画 */
+.btn:active {
+  transform: scale(0.95);
+}
+
+/* 路径容器悬停效果 */
+.cursor-text:hover {
+  @apply shadow-sm;
 }
 </style> 

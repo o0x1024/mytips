@@ -3,7 +3,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 use crate::db;
-use crate::db::DbManager;
+use crate::db::UnifiedDbManager;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TipTemplate {
@@ -16,7 +16,7 @@ const TEMPLATE_KEY: &str = "tip_templates";
 /// 获取全部提示词模板
 #[tauri::command]
 pub async fn get_tip_templates(app: AppHandle) -> Result<Vec<TipTemplate>, String> {
-    let db_state = app.state::<DbManager>();
+    let db_state = app.state::<UnifiedDbManager>();
     let conn = db_state.get_conn().await.map_err(|e| e.to_string())?;
     match db::get_setting(&conn, TEMPLATE_KEY).await {
         Ok(Some(json_str)) => {
@@ -31,7 +31,7 @@ pub async fn get_tip_templates(app: AppHandle) -> Result<Vec<TipTemplate>, Strin
 /// 保存（新增或更新）单个模板
 #[tauri::command]
 pub async fn save_tip_template(app: AppHandle, template: TipTemplate) -> Result<(), String> {
-    let db_state = app.state::<DbManager>();
+    let db_state = app.state::<UnifiedDbManager>();
     let conn = db_state.get_conn().await.map_err(|e| e.to_string())?;
     // 获取现有
     let mut templates: Vec<TipTemplate> = match db::get_setting(&conn, TEMPLATE_KEY).await.map_err(|e| e.to_string())? {
@@ -54,7 +54,7 @@ pub async fn save_tip_template(app: AppHandle, template: TipTemplate) -> Result<
 /// 删除模板
 #[tauri::command]
 pub async fn delete_tip_template(app: AppHandle, name: String) -> Result<(), String> {
-    let db_state = app.state::<DbManager>();
+    let db_state = app.state::<UnifiedDbManager>();
     let conn = db_state.get_conn().await.map_err(|e| e.to_string())?;
         let mut templates: Vec<TipTemplate> = match db::get_setting(&conn, TEMPLATE_KEY).await.map_err(|e| e.to_string())? {
         Some(s) => serde_json::from_str(&s).unwrap_or_default(),

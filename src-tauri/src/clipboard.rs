@@ -11,8 +11,9 @@ use std::{
     time::Duration,
 };
 use tauri::{AppHandle, Emitter, Manager, State};
+use tracing::{info, warn, error, debug};
 
-use crate::db::DbManager;
+use crate::db::UnifiedDbManager;
 
 // 用于标记模拟复制操作的全局变量
 lazy_static::lazy_static! {
@@ -105,188 +106,77 @@ pub fn get_active_process_name() -> Option<String> {
     None
 }
 
-/// 获取当前选中的文本（macOS）
-#[cfg(target_os = "macos")]
-pub fn get_selected_text(app: &AppHandle) -> Option<String> {
-    // 标记我们正在模拟复制，防止剪贴板监听器触发
-    SIMULATING_COPY.store(true, Ordering::SeqCst);
-
-    // 使用AppleScript获取当前选中文本
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(
-            r#"
-        tell application "System Events"
-            keystroke "c" using {command down}
-            delay 0.1
-        end tell
-        delay 0.1
-        set the clipboard_content to the clipboard
-        return the clipboard_content
-        "#,
-        )
-        .output()
-        .ok()?;
-
-    // 处理结果
-    let result = if output.status.success() {
-        let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !text.is_empty() {
-            Some(text)
+// A helper function to simulate the copy action based on the OS.
+fn simulate_copy() {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .arg("-e")
+            .arg("tell application \"System Events\" to keystroke \"c\" using {command down}")
+            .output();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        use enigo::{Enigo, Key, Keyboard, Settings};
+        if let Ok(mut enigo) = Enigo::new(&Settings::default()) {
+            let _ = enigo.key(Key::Control, enigo::Direction::Press);
+            let _ = enigo.key(Key::Unicode('c'), enigo::Direction::Click);
+            let _ = enigo.key(Key::Control, enigo::Direction::Release);
         } else {
-            None
+            error!("Failed to create enigo instance for copy simulation");
         }
-    } else {
-        None
-    };
+    }
+}
 
-    // 延迟一小段时间后重置标记
-    thread::spawn(|| {
-        thread::sleep(Duration::from_millis(500));
+
+/// Gets the currently selected text by simulating a copy action.
+#[cfg(desktop)]
+pub fn get_selected_text(app: &AppHandle) -> Option<String> {
+    SIMULATING_COPY.store(true, Ordering::SeqCst);
+
+    let clipboard = app.clipboard();
+    let original_content_result = clipboard.read_text();
+
+    // 1. Clear the clipboard to reliably detect new content.
+    if clipboard.write_text("").is_err() {
+        warn!("Failed to clear clipboard, cannot get selected text.");
+        SIMULATING_COPY.store(false, Ordering::SeqCst);
+        return None;
+    }
+
+    // 2. Simulate the copy command.
+    simulate_copy();
+
+    // 3. Wait for the clipboard to be updated and read the new content.
+    thread::sleep(Duration::from_millis(200));
+    let selected_text = clipboard.read_text().unwrap_or_default();
+
+    // 4. Restore the original clipboard content.
+    if let Ok(original_content) = original_content_result {
+        if !original_content.is_empty() {
+            if let Err(e) = clipboard.write_text(original_content) {
+                warn!("Failed to restore clipboard content: {}", e);
+            }
+        }
+    }
+
+    // 5. Reset the simulation flag after a delay to avoid race conditions.
+    let reset_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
         SIMULATING_COPY.store(false, Ordering::SeqCst);
     });
 
-    result
-}
-
-/// 获取当前选中的文本（Windows）
-#[cfg(target_os = "windows")]
-pub fn get_selected_text(app: &AppHandle) -> Option<String> {
-    // 标记我们正在模拟复制，防止剪贴板监听器触发
-    SIMULATING_COPY.store(true, Ordering::SeqCst);
-
-    // 在Windows上模拟Ctrl+C获取选中文本
-    // 使用临时剪贴板存储原始内容
-    let original_content = app.clipboard().read_text().unwrap_or_default();
-
-    // 模拟Ctrl+C按键
-    use enigo::{Enigo, Key, Keyboard, Settings};
-
-    // 创建enigo实例
-    let mut enigo = match Enigo::new(&Settings::default()) {
-        Ok(enigo) => enigo,
-        Err(e) => {
-            eprintln!("无法创建Enigo实例: {}", e);
-            SIMULATING_COPY.store(false, Ordering::SeqCst);
-            return None;
-        }
-    };
-
-    // 模拟Ctrl+C按键组合
-    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Press) {
-        eprintln!("按下Ctrl键失败: {}", e);
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-        return None;
-    }
-
-    if let Err(e) = enigo.key(Key::Unicode('c'), enigo::Direction::Click) {
-        eprintln!("按下C键失败: {}", e);
-        let _ = enigo.key(Key::Control, enigo::Direction::Release);
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-        return None;
-    }
-
-    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Release) {
-        eprintln!("释放Ctrl键失败: {}", e);
-    }
-
-    // 等待一小段时间确保剪贴板已更新
-    thread::sleep(Duration::from_millis(200));
-
-    // 获取剪贴板内容（即选中文本）
-    let selected_text = app.clipboard().read_text().unwrap_or_default();
-
-    // 处理结果
-    let result = if !selected_text.is_empty() && selected_text != original_content {
+    // 6. Return the captured text if it's not empty.
+    if !selected_text.is_empty() {
         Some(selected_text)
     } else {
         None
-    };
-
-    // 恢复原始剪贴板内容
-    if !original_content.is_empty() {
-        let _ = app.clipboard().set_text(original_content);
     }
-
-    // 延迟一小段时间后重置标记
-    thread::spawn(|| {
-        thread::sleep(Duration::from_millis(1000));
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-    });
-
-    result
 }
 
-/// 获取当前选中的文本（Linux）
-#[cfg(target_os = "linux")]
-pub fn get_selected_text(app: &AppHandle) -> Option<String> {
-    // 标记我们正在模拟复制，防止剪贴板监听器触发
-    SIMULATING_COPY.store(true, Ordering::SeqCst);
-
-    // 在Linux上模拟Ctrl+C获取选中文本
-    // 使用临时剪贴板存储原始内容
-    let original_content = app.clipboard().read_text().unwrap_or_default();
-
-    // 模拟Ctrl+C按键
-    use enigo::{Enigo, Key, Keyboard, Settings};
-
-    // 创建enigo实例
-    let mut enigo = match Enigo::new(&Settings::default()) {
-        Ok(enigo) => enigo,
-        Err(e) => {
-            eprintln!("无法创建Enigo实例: {}", e);
-            SIMULATING_COPY.store(false, Ordering::SeqCst);
-            return None;
-        }
-    };
-
-    // 模拟Ctrl+C按键组合
-    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Press) {
-        eprintln!("按下Ctrl键失败: {}", e);
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-        return None;
-    }
-
-    if let Err(e) = enigo.key(Key::Unicode('c'), enigo::Direction::Click) {
-        eprintln!("按下C键失败: {}", e);
-        let _ = enigo.key(Key::Control, enigo::Direction::Release);
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-        return None;
-    }
-
-    if let Err(e) = enigo.key(Key::Control, enigo::Direction::Release) {
-        eprintln!("释放Ctrl键失败: {}", e);
-    }
-
-    // 等待一小段时间确保剪贴板已更新
-    thread::sleep(Duration::from_millis(200));
-
-    // 获取剪贴板内容（即选中文本）
-    let selected_text = app.clipboard().read_text().unwrap_or_default();
-
-    // 处理结果
-    let result = if !selected_text.is_empty() && selected_text != original_content {
-        Some(selected_text)
-    } else {
-        None
-    };
-
-    // 恢复原始剪贴板内容
-    if !original_content.is_empty() {
-        let _ = app.clipboard().set_text(original_content);
-    }
-
-    // 延迟一小段时间后重置标记
-    thread::spawn(|| {
-        thread::sleep(Duration::from_millis(1000));
-        SIMULATING_COPY.store(false, Ordering::SeqCst);
-    });
-
-    result
-}
-
-/// 通用实现，用于不支持的平台
-#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+/// Fallback for non-desktop platforms.
+#[cfg(not(desktop))]
 pub fn get_selected_text(_app: &AppHandle) -> Option<String> {
     None
 }
@@ -432,9 +322,9 @@ fn is_sensitive_content(content: &str) -> bool {
 /// 清理过期的剪贴板条目
 #[cfg(desktop)]
 pub async fn clean_expired_entries(app_handle: &AppHandle) {
-    let db_manager = app_handle.state::<DbManager>();
+    let db_manager = app_handle.state::<UnifiedDbManager>();
     if let Ok(conn) = db_manager.get_conn().await {
-        if let Ok(setting) = crate::db::get_setting(&conn, "clipboard_settings").await {
+        if let Ok(setting) = crate::db::operations::get_setting(&conn, "clipboard_settings").await {
             let settings = setting
                 .and_then(|s| ClipboardSettings::from_json(&s).ok())
                 .unwrap_or_default();
@@ -449,7 +339,7 @@ pub async fn clean_expired_entries(app_handle: &AppHandle) {
                 let expire_timestamp = expire_date.timestamp();
 
                 // 删除过期条目
-                if let Err(e) = crate::db::delete_expired_clipboard_entries(&conn, expire_timestamp).await {
+                if let Err(e) = crate::db::operations::delete_expired_clipboard_entries(&conn, expire_timestamp).await {
                     eprintln!("清理过期剪贴板条目失败: {}", e);
                 }
             }
@@ -458,202 +348,133 @@ pub async fn clean_expired_entries(app_handle: &AppHandle) {
 }
 
 #[cfg(desktop)]
-pub async fn start_clipboard_listener(app_handle: AppHandle) {
-    thread::spawn( async move || {
-        // 初始化剪贴板
-        let clipboard = app_handle.clipboard();
-
-        // 获取初始剪贴板内容
-        let mut last_text = clipboard.read_text().unwrap_or_default();
-        println!("剪贴板监听已启动，初始内容: {}", last_text);
-
-        // 用于比较图片内容的哈希值
-        let mut last_image_hash = String::new();
-
-        // 定义清理计时器
-        let mut last_cleanup_time = Utc::now();
-
-        // 记录最近处理过的内容和时间戳，用于防止短时间内重复添加
-        let mut recent_contents: Vec<(String, i64)> = Vec::new();
-
-        // 辅助函数：检查内容是否在recent_contents中
-        fn has_recent_content(content: &str, contents: &[(String, i64)]) -> bool {
-            contents.iter().any(|(c, _)| c == content)
-        }
-
-        loop {
-            // 每隔一秒检查一次
-            thread::sleep(Duration::from_millis(1000));
-
-            // 检查是否启用了监听
-            if !MONITORING_ENABLED.load(Ordering::SeqCst) {
-                // 未启用监听，跳过此次循环
-                continue;
-            }
-
-            // 清理超过10秒的记录
-            let now = Utc::now().timestamp();
-            recent_contents.retain(|(_, timestamp)| now - timestamp < 10);
-
-            // 检查是否需要清理过期条目（每天检查一次）
-            let current_time = Utc::now();
-            if (current_time - last_cleanup_time).num_hours() >= 24 {
-                clean_expired_entries(&app_handle).await;
-                last_cleanup_time = current_time;
-            }
-
-            // 如果当前正在模拟复制操作，跳过此次检查
-            if SIMULATING_COPY.load(Ordering::SeqCst) {
-                continue;
-            }
-
-            // 获取剪贴板设置
-            let settings = {
-                let db_manager = app_handle.state::<DbManager>();
-                if let Ok(conn) = db_manager.get_conn().await {
-                    match crate::db::get_setting(&conn, "clipboard_settings").await {
-                        Ok(Some(settings_str)) => {
-                            ClipboardSettings::from_json(&settings_str).unwrap_or_default()
-                        }
-                        _ => ClipboardSettings::default(),
-                    }
-                } else {
-                    ClipboardSettings::default()
+pub fn start_clipboard_listener(app_handle: AppHandle) {
+    thread::spawn(move || {
+        // 创建一个新的异步运行时
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        
+        rt.block_on(async move {
+            // 检查数据库管理器是否可用
+            let db_manager = match app_handle.try_state::<UnifiedDbManager>() {
+                Some(manager) => manager,
+                None => {
+                    eprintln!("数据库管理器未初始化，剪贴板监听启动失败");
+                    return;
                 }
             };
 
-            // 检查文本内容
-            let mut has_new_content = false;
-            if let Ok(current_text) = clipboard.read_text() {
-                // 检查内容是否为空或与上次相同
-                if !current_text.is_empty() && current_text != last_text {
-                    last_text = current_text.clone();
-
-                    // 检查此内容是否最近被处理过，防止重复添加
-                    if has_recent_content(&current_text, &recent_contents) {
-                        println!("内容最近已处理过，跳过");
-                        continue;
-                    }
-
-                    // 记录此内容已被处理
-                    recent_contents.push((current_text.clone(), Utc::now().timestamp()));
-
-                    // 检查是否为敏感内容
-                    // if settings.ignore_sensitive_content && is_sensitive_content(&current_text) {
-                    //     println!("检测到敏感内容，跳过添加");
-                    //     continue;
-                    // }
-
-                    // 获取当前活动窗口标题
-                    let source = if settings.capture_source_info {
-                        get_active_window_title()
-                    } else {
-                        None
-                    };
-
-                    if let Some(ref source_name) = source {
-                        println!("内容来源: {}", source_name);
-                        
-                        // 检查白名单应用
-                        if settings.enable_app_whitelist && !settings.whitelist_apps.is_empty() {
-                            // 获取进程名称以提高匹配准确性
-                            let process_name = get_active_process_name();
-                            
-                            let should_ignore = settings.whitelist_apps.iter().any(|app| {
-                                let app_lower = app.to_lowercase();
-                                let source_lower = source_name.to_lowercase();
-                                
-                                // 首先检查窗口标题/应用名称匹配
-                                let title_match = source_lower.contains(&app_lower) || 
-                                                 app_lower.contains(&source_lower) ||
-                                                 source_lower == app_lower;
-                                
-                                // 如果有进程名称，也检查进程名称匹配
-                                let process_match = if let Some(ref proc_name) = process_name {
-                                    let proc_lower = proc_name.to_lowercase();
-                                    proc_lower.contains(&app_lower) || 
-                                    app_lower.contains(&proc_lower) ||
-                                    proc_lower == app_lower
-                                } else {
-                                    false
-                                };
-                                
-                                title_match || process_match
-                            });
-                            
-                            if should_ignore {
-                                if let Some(ref proc_name) = process_name {
-                                    println!("进程名称: {}", proc_name);
-                                }
-                                continue;
-                            }
-                        }
-                    }
-
-                    // 获取数据库连接
-                    let db_manager = app_handle.state::<DbManager>();
-                    if let Ok(conn) = db_manager.get_conn().await {
-                        // 检查是否已经存在相同内容
-                        let content_exists =
-                            match crate::db::check_clipboard_entry_exists(&conn, &current_text).await {
-                                Ok(exists) => exists,
-                                Err(e) => {
-                                    eprintln!("检查剪贴板内容是否存在失败: {}", e);
-                                    false // 如果检查失败，继续尝试添加
-                                }
-                            };
-
-                        if content_exists {
-                            println!("相同内容已存在于数据库，跳过添加");
-                            continue;
-                        }
-
-                        // 添加到数据库
-                        if let Err(e) =
-                            crate::db::add_clipboard_entry(&conn, &current_text, source.as_deref()).await
-                        {
-                            eprintln!("添加剪贴板内容到数据库失败: {}", e);
-                        } else {
-                            println!("剪贴板文本内容已添加到临时笔记区");
-                            has_new_content = true;
-                        }
-                    } else {
-                        eprintln!("获取数据库连接失败");
-                        continue;
-                    }
-                }
+            // 验证数据库连接
+            if let Err(e) = db_manager.get_conn().await {
+                error!("数据库连接失败，剪贴板监听启动失败: {}", e);
+                return;
             }
 
-            // 检查图片内容（如果启用了图片捕获）
-            if settings.capture_images {
-                match clipboard.read_image() {
-                    Ok(img) => {
-                        // 计算图片内容的哈希，用于比较是否发生变化
-                        let image_data = img.rgba();
-                        let mut hasher = blake3::Hasher::new();
-                        hasher.update(&image_data);
-                        let hash = hasher.finalize().to_hex().to_string();
+            debug!("剪贴板监听器启动成功");
 
-                        // 检查图片是否与上次不同
-                        if hash != last_image_hash {
-                            // println!(
-                            //     "检测到新的剪贴板图片内容，尺寸: {}x{}",
-                            //     img.size().width, img.size().height
-                            // );
-                            last_image_hash = hash;
+            // 初始化剪贴板
+            let clipboard = app_handle.clipboard();
 
-                            // 将图片数据转换为Base64编码的字符串
-                            let base64_image = general_purpose::STANDARD.encode(&image_data);
-                            let img_text = format!("data:image/png;base64,{}", base64_image);
+            // 获取初始剪贴板内容
+            let mut last_text = clipboard.read_text().unwrap_or_default();
+            debug!("剪贴板监听已启动，初始内容长度: {} 字符", last_text.len());
 
-                            // 检查此图片内容是否最近被处理过，防止重复添加
-                            if has_recent_content(&img_text, &recent_contents) {
-                                println!("图片内容最近已处理过，跳过");
+            // 用于比较图片内容的哈希值
+            let mut last_image_hash = String::new();
+
+            // 定义清理计时器
+            let mut last_cleanup_time = Utc::now();
+
+            // 记录最近处理过的内容和时间戳，用于防止短时间内重复添加
+            let mut recent_contents: Vec<(String, i64)> = Vec::new();
+
+            // 连续失败计数器
+            let mut consecutive_failures = 0;
+            const MAX_CONSECUTIVE_FAILURES: u32 = 5;
+
+            // 辅助函数：检查内容是否在recent_contents中
+            fn has_recent_content(content: &str, contents: &[(String, i64)]) -> bool {
+                contents.iter().any(|(c, _)| c == content)
+            }
+
+            loop {
+                // 每隔一秒检查一次
+                thread::sleep(Duration::from_millis(1000));
+
+                // 检查是否启用了监听
+                if !MONITORING_ENABLED.load(Ordering::SeqCst) {
+                    // 未启用监听，跳过此次循环
+                    continue;
+                }
+
+                // 检查连续失败次数
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                    error!("剪贴板监听连续失败 {} 次，暂停 30 秒", consecutive_failures);
+                    thread::sleep(Duration::from_secs(30));
+                    consecutive_failures = 0;
+                    continue;
+                }
+
+                // 清理超过10秒的记录
+                let now = Utc::now().timestamp();
+                recent_contents.retain(|(_, timestamp)| now - timestamp < 10);
+
+                // 检查是否需要清理过期条目（每天检查一次）
+                let current_time = Utc::now();
+                if (current_time - last_cleanup_time).num_hours() >= 24 {
+                    clean_expired_entries(&app_handle).await;
+                    last_cleanup_time = current_time;
+                }
+
+                // 如果当前正在模拟复制操作，跳过此次检查
+                if SIMULATING_COPY.load(Ordering::SeqCst) {
+                    continue;
+                }
+
+                // 获取剪贴板设置
+                let settings = {
+                    match db_manager.get_conn().await {
+                        Ok(conn) => {
+                            match crate::db::operations::get_setting(&conn, "clipboard_settings").await {
+                                Ok(Some(settings_str)) => {
+                                    ClipboardSettings::from_json(&settings_str).unwrap_or_default()
+                                }
+                                Ok(None) => ClipboardSettings::default(),
+                                Err(e) => {
+                                    warn!("获取剪贴板设置失败: {}", e);
+                                    ClipboardSettings::default()
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            error!("获取数据库连接失败: {}", e);
+                            consecutive_failures += 1;
+                            continue;
+                        }
+                    }
+                };
+
+                // 检查文本内容
+                let mut has_new_content = false;
+                match clipboard.read_text() {
+                    Ok(current_text) => {
+                        // 检查内容是否为空或与上次相同
+                        if !current_text.is_empty() && current_text != last_text {
+                            last_text = current_text.clone();
+
+                            // 检查此内容是否最近被处理过，防止重复添加
+                            if has_recent_content(&current_text, &recent_contents) {
+                                info!("内容最近已处理过，跳过");
                                 continue;
                             }
 
-                            // 记录此图片内容已被处理
-                            recent_contents.push((img_text.clone(), Utc::now().timestamp()));
+                            // 记录此内容已被处理
+                            recent_contents.push((current_text.clone(), Utc::now().timestamp()));
+
+                            // 检查是否为敏感内容
+                            // if settings.ignore_sensitive_content && is_sensitive_content(&current_text) {
+                            //     info!("检测到敏感内容，跳过添加");
+                            //     continue;
+                            // }
 
                             // 获取当前活动窗口标题
                             let source = if settings.capture_source_info {
@@ -663,7 +484,7 @@ pub async fn start_clipboard_listener(app_handle: AppHandle) {
                             };
 
                             if let Some(ref source_name) = source {
-                                println!("内容来源: {}", source_name);
+                                info!("内容来源: {}", source_name);
                                 
                                 // 检查白名单应用
                                 if settings.enable_app_whitelist && !settings.whitelist_apps.is_empty() {
@@ -694,58 +515,185 @@ pub async fn start_clipboard_listener(app_handle: AppHandle) {
                                     
                                     if should_ignore {
                                         if let Some(ref proc_name) = process_name {
-                                            println!("进程名称: {}", proc_name);
+                                            debug!("进程名称: {}，在白名单中，跳过", proc_name);
                                         }
                                         continue;
                                     }
                                 }
                             }
 
-                            // 获取数据库连接并保存图片内容
-                            let db_manager = app_handle.state::<DbManager>();
-                             if let Ok(conn) = db_manager.get_conn().await {
-                                // 检查是否已经存在相同内容
-                                let content_exists =
-                                    match crate::db::check_clipboard_entry_exists(&conn, &img_text).await {
+                            // 获取数据库连接并保存
+                            match db_manager.get_conn().await {
+                                Ok(conn) => {
+                                    // 检查是否已经存在相同内容
+                                    let content_exists = match crate::db::operations::check_clipboard_entry_exists(&conn, &current_text).await {
                                         Ok(exists) => exists,
                                         Err(e) => {
-                                            eprintln!("检查剪贴板图片内容是否存在失败: {}", e);
+                                            warn!("检查剪贴板内容是否存在失败: {}", e);
                                             false // 如果检查失败，继续尝试添加
                                         }
                                     };
 
-                                if content_exists {
-                                    println!("相同图片内容已存在于数据库，跳过添加");
-                                    continue;
-                                }
+                                    if content_exists {
+                                        debug!("相同内容已存在于数据库，跳过添加");
+                                        continue;
+                                    }
 
-                                if let Err(e) = crate::db::add_clipboard_entry(&conn, &img_text, source.as_deref()).await
-                                {
-                                    eprintln!("添加剪贴板图片内容到数据库失败: {}", e);
-                                } else {
-                                    println!("剪贴板图片内容已添加到临时笔记区");
-                                    has_new_content = true;
+                                    // 添加到数据库
+                                    match crate::db::operations::add_clipboard_entry(&conn, &current_text, source.as_deref()).await {
+                                        Ok(_) => {
+                                            debug!("剪贴板文本内容已添加到临时笔记区");
+                                            has_new_content = true;
+                                            consecutive_failures = 0; // 重置失败计数
+                                        }
+                                        Err(e) => {
+                                            error!("添加剪贴板内容到数据库失败: {}", e);
+                                            consecutive_failures += 1;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("获取数据库连接失败: {}", e);
+                                    consecutive_failures += 1;
+                                    continue;
                                 }
                             }
                         }
                     }
-                    Err(_) => {
-                        // 忽略无图片内容的错误
-                        // if !e.to_string().contains("no image content available") {
-                        //     eprintln!("获取剪贴板图片失败: {}", e);
-                        // }
+                    Err(e) => {
+                        warn!("读取剪贴板文本失败: {}", e);
+                        consecutive_failures += 1;
+                    }
+                }
+
+                // 检查图片内容（如果启用了图片捕获）
+                if settings.capture_images {
+                    match clipboard.read_image() {
+                        Ok(img) => {
+                            // 计算图片内容的哈希，用于比较是否发生变化
+                            let image_data = img.rgba();
+                            let mut hasher = blake3::Hasher::new();
+                            hasher.update(&image_data);
+                            let hash = hasher.finalize().to_hex().to_string();
+
+                            // 检查图片是否与上次不同
+                            if hash != last_image_hash {
+                                // debug!(
+                                //     "检测到新的剪贴板图片内容，尺寸: {}x{}",
+                                //     img.size().width, img.size().height
+                                // );
+                                last_image_hash = hash;
+
+                                // 将图片数据转换为Base64编码的字符串
+                                let base64_image = general_purpose::STANDARD.encode(&image_data);
+                                let img_text = format!("data:image/png;base64,{}", base64_image);
+
+                                // 检查此图片内容是否最近被处理过，防止重复添加
+                                if has_recent_content(&img_text, &recent_contents) {
+                                    debug!("图片内容最近已处理过，跳过");
+                                    continue;
+                                }
+
+                                // 记录此图片内容已被处理
+                                recent_contents.push((img_text.clone(), Utc::now().timestamp()));
+
+                                // 获取当前活动窗口标题
+                                let source = if settings.capture_source_info {
+                                    get_active_window_title()
+                                } else {
+                                    None
+                                };
+
+                                if let Some(ref source_name) = source {
+                                    debug!("内容来源: {}", source_name);
+                                    
+                                    // 检查白名单应用
+                                    if settings.enable_app_whitelist && !settings.whitelist_apps.is_empty() {
+                                        // 获取进程名称以提高匹配准确性
+                                        let process_name = get_active_process_name();
+                                        
+                                        let should_ignore = settings.whitelist_apps.iter().any(|app| {
+                                            let app_lower = app.to_lowercase();
+                                            let source_lower = source_name.to_lowercase();
+                                            
+                                            // 首先检查窗口标题/应用名称匹配
+                                            let title_match = source_lower.contains(&app_lower) || 
+                                                             app_lower.contains(&source_lower) ||
+                                                             source_lower == app_lower;
+                                            
+                                            // 如果有进程名称，也检查进程名称匹配
+                                            let process_match = if let Some(ref proc_name) = process_name {
+                                                let proc_lower = proc_name.to_lowercase();
+                                                proc_lower.contains(&app_lower) || 
+                                                app_lower.contains(&proc_lower) ||
+                                                proc_lower == app_lower
+                                            } else {
+                                                false
+                                            };
+                                            
+                                            title_match || process_match
+                                        });
+                                        
+                                        if should_ignore {
+                                            if let Some(ref proc_name) = process_name {
+                                                debug!("进程名称: {}，在白名单中，跳过", proc_name);
+                                            }
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                // 获取数据库连接并保存图片内容
+                                match db_manager.get_conn().await {
+                                    Ok(conn) => {
+                                        // 检查是否已经存在相同内容
+                                        let content_exists = match crate::db::operations::check_clipboard_entry_exists(&conn, &img_text).await {
+                                            Ok(exists) => exists,
+                                            Err(e) => {
+                                                warn!("检查剪贴板图片内容是否存在失败: {}", e);
+                                                false // 如果检查失败，继续尝试添加
+                                            }
+                                        };
+
+                                        if content_exists {
+                                            debug!("相同图片内容已存在于数据库，跳过添加");
+                                            continue;
+                                        }
+
+                                        match crate::db::operations::add_clipboard_entry(&conn, &img_text, source.as_deref()).await {
+                                            Ok(_) => {
+                                                debug!("剪贴板图片内容已添加到临时笔记区");
+                                                has_new_content = true;
+                                                consecutive_failures = 0; // 重置失败计数
+                                            }
+                                            Err(e) => {
+                                                error!("添加剪贴板图片内容到数据库失败: {}", e);
+                                                consecutive_failures += 1;
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        error!("获取数据库连接失败: {}", e);
+                                        consecutive_failures += 1;
+                                    }
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // 忽略无图片内容的错误，这是正常情况
+                        }
+                    }
+                }
+
+                // 如果有新内容（文本或图片），通知前端更新
+                if has_new_content {
+                    // 通知前端更新
+                    if let Err(e) = app_handle.emit("new-clipboard-entry", ()) {
+                        error!("发送new-clipboard-entry事件失败: {}", e);
                     }
                 }
             }
-
-            // 如果有新内容（文本或图片），通知前端更新
-            if has_new_content {
-                // 通知前端更新
-                if let Err(e) = app_handle.emit("new-clipboard-entry", ()) {
-                    eprintln!("发送new-clipboard-entry事件失败: {}", e);
-                }
-            }
-        }
+        });
     });
 }
 

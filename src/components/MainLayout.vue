@@ -131,6 +131,8 @@
               :selected-note-id="selectedNoteId || undefined"
               :notebooks="notebooks"
               :selected-notebook-id="selectedNotebookId || undefined"
+              :tips="displayTips"
+              :total-count="displayTotalCount"
               @select-note="handleNoteSelection"
               @search="handleListSearch"
               @new-note="createNewNote"
@@ -219,6 +221,8 @@
               :selected-note-id="selectedNoteId || undefined"
               :notebooks="notebooks"
               :selected-notebook-id="selectedNotebookId || undefined"
+              :tips="displayTips"
+              :total-count="displayTotalCount"
               @select-note="handleNoteSelection"
               @search="handleListSearch"
               @new-note="createNewNote"
@@ -355,6 +359,8 @@ import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
 import { showConfirm, showAlert } from '../services/dialog'
 import { useResponsive } from '../composables/useResponsive'
+import { invoke } from '@tauri-apps/api/core'
+
 
 // Components
 import SideNavBar from './SideNavBar.vue'
@@ -375,6 +381,10 @@ const {
   isLoading: storeIsLoading,
 } = storeToRefs(tipsStore)
 
+// 数据库状态管理
+import { useDatabaseStore } from '../stores/databaseStore'
+const databaseStore = useDatabaseStore()
+const { databaseChangeCounter } = storeToRefs(databaseStore)
 
 const encryptionStore = useEncryptionStore()
 
@@ -452,6 +462,58 @@ const listTitle = computed(() => {
   return '全部笔记'
 })
 
+// 为NoteList提供统一的数据源
+const displayTips = computed(() => {
+  // 如果选中了笔记本且有分类浏览数据，使用分类浏览的数据
+  if (selectedNotebookId.value && tipsStore.currentCategoryBrowse) {
+    const categoryData = tipsStore.currentCategoryBrowse
+    const result: TipSummary[] = []
+    const seenIds = new Set<string>() // 用于去重
+    
+    // 添加特色笔记（第一条完整笔记）转换为TipSummary格式
+    if (categoryData.featured_tip) {
+      const featured = categoryData.featured_tip
+      result.push({
+        id: featured.id,
+        title: featured.title,
+        tip_type: featured.tip_type,
+        language: featured.language,
+        category_id: featured.category_id,
+        created_at: featured.created_at,
+        updated_at: featured.updated_at,
+        tags: featured.tags,
+        is_encrypted: featured.is_encrypted || false,
+        content: featured.content // 保留完整内容
+      })
+      seenIds.add(featured.id) // 记录已添加的ID
+    }
+    
+    // 添加其他笔记摘要，确保不重复
+    for (const summary of categoryData.tip_summaries) {
+      if (!seenIds.has(summary.id)) {
+        result.push(summary)
+        seenIds.add(summary.id)
+      }
+    }
+    
+    return result
+  }
+  
+  // 否则使用常规的tips数据
+  return storeTips.value
+})
+
+// 计算显示的笔记总数
+const displayTotalCount = computed(() => {
+  // 如果选中了笔记本且有分类浏览数据，使用分类浏览的总数
+  if (selectedNotebookId.value && tipsStore.currentCategoryBrowse) {
+    return tipsStore.currentCategoryBrowse.total_tips_count
+  }
+  
+  // 否则使用当前tips的长度
+  return storeTips.value.length
+})
+
 
 // Helper functions for notebook tree
 function buildNotebookTree(
@@ -514,22 +576,46 @@ function handleListSearch(query: string) {
   }
 }
 
+// 记录搜索前的状态，用于恢复
+const lastSelectedState = ref({
+  notebookId: null as string | null,
+  tags: [] as string[]
+})
+
 let searchDebounceTimer: number | undefined;
 watch(navSearchQuery, (query) => {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = window.setTimeout(() => {
     if (query.trim()) {
+      // 搜索前保存当前状态
+      lastSelectedState.value = {
+        notebookId: selectedNotebookId.value,
+        tags: [...selectedTags.value]
+      }
+      
+      // 执行搜索时清除选中状态，确保显示搜索结果
+      selectedNotebookId.value = null;
+      selectedTags.value = [];
       tipsStore.searchTips(query.trim());
     } else {
-      if (selectedNotebookId.value) {
-        tipsStore.fetchTipsByCategory(selectedNotebookId.value);
-      } else if (selectedTags.value.length > 0) {
-        tipsStore.fetchTipsByTag(selectedTags.value.join(','));
+      // 搜索框清空时，恢复之前的状态
+      if (lastSelectedState.value.notebookId) {
+        selectedNotebookId.value = lastSelectedState.value.notebookId;
+        selectedTags.value = [];
+        // 使用新的分类浏览API
+        tipsStore.browseCategory(lastSelectedState.value.notebookId);
+      } else if (lastSelectedState.value.tags.length > 0) {
+        selectedTags.value = [...lastSelectedState.value.tags];
+        selectedNotebookId.value = null;
+        tipsStore.fetchTipsByTag(lastSelectedState.value.tags.join(','));
       } else {
+        // 如果之前没有选中任何状态，显示全部笔记
+        selectedNotebookId.value = null;
+        selectedTags.value = [];
         tipsStore.fetchTips(true);
       }
     }
-  }, 300);
+  }, 200);
 });
 
 // 接收来自NoteList的事件
@@ -585,6 +671,30 @@ onMounted(async () => {
   // ... other onMounted logic
 })
 
+// 监听数据库切换事件，自动刷新数据
+watch(databaseChangeCounter, async (newCount, oldCount) => {
+  if (newCount > oldCount && newCount > 0) {
+    console.log('[MainLayout] 检测到数据库切换/同步事件，开始刷新数据...')
+    try {
+      // 清除当前选中状态
+      selectedNote.value = null
+      selectedNoteId.value = null
+      selectedNotebookId.value = null
+      selectedTags.value = []
+      
+      // 重新获取所有数据
+      await fetchInitialData()
+      
+      // 刷新笔记列表
+      await tipsStore.fetchAllTipSummaries()
+      
+      console.log('[MainLayout] 数据刷新完成')
+    } catch (error) {
+      console.error('[MainLayout] 数据刷新失败:', error)
+    }
+  }
+})
+
 onUnmounted(() => {
   // No longer need to remove resize listener here as it's handled globally
 })
@@ -592,12 +702,18 @@ onUnmounted(() => {
 // watch for selection changes to clear search
 watch(selectedNotebookId, () => {
   listSearchQuery.value = ''
-  navSearchQuery.value = ''
+  // 只有在不是恢复状态时才清空搜索框
+  if (!navSearchQuery.value.trim()) {
+    navSearchQuery.value = ''
+  }
 })
 
 watch(selectedTags, () => {
   listSearchQuery.value = ''
-  navSearchQuery.value = ''
+  // 只有在不是恢复状态时才清空搜索框
+  if (!navSearchQuery.value.trim()) {
+    navSearchQuery.value = ''
+  }
 })
 
 // Helper function to get or create the 'Uncategorized' notebook
@@ -650,6 +766,39 @@ async function createNewNote() {
   }
 
   if (savedNote) {
+    console.log('[MainLayout] 新笔记创建成功:', {
+      noteId: savedNote.id,
+      categoryId: savedNote.category_id,
+      selectedNotebookId: selectedNotebookId.value,
+      selectedTags: selectedTags.value
+    })
+    
+    // 根据当前视图状态刷新数据
+    if (selectedNotebookId.value) {
+      // 选中了笔记本的情况
+      if (savedNote.category_id === selectedNotebookId.value) {
+        // 新笔记在当前选中的笔记本中，刷新分类浏览数据
+        console.log('[MainLayout] 新笔记在当前笔记本中，刷新分类浏览数据')
+        await tipsStore.browseCategory(selectedNotebookId.value)
+      } else {
+        // 新笔记不在当前选中的笔记本中，切换到新笔记所在的笔记本
+        console.log('[MainLayout] 新笔记在其他笔记本中，切换到目标笔记本')
+        if (savedNote.category_id) {
+          selectedNotebookId.value = savedNote.category_id
+          selectedTags.value = []
+          await tipsStore.browseCategory(savedNote.category_id)
+        }
+      }
+    } else if (selectedTags.value.length > 0) {
+      // 选中了标签的情况，刷新标签视图
+      console.log('[MainLayout] 当前选中标签，刷新标签视图')
+      await tipsStore.fetchTipsByTag(selectedTags.value.join(','))
+    } else {
+      // 全部笔记视图，刷新全部笔记
+      console.log('[MainLayout] 全部笔记视图，刷新笔记列表')
+      await tipsStore.fetchAllTipSummaries()
+    }
+    
     await handleNoteSelection(savedNote);
   } else {
     console.error("Failed to create new note.");
@@ -906,7 +1055,17 @@ function toggleNoteList() {
 async function selectNotebook(id: string) {
   selectedNotebookId.value = id
   selectedTags.value = [] // clear tag selection
-  await tipsStore.fetchTipsByCategory(id)
+  
+  // 如果不在搜索状态，更新保存的状态
+  if (!navSearchQuery.value.trim()) {
+    lastSelectedState.value = {
+      notebookId: id,
+      tags: []
+    }
+  }
+  
+  // 使用新的分类浏览API获取优化的数据
+  const categoryData = await tipsStore.browseCategory(id)
 
   if (isMobile.value) {
     // On mobile, just display the list of notes for the selected notebook.
@@ -915,9 +1074,13 @@ async function selectNotebook(id: string) {
     selectedNoteId.value = null
   } else {
     // On desktop, auto-select the first note.
-    if (storeTips.value.length > 0) {
-      const firstNoteId = storeTips.value[0].id
-      const note = await tipsStore.fetchTip(firstNoteId)
+    // 优先使用featured_tip，如果没有则使用第一个摘要
+    if (categoryData?.featured_tip) {
+      selectNote(categoryData.featured_tip)
+    } else if (categoryData?.tip_summaries && categoryData.tip_summaries.length > 0) {
+      // 如果只有摘要，需要获取完整内容
+      const firstTipId = categoryData.tip_summaries[0].id
+      const note = await tipsStore.fetchTip(firstTipId)
       if (note) {
         selectNote(note)
       }
@@ -938,6 +1101,15 @@ function toggleTag(id: string) {
   }
   
   selectedNotebookId.value = null; // clear notebook selection
+  
+  // 如果不在搜索状态，更新保存的状态
+  if (!navSearchQuery.value.trim()) {
+    lastSelectedState.value = {
+      notebookId: null,
+      tags: [...selectedTags.value]
+    }
+  }
+  
   if (selectedTags.value.length > 0) {
     tipsStore.fetchTipsByTag(selectedTags.value.join(','))
   } else {
@@ -945,7 +1117,45 @@ function toggleTag(id: string) {
   }
 }
 
-function exportNote(_id: string, _format: string) {}
+async function exportNote(noteId: string, format: string) {
+  try {
+    console.log(`开始导出笔记: ${noteId}, 格式: ${format}`)
+    
+    // 根据格式调用不同的导出函数
+    let result: string
+    
+    switch (format.toLowerCase()) {
+      case 'markdown':
+      case 'md':
+        result = await invoke('export_as_markdown', { noteIds: [noteId] })
+        break
+      case 'html':
+        result = await invoke('export_as_html', { noteIds: [noteId] })
+        break
+      case 'pdf':
+        result = await invoke('export_as_pdf', { noteIds: [noteId] })
+        break
+      default:
+        throw new Error(`不支持的导出格式: ${format}`)
+    }
+    
+    console.log('导出成功:', result)
+    // 可以显示成功提示
+    await showAlert(result, { title: '导出成功' })
+    
+  } catch (error) {
+    console.error('导出笔记失败:', error)
+    let errorMessage = '导出笔记失败'
+    
+    if (typeof error === 'string') {
+      errorMessage = error
+    } else if (error && typeof error === 'object' && 'message' in error) {
+      errorMessage = (error as any).message
+    }
+    
+    await showAlert(errorMessage, { title: '导出失败' })
+  }
+}
 function moveNoteToCategory(noteId: string, categoryId: string) {
   // 查找要移动的笔记
   const noteToMove = storeTips.value.find(note => note.id === noteId);

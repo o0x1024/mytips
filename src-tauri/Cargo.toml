@@ -21,7 +21,7 @@ tauri-build = { version = "2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 tauri = { version = "2", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
-libsql = { version = "0.9.15", features = ["core", "replication", "remote"] }
+libsql = { version = "0.9.17", features = ["core", "replication", "remote"] }
 uuid = { version = "1.6.1", features = ["v4", "serde"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 dirs = "6.0.0"
@@ -29,7 +29,7 @@ thiserror = "2.0.12"
 anyhow = "1.0.75"
 tauri-plugin-dialog = "2.2.1"
 tauri-plugin-fs = "2"
-reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls", "multipart"] }
 base64 = "0.21"
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
@@ -43,21 +43,27 @@ pulldown-cmark = "0.9.3"
 printpdf = "0.6.0"
 enigo = "0.5.0"
 blake3 = "1.8.2"
+sha2 = "0.10"
 fs_extra = "1.3.0"
 lru = "0.12"
 regex = "1.0"
 tauri-plugin-global-shortcut = "2"
-tauri-plugin-shell = "2"
+flate2 = "1.0"
+md5 = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+rand = "0.8"
 tauri-plugin-updater = "2"
 zip = "0.6"
 tauri-plugin-process = "2"
 # 加密相关依赖
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
-rand = "0.8"
 zeroize = "1.7"
-sha2 = "0.10"
 open = "5.3.0"
+
+[dev-dependencies]
+tempfile = "3.8"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

@@ -52,6 +52,15 @@ export interface TipData {
   tags: string[]
 }
 
+// 新增：分类浏览响应数据结构
+export interface CategoryBrowseResponse {
+  current_category?: Category
+  subcategories: Category[]
+  featured_tip?: Tip
+  tip_summaries: TipSummary[]
+  total_tips_count: number
+}
+
 // 定义存储
 export const useTipsStore = defineStore('tips', () => {
   // 状态
@@ -63,6 +72,13 @@ export const useTipsStore = defineStore('tips', () => {
   const currentPage = ref(1)
   const hasMore = ref(true)
   const pageSize = 20 // 每页加载的数量
+
+  // 新增：分类浏览相关状态
+  const currentCategoryBrowse = ref<CategoryBrowseResponse | null>(null)
+  const isLoadingCategory = ref(false)
+  const categoryError = ref<string | null>(null)
+  const categoryTipsOffset = ref(0) // 分类笔记加载偏移量
+  const categoryTipsLimit = ref(20) // 分类笔记每次加载数量
 
   // Getters
   const tipsByCategory = computed(() => (categoryId: string) => {
@@ -403,27 +419,20 @@ export const useTipsStore = defineStore('tips', () => {
     }
   }
 
-  // 搜索笔记
+  // 搜索笔记 - 优化版本
   async function searchTips(query: string) {
     try {
       isLoading.value = true
       error.value = null
-      // 调用新的后端命令 `search_tips` 来实现全文搜索
-      const result = await invoke<Tip[]>('search_tips', { query })
       
-      // 将返回的 Tip[] 转换为 TipSummary[]
-      tips.value = result.map(tip => ({
-        id: tip.id,
-        title: tip.title,
-        tip_type: tip.tip_type,
-        language: tip.language,
-        category_id: tip.category_id,
-        created_at: tip.created_at,
-        updated_at: tip.updated_at,
-        tags: tip.tags,
-        is_encrypted: tip.is_encrypted || false,
-        // 摘要不包含完整内容
-      }))
+      // 清除分类浏览状态，确保搜索结果不被覆盖
+      currentCategoryBrowse.value = null
+      
+      // 使用优化的搜索摘要API，速度更快
+      const result = await invoke<TipSummary[]>('search_tips_summary', { query })
+      
+      // 直接使用返回的TipSummary数组
+      tips.value = result
 
       hasMore.value = false; // 搜索结果不分页
     } catch (err) {
@@ -434,7 +443,59 @@ export const useTipsStore = defineStore('tips', () => {
     }
   }
 
-  // 按分类加载笔记
+  // 新的分类浏览API - 优化性能
+  async function browseCategory(categoryId: string = '') {
+    try {
+      isLoadingCategory.value = true
+      categoryError.value = null
+      
+      const result = await invoke<CategoryBrowseResponse>('browse_category', { categoryId })
+      currentCategoryBrowse.value = result
+      
+      // 重置分页偏移量
+      categoryTipsOffset.value = result.tip_summaries.length + (result.featured_tip ? 1 : 0)
+      
+      return result
+    } catch (err) {
+      categoryError.value = (err as Error).message
+      console.error(`[TipsStore] 浏览分类失败 for category ${categoryId}:`, err)
+      return null
+    } finally {
+      isLoadingCategory.value = false
+    }
+  }
+
+  // 加载分类下的更多笔记
+  async function loadMoreCategoryTips(categoryId: string) {
+    if (!currentCategoryBrowse.value) return []
+    
+    try {
+      isLoadingCategory.value = true
+      categoryError.value = null
+      
+      const result = await invoke<TipSummary[]>('load_more_tips_by_category', {
+        categoryId,
+        offset: categoryTipsOffset.value,
+        limit: categoryTipsLimit.value
+      })
+      
+      // 将新笔记添加到当前分类浏览数据中
+      if (result.length > 0) {
+        currentCategoryBrowse.value.tip_summaries.push(...result)
+        categoryTipsOffset.value += result.length
+      }
+      
+      return result
+    } catch (err) {
+      categoryError.value = (err as Error).message
+      console.error(`[TipsStore] 加载更多分类笔记失败 for category ${categoryId}:`, err)
+      return []
+    } finally {
+      isLoadingCategory.value = false
+    }
+  }
+
+  // 按分类加载笔记（保留向后兼容，但建议使用browseCategory）
   async function fetchTipsByCategory(categoryId: string) {
     try {
       isLoading.value = true
@@ -525,6 +586,13 @@ export const useTipsStore = defineStore('tips', () => {
     hasMore,
     pageSize,
     
+    // 新增：分类浏览相关状态
+    currentCategoryBrowse,
+    isLoadingCategory,
+    categoryError,
+    categoryTipsOffset,
+    categoryTipsLimit,
+    
     // Getters
     tipsByCategory,
     tipsByTag,
@@ -548,6 +616,10 @@ export const useTipsStore = defineStore('tips', () => {
     initializeData,
     fetchTipContent,
     fetchAllTips,
-    fetchAllTipSummaries
+    fetchAllTipSummaries,
+    
+    // 新增：分类浏览相关方法
+    browseCategory,
+    loadMoreCategoryTips
   }
 }) 

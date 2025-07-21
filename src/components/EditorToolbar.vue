@@ -138,8 +138,27 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
           </svg>
         </button>
+
+        <!-- 音频录制按钮 -->
+        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="11"
+          title="录制音频" @click="emit('command', 'toggle-audio-recording')">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+          </svg>
+        </button>
+
+        <!-- 音频播放器按钮 -->
+        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="12"
+          title="音频播放器" @click="emit('command', 'toggle-audio-player')">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+          </svg>
+        </button>
+
         <!-- 代码高亮主题 -->
-        <div class="dropdown dropdown-bottom dropdown-end toolbar-item" data-priority="11">
+        <div class="dropdown dropdown-bottom dropdown-end toolbar-item" data-priority="13">
           <button tabindex="0" class="btn btn-sm btn-ghost" title="代码高亮主题">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2">

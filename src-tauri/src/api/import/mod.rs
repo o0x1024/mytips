@@ -1,10 +1,11 @@
-use crate::db::{DbManager, Tip, TipType};
+use crate::db::{models::{Tip, TipType, Category}, operations, manager::UnifiedDbManager};
 use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tauri::Manager;
 use uuid::Uuid;
 
 // 导入选项
@@ -73,15 +74,13 @@ impl Default for ImportResult {
 // 从目录导入（修改为同步API）
 #[tauri::command]
 pub async fn import_from_directory(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     directory_path: String,
     target_notebook_id: Option<String>,
     options: ImportOptions,
-    db_manager: tauri::State<'_, DbManager>,
 ) -> Result<ImportResult, String> {
-    let conn = db_manager
-        .get_conn()
-        .await
+    let manager = app.state::<UnifiedDbManager>();
+    let conn = manager.get_conn().await
         .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
@@ -105,14 +104,12 @@ pub async fn import_from_directory(
 // 从单个文件导入（修改为同步API）
 #[tauri::command]
 pub async fn import_markdown_file(
-    _app: tauri::AppHandle,
+    app: tauri::AppHandle,
     file_path: String,
     target_notebook_id: String,
-    db_manager: tauri::State<'_, DbManager>,
 ) -> Result<ImportResult, String> {
-    let conn = db_manager
-        .get_conn()
-        .await
+    let manager = app.state::<UnifiedDbManager>();
+    let conn = manager.get_conn().await
         .map_err(|e| format!("数据库连接失败: {}", e))?;
     let mut result = ImportResult::default();
 
@@ -170,13 +167,39 @@ fn process_directory_sync<'a>(
 
         let notebook_id = if let Some(parent_id) = parent_notebook_id {
             // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
-            let category = crate::db::create_category(conn, &dir_name, Some(&parent_id)).await
+            let now = Utc::now().timestamp_millis();
+            let category = Category {
+                id: Uuid::new_v4().to_string(),
+                name: dir_name.clone(),
+                parent_id: Some(parent_id),
+                created_at: now,
+                updated_at: now,
+                version: Some(1),
+                last_synced_at: Some(0),
+                sync_hash: None,
+                is_encrypted: Some(false),
+                encryption_key_id: None,
+            };
+            operations::create_category(conn, &category).await
                 .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
             result.notebooks_created += 1;
             category.id
         } else {
             // 创建顶级笔记本
-            let category = crate::db::create_category(conn, &dir_name, None).await
+            let now = Utc::now().timestamp_millis();
+            let category = Category {
+                id: Uuid::new_v4().to_string(),
+                name: dir_name.clone(),
+                parent_id: None,
+                created_at: now,
+                updated_at: now,
+                version: Some(1),
+                last_synced_at: Some(0),
+                sync_hash: None,
+                is_encrypted: Some(false),
+                encryption_key_id: None,
+            };
+            operations::create_category(conn, &category).await
                 .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
             result.notebooks_created += 1;
             category.id
@@ -245,10 +268,16 @@ async fn import_single_file_sync(
             category_id: Some(notebook_id.to_string()),
             created_at: now,
             updated_at: now,
+            version: Some(1),
+            last_synced_at: Some(0),
+            sync_hash: None,
+            is_encrypted: Some(false),
+            encryption_key_id: None,
+            encrypted_content: None,
         };
 
         // 保存笔记
-        match crate::db::save_tip(conn, tip).await {
+        match operations::create_tip(conn, &tip).await {
             Ok(_) => {
                 result.notes_imported += 1;
                 Ok(())
@@ -266,36 +295,33 @@ async fn import_single_file_sync(
             category_id: Some(notebook_id.to_string()),
             created_at: now,
             updated_at: now,
+            version: Some(1),
+            last_synced_at: Some(0),
+            sync_hash: None,
+            is_encrypted: Some(false),
+            encryption_key_id: None,
+            encrypted_content: None,
         };
 
         // 保存笔记
-        match crate::db::save_tip(conn, tip).await {
-            Ok(saved_tip) => {
-                // 使用保存后返回的笔记ID来保存图片，确保外键约束
-                let actual_tip_id = saved_tip.id;
-
-                // 确认笔记ID是否为空
-                if actual_tip_id.is_empty() {
-                    result.warnings.push(format!(
-                        "笔记ID为空，无法保存图片。文件: {}",
-                        file_path.display()
-                    ));
-                    result.notes_imported += 1;
-                    return Ok(());
-                }
+        match operations::create_tip(conn, &tip).await {
+            Ok(_) => {
+                // 使用传入的笔记ID保存图片
+                let actual_tip_id = &tip.id;
 
                 // 保存图片
                 for (image_id, base64_data) in image_data {
-                    match crate::db::save_image(conn, &actual_tip_id, &image_id, &base64_data).await {
+                    match operations::save_tip_image(conn, actual_tip_id, &image_id, &base64_data).await {
                         Ok(_) => {
                             result.images_processed += 1;
+                            tracing::info!("Successfully saved image {} for tip {}", image_id, actual_tip_id);
                         }
                         Err(e) => {
-                            // 记录警告但不中断导入过程
                             result.warnings.push(format!(
-                                "保存图片 {} 失败: {}。笔记ID: {}",
-                                image_id, e, actual_tip_id
+                                "保存图片 {} 失败: {}",
+                                image_id, e
                             ));
+                            tracing::warn!("Failed to save image {} for tip {}: {}", image_id, actual_tip_id, e);
                         }
                     }
                 }

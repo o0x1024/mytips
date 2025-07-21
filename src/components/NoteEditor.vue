@@ -157,6 +157,22 @@
     @copy="copyTipResult"
     @insert="insertTipResultToContent"
   />
+
+  <!-- 音频录制组件 -->
+  <AudioRecorder
+    :visible="showAudioRecorder"
+    :note-id="localNote.id"
+    @close="showAudioRecorder = false"
+    @audio-inserted="handleAudioInserted"
+  />
+
+  <!-- 音频播放器组件 -->
+  <AudioPlayer
+    :show="showAudioPlayer"
+    :tip-id="localNote.id"
+    @close="showAudioPlayer = false"
+    @insert-audio="handleAudioPlayerInsert"
+  />
 </template>
 
 <script setup lang="ts">
@@ -173,6 +189,8 @@ import AIExplanationDialog from './dialogs/AIExplanationDialog.vue'
 import AITranslationDialog from './dialogs/AITranslationDialog.vue'
 import TipInputDialog from './dialogs/TipInputDialog.vue'
 import TipResultDialog from './dialogs/TipResultDialog.vue'
+import AudioRecorder from './audio/AudioRecorder.vue'
+import AudioPlayer from './audio/AudioPlayer.vue'
 import { showAlert } from '../services/dialog'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { getDefaultAIModel } from '../services/aiService'
@@ -310,6 +328,10 @@ const originalTipPrompt = ref('')
 const showTipResultBox = ref(false)
 const tipResultContent = ref('')
 const isTipProcessing = ref(false)
+
+// 音频录制相关状态
+const showAudioRecorder = ref(false)
+const showAudioPlayer = ref(false)
 
 // 动态响应式工具栏相关状态
 const toolbarContainer = ref<HTMLElement | null>(null)
@@ -3067,23 +3089,129 @@ watch(renderedContent, () => {
 function handleToolbarCommand(command: string, ...args: any[]) {
   switch (command) {
     case 'insert-markdown':
-      insertMarkdown(args[0], args[1]);
-      break;
+      insertMarkdown(args[0], args[1])
+      break
     case 'insert-table':
-      insertTable();
-      break;
+      insertTable()
+      break
     case 'toggle-toc':
-      toggleToc();
-      break;
+      toggleToc()
+      break
+    case 'toggle-audio-recording':
+      toggleAudioRecording()
+      break
+    case 'toggle-audio-player':
+      toggleAudioPlayer()
+      break
     case 'set-highlight-theme':
-      setHighlightTheme(args[0]);
-      break;
+      setHighlightTheme(args[0])
+      break
     case 'set-markdown-theme':
-      setMarkdownTheme(args[0]);
-      break;
-    case 'set-edit-mode':
-      setEditMode(args[0]);
-      break;
+      setMarkdownTheme(args[0])
+      break
+    default:
+      console.warn('Unknown toolbar command:', command)
+  }
+}
+
+// 切换音频录制
+function toggleAudioRecording() {
+  // 确保笔记已保存（有ID）
+  if (!localNote.value.id) {
+    showAlert('请先保存笔记再录制音频', { title: '提示' })
+    return
+  }
+  
+  showAudioRecorder.value = !showAudioRecorder.value
+}
+
+// 切换音频播放器
+function toggleAudioPlayer() {
+  // 确保笔记已保存（有ID）
+  if (!localNote.value.id) {
+    showAlert('请先保存笔记再打开播放器', { title: '提示' })
+    return
+  }
+  
+  showAudioPlayer.value = !showAudioPlayer.value
+}
+
+// 处理音频插入完成
+function handleAudioInserted(audioId: string, transcription?: string) {
+  console.log('Audio inserted:', audioId, transcription)
+  
+  // 在光标位置插入音频引用
+  const textarea = editorTextarea.value
+  if (textarea) {
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    
+    let audioMarkdown = `\n\n🎵 **音频录制**\n`
+    audioMarkdown += `<audio controls>\n  <source src="audio://${audioId}" type="audio/webm">\n  您的浏览器不支持音频播放。\n</audio>\n`
+    
+    // 如果有转录文本，也插入
+    if (transcription && transcription.trim()) {
+      audioMarkdown += `\n**转录文本：**\n${transcription}\n`
+    }
+    
+    audioMarkdown += `\n---\n`
+    
+    // 在光标位置插入
+    localNote.value.content = 
+      localNote.value.content.substring(0, start) +
+      audioMarkdown +
+      localNote.value.content.substring(end)
+    
+    // 更新界面
+    nextTick(() => {
+      if (textarea) {
+        const newCursorPos = start + audioMarkdown.length
+        textarea.selectionStart = newCursorPos
+        textarea.selectionEnd = newCursorPos
+        textarea.focus()
+      }
+      
+      // 触发自动保存
+      autoSave()
+    })
+  }
+}
+
+// 处理音频播放器插入
+function handleAudioPlayerInsert(data: { text: string, type: 'link' | 'transcription' }) {
+  console.log('Audio player insert:', data)
+  
+  const textarea = editorTextarea.value
+  if (textarea) {
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    
+    let insertText = ''
+    
+    if (data.type === 'link') {
+      insertText = `\n${data.text}\n`
+    } else if (data.type === 'transcription') {
+      insertText = `\n**转录文本：**\n${data.text}\n`
+    }
+    
+    // 在光标位置插入
+    localNote.value.content = 
+      localNote.value.content.substring(0, start) +
+      insertText +
+      localNote.value.content.substring(end)
+    
+    // 更新界面
+    nextTick(() => {
+      if (textarea) {
+        const newCursorPos = start + insertText.length
+        textarea.selectionStart = newCursorPos
+        textarea.selectionEnd = newCursorPos
+        textarea.focus()
+      }
+      
+      // 触发自动保存
+      autoSave()
+    })
   }
 }
 
