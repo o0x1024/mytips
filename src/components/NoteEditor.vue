@@ -220,6 +220,7 @@ import 'prismjs/components/prism-csharp'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
+import { getCachedAudioUrl, setCachedAudioUrl } from '../utils/audioCache'
 
 // 简化的语言组件初始化函数
 async function loadPrismLanguages() {
@@ -531,7 +532,7 @@ onMounted(() => {
 
   markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
 
-  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
+  markdownWorker.value.onmessage = async (event: MessageEvent<{html?: string, error?: string}>) => {
     if (event.data.error) {
       console.error('Markdown rendering error:', event.data.error);
       renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
@@ -540,10 +541,15 @@ onMounted(() => {
     if(event.data.html) {
         // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
         const safeHtml = DOMPurify.sanitize(event.data.html, {
-          ADD_ATTR: ['target', 'class', 'href'],
-          ALLOW_DATA_ATTR: true
+          ADD_ATTR: ['target', 'class', 'href', 'controls', 'src'], // 允许 audio/source
+          ADD_TAGS: ['audio', 'source'],
+          ALLOW_DATA_ATTR: true,
+          ALLOW_UNKNOWN_PROTOCOLS: true // 保留 audio:// 协议
         });
-        renderedContent.value = safeHtml;
+
+        const finalHtml = await processAudioTags(safeHtml);
+        renderedContent.value = finalHtml;
+
         nextTick(() => {
             enhanceCodeBlocks();
             highlightCode();
@@ -664,7 +670,84 @@ function loadImagesAsync(noteId: string) {
   })
 }
 
+// 新增函数：处理音频标签
+async function processAudioTags(html: string): Promise<string> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const audioSources = doc.querySelectorAll('source[src^="audio://"]');
 
+  if (audioSources.length === 0) {
+    return html;
+  }
+  
+  const promises = Array.from(audioSources).map(async (source) => {
+    const src = source.getAttribute('src')
+    if (!src) return
+
+    const audioId = src.replace('audio://', '')
+
+    // 缓存命中，直接替换
+    if (getCachedAudioUrl(audioId)) {
+      source.setAttribute('src', getCachedAudioUrl(audioId)!)
+      return
+    }
+
+    try {
+      // 从后端获取音频数据 (base64)
+      const audioData: { audio_data: string; file_format: string } = await invoke('get_audio_file', { audioId })
+
+      if (!audioData || !audioData.audio_data) {
+        throw new Error('empty-audio-data')
+      }
+
+      const format = audioData.file_format || 'webm'
+      // 检查浏览器对该格式的支持
+      const testAudio = document.createElement('audio')
+      if (testAudio.canPlayType && !testAudio.canPlayType(`audio/${format}`)) {
+        throw new Error(`unsupported format: ${format}`)
+      }
+
+      // 将 base64 转换为 Blob URL
+      const byteCharacters = atob(audioData.audio_data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: `audio/${format}` })
+      const objectUrl = URL.createObjectURL(blob)
+
+      // 替换 src 并缓存
+      source.setAttribute('src', objectUrl)
+      // 同时更新父级 <audio> 的 src（提高兼容性）
+      const audioParent = source.parentElement as HTMLAudioElement | null
+      if (audioParent && audioParent.tagName.toLowerCase() === 'audio') {
+        if (!audioParent.getAttribute('src')) {
+          audioParent.setAttribute('src', objectUrl)
+        }
+        // 调用 load 以确保浏览器重新选择资源
+        try {
+          audioParent.load()
+        } catch (e) {
+          /* ignore */
+        }
+      }
+      setCachedAudioUrl(audioId, objectUrl)
+    } catch (error: any) {
+      console.error(`Failed to load audio data for ID ${audioId}:`, error)
+      source.setAttribute('src', '')
+      // 插入用户可见的错误提示
+      const errorTip = doc.createElement('div')
+      errorTip.className = 'audio-error text-error text-sm'
+      errorTip.textContent = `⚠️ 音频加载失败 (${error?.message || 'unknown'})`
+      source.parentElement?.appendChild(errorTip)
+    }
+  })
+
+  await Promise.all(promises)
+
+  return doc.body.innerHTML
+}
 
 // 监听外部note变化 - 优化版本
 watch(() => props.note, async (newNote, oldNote) => {
@@ -3109,6 +3192,12 @@ function handleToolbarCommand(command: string, ...args: any[]) {
     case 'set-markdown-theme':
       setMarkdownTheme(args[0])
       break
+    case 'set-edit-mode':
+      setEditMode(args[0])
+      break
+    case 'toggle-fullscreen':
+      toggleFullscreen()
+      break
     default:
       console.warn('Unknown toolbar command:', command)
   }
@@ -3147,7 +3236,7 @@ function handleAudioInserted(audioId: string, transcription?: string) {
     const end = textarea.selectionEnd
     
     let audioMarkdown = `\n\n🎵 **音频录制**\n`
-    audioMarkdown += `<audio controls>\n  <source src="audio://${audioId}" type="audio/webm">\n  您的浏览器不支持音频播放。\n</audio>\n`
+    audioMarkdown += `<audio controls onerror="alert('音频加载失败: ' + this.error.message)">\n  <source src="audio://${audioId}" type="audio/webm">\n  您的浏览器不支持音频播放。\n</audio>\n`
     
     // 如果有转录文本，也插入
     if (transcription && transcription.trim()) {
@@ -3481,37 +3570,6 @@ function renderInlineMarkdown(text: string): string {
 
 const markdownWorker = ref<Worker | null>(null);
 
-onMounted(() => {
-  markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
-
-  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
-    if (event.data.error) {
-      console.error('Markdown rendering error:', event.data.error);
-      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
-      return;
-    }
-    if(event.data.html) {
-        // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
-        const safeHtml = DOMPurify.sanitize(event.data.html, {
-          ADD_ATTR: ['target', 'class', 'href'],
-          ALLOW_DATA_ATTR: true
-        });
-        renderedContent.value = safeHtml;
-        nextTick(() => {
-            enhanceCodeBlocks();
-            highlightCode();
-            updateToc();
-        });
-    }
-  };
-});
-
-onBeforeUnmount(() => {
-  if (markdownWorker.value) {
-    markdownWorker.value.terminate();
-  }
-});
-
 // 渲染Markdown内容
 const renderMarkdown = () => {
   if (markdownWorker.value && localNote.value) {
@@ -3579,47 +3637,12 @@ const updateToc = () => {
   tocItems.value = items;
 };
 
-onMounted(() => {
-  markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
-
-  markdownWorker.value.onmessage = (event: MessageEvent<{html?: string, error?: string}>) => {
-    if (event.data.error) {
-      console.error('Markdown rendering error:', event.data.error);
-      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
-      return;
-    }
-    if(event.data.html) {
-        // 在主线程进行 HTML 清洗，避免在 Worker 中因缺少 `document` 报错
-        const safeHtml = DOMPurify.sanitize(event.data.html, {
-          ADD_ATTR: ['target', 'class', 'href'],
-          ALLOW_DATA_ATTR: true
-        });
-        renderedContent.value = safeHtml;
-        nextTick(() => {
-            enhanceCodeBlocks();
-            highlightCode();
-            updateToc();
-        });
-    }
-  };
-  
-  // Other onMounted logic...
-});
-
-onBeforeUnmount(() => {
-  if (markdownWorker.value) {
-    markdownWorker.value.terminate();
-  }
-});
-
-// Watch for content changes to trigger rendering
-watch(() => localNote.value?.content, (newValue, oldValue) => {
-  if (newValue !== oldValue) {
-      renderMarkdown();
-  }
-}, { deep: true });
+// 删除重复的 onMounted 和相关代码
 
 const templateStore = useTipTemplateStore();
+
+// 在其他 script 顶层常量之后添加音频缓存
+const audioUrlCache = new Map<string, string>()
 
 </script>
 

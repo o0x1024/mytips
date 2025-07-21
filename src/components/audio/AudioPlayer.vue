@@ -192,6 +192,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { getCachedAudioUrl, setCachedAudioUrl, revokeAudioUrl } from '../../utils/audioCache'
 
 // Props
 interface Props {
@@ -288,23 +289,50 @@ const loadAudio = async (audio: any) => {
     isLoading.value = true
     stopAudio()
     
+    const cached = getCachedAudioUrl(audio.audio_id)
+    if (cached) {
+      if (audioElement.value) {
+        audioElement.value.src = cached
+        audioElement.value.load()
+      }
+      currentAudio.value = audio
+      await generateWaveform()
+      isLoading.value = false
+      return
+    }
+
     currentAudio.value = audio
     
     // 获取音频数据
-    const audioData = await invoke('get_audio_file', { audioId: audio.audio_id })
-    audioBuffer.value = audioData as ArrayBuffer
+    const audioData: { audio_data: string; file_format: string } = await invoke(
+      'get_audio_file', 
+      { audioId: audio.audio_id }
+    )
     
-    // 创建 Blob URL
-    const blob = new Blob([audioBuffer.value], { type: `audio/${audio.file_format}` })
-    const url = URL.createObjectURL(blob)
-    
-    if (audioElement.value) {
-      audioElement.value.src = url
-      audioElement.value.load()
+    if (audioData && audioData.audio_data) {
+      // Base64 解码
+      const byteCharacters = atob(audioData.audio_data)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      audioBuffer.value = byteArray.buffer
+
+      // 创建 Blob URL
+      const blob = new Blob([audioBuffer.value], { type: `audio/${audioData.file_format || 'webm'}` })
+      const url = URL.createObjectURL(blob)
+      
+      if (audioElement.value) {
+        audioElement.value.src = url
+        audioElement.value.load()
+      }
+      
+      // 生成波形数据
+      await generateWaveform()
+    } else {
+      throw new Error('Failed to retrieve audio data.')
     }
-    
-    // 生成波形数据
-    await generateWaveform()
     
   } catch (error) {
     console.error('Error loading audio:', error)
@@ -554,6 +582,11 @@ watch(() => props.tipId, (newTipId: string) => {
     loadAudioFiles()
   }
 })
+
+const checkAudioSupport = (format: string) => {
+  const test = document.createElement('audio')
+  return !!test.canPlayType && test.canPlayType(`audio/${format}`) !== ''
+}
 </script>
 
 <style scoped>

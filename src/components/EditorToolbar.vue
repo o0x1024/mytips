@@ -259,39 +259,6 @@
             </li>
           </ul>
         </div>
-
-        <!-- 更多工具下拉菜单 -->
-        <div class="dropdown dropdown-bottom" ref="moreToolsDropdown" v-show="hiddenItems.length > 0">
-          <button tabindex="0" class="btn btn-sm btn-ghost" title="更多工具">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-            </svg>
-            <span class="ml-1 text-xs toolbar-text">更多</span>
-          </button>
-          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-            <!-- 动态隐藏的工具 -->
-            <li v-for="item in hiddenItems" :key="item.priority">
-              <a @click="item.action" v-html="item.content"></a>
-            </li>
-            <!-- 其他固定工具 -->
-            <li class="divider" v-if="hiddenItems.length > 0"></li>
-            <li>
-              <a @click="emit('command', 'insert-markdown', '- [ ] ')">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="5" width="6" height="6" rx="1"></rect>
-                  <path d="m9 11-6-6"></path>
-                  <line x1="13" y1="8" x2="21" y2="8"></line>
-                  <rect x="3" y="17" width="6" height="6" rx="1"></rect>
-                  <line x1="13" y1="20" x2="21" y2="20"></line>
-                </svg>
-                任务列表
-              </a>
-            </li>
-          </ul>
-        </div>
       </div>
 
       <!-- 右侧工具组 -->
@@ -332,17 +299,41 @@
         <!-- 全屏切换按钮 -->
         <button class="btn btn-sm btn-ghost toolbar-item" data-priority="14" :class="{ 'btn-active': isFullscreen }"
           title="切换全屏" @click="emit('command', 'toggle-fullscreen')">
-          <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24"
-            stroke="currentColor">
-            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
-            <path d="M17 21h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
+          <!-- 进入全屏图标 -->
+          <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
           </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2">
-            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
-            <path d="M17 21h-10a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
+          <!-- 退出全屏图标 -->
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 4H4v4M16 4h4v4M8 20H4v-4M20 16v4h-4" />
           </svg>
         </button>
+
+        <!-- 更多工具下拉菜单 -->
+        <div class="dropdown dropdown-bottom dropdown-end" ref="moreToolsDropdown" v-if="hiddenItems.length > 0">
+          <button tabindex="0" class="btn btn-sm btn-ghost" title="更多工具">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01" />
+            </svg>
+          </button>
+          <div tabindex="0" class="dropdown-content z-[1] mt-2 p-2 shadow-lg bg-base-200 rounded-box w-auto">
+            <div class="flex flex-wrap items-center gap-1">
+              <button v-for="item in hiddenItems" :key="item.priority" @click="item.action()" v-html="item.content" class="btn btn-sm btn-ghost flex items-center gap-1"></button>
+              <div class="divider divider-horizontal mx-1" v-if="hiddenItems.length > 0"></div>
+              <button @click="emit('command', 'insert-markdown', '- [ ] ')" class="btn btn-sm btn-ghost flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="5" width="6" height="6" rx="1"></rect>
+                  <path d="m9 11-6-6"></path>
+                  <line x1="13" y1="8" x2="21" y2="8"></line>
+                  <rect x="3" y="17" width="6" height="6" rx="1"></rect>
+                  <line x1="13" y1="20" x2="21" y2="20"></line>
+                </svg>
+                任务列表
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

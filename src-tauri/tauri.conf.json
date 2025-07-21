@@ -24,27 +24,7 @@
       }
     ],
     "security": {
-      "csp": {
-        "default-src": [
-          "'self'"
-        ],
-        "img-src": [
-          "'self'",
-          "https://*",
-          "data:"
-        ],
-        "connect-src": [
-          "'self'",
-          "https://*"
-        ],
-        "script-src": [
-          "'self'"
-        ],
-        "style-src": [
-          "'self'",
-          "'unsafe-inline'"
-        ]
-      }
+      "csp": ""
     }
   },
   "bundle": {
@@ -94,6 +74,7 @@
       "open": true
     },
     "global-shortcut": null,
+    "microphone": null,
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFFRjc0MUIyN0M5Njk2NzEKUldSWTJMa0tvOEZ2bWJzbXJEVXJxYnBocXNoVjU1VDY2ZWRyRzVlS0d1T2wzR3hCVzFqeVd3QVAK",
       "endpoints": [

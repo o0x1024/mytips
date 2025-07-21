@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use crate::db::UnifiedDbManager;
+use base64::Engine;
 
 pub mod storage;
 pub mod transcription;
@@ -43,6 +44,13 @@ pub struct AudioFileInfo {
     pub updated_at: i64,
 }
 
+/// 响应给前端的音频文件结构
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioFileResponse {
+    pub audio_data: String, // Base64 编码的音频数据
+    pub file_format: String,
+}
+
 /// 转录请求
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptionRequest {
@@ -82,8 +90,16 @@ pub async fn save_audio_file(
 pub async fn get_audio_file(
     audio_id: String,
     db_manager: State<'_, UnifiedDbManager>,
-) -> Result<AudioFileInfo, String> {
-    storage::get_audio_file_info(&*db_manager, &audio_id).await
+) -> Result<AudioFileResponse, String> {
+    let audio_file = storage::get_audio_file_info(&*db_manager, &audio_id).await?;
+    let audio_data = storage::get_audio_file_data(&*db_manager, &audio_id).await?;
+
+    let encoded_data = base64::engine::general_purpose::STANDARD.encode(&audio_data);
+
+    Ok(AudioFileResponse {
+        audio_data: encoded_data,
+        file_format: audio_file.file_format,
+    })
 }
 
 /// 获取笔记的所有音频

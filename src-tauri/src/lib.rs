@@ -122,7 +122,6 @@ pub fn run() -> anyhow::Result<()> {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        // .plugin(tauri_plugin_shell::init()) // 暂时注释掉
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
