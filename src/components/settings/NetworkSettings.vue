@@ -13,12 +13,12 @@
         </div>
 
         <div v-if="proxySettings.enabled" class="grid gap-4">
-          <!-- 代理类型 -->
+          <!-- 代理协议 -->
           <div class="form-control">
             <label class="label">
-              <span class="label-text">代理类型</span>
+              <span class="label-text">代理协议</span>
             </label>
-            <select v-model="proxySettings.type" class="select select-bordered w-full">
+            <select v-model="proxySettings.protocol" class="select select-bordered w-full">
               <option value="http">HTTP</option>
               <option value="socks5">SOCKS5</option>
             </select>
@@ -39,32 +39,6 @@
               </label>
               <input type="number" v-model="proxySettings.port" placeholder="例如：7890"
                 class="input input-bordered" />
-            </div>
-          </div>
-
-          <!-- 代理认证 -->
-          <div class="form-control">
-            <div class="flex items-center">
-              <label class="label cursor-pointer">
-                <span class="label-text mr-4">需要认证</span>
-                <input type="checkbox" v-model="proxySettings.auth" class="checkbox checkbox-primary" />
-              </label>
-            </div>
-          </div>
-
-          <!-- 认证信息 -->
-          <div v-if="proxySettings.auth" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">用户名</span>
-              </label>
-              <input type="text" v-model="proxySettings.username" class="input input-bordered" />
-            </div>
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">密码</span>
-              </label>
-              <input type="password" v-model="proxySettings.password" class="input input-bordered" />
             </div>
           </div>
 
@@ -92,22 +66,16 @@ import { showMessage } from '../../services/dialog'
 // 代理设置接口
 interface ProxySettings {
   enabled: boolean
-  type: string
+  protocol: string
   host: string
   port: number
-  auth: boolean
-  username: string
-  password: string
 }
 
 const proxySettings = ref<ProxySettings>({
   enabled: false,
-  type: 'http',
+  protocol: 'http',
   host: '127.0.0.1',
   port: 10809,
-  auth: false,
-  username: '',
-  password: ''
 })
 
 const isTestingProxy = ref(false)

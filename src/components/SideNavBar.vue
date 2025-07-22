@@ -75,11 +75,14 @@
                   :is-collapsed="isCollapsed && !isMobile"
                   :selected-id="selectedNotebookId"
                   @select="selectNotebook"
-                  @edit="id => $emit('edit-notebook', id)"
+                  @edit="data => $emit('edit-notebook', data)"
                   @add-child="addChildNotebook"
                   @delete="deleteNotebook"
                   @encrypt="(id: string) => $emit('encrypt-notebook', id)"
                   @decrypt="(id: string) => $emit('decrypt-notebook', id)"
+                  @export-to-folder="id => $emit('export-to-folder', id)"
+                  @export-to-pdf="id => $emit('export-to-pdf', id)"
+                  @export-to-word="id => $emit('export-to-word', id)"
                 >
                   <template #name="{ name }">
                     <span v-html="highlightKeyword(name, searchQuery)"></span>
@@ -391,7 +394,10 @@ const emit = defineEmits([
   'import',
   'encrypt-notebook',
   'decrypt-notebook',
-  'refresh-notebooks'
+  'refresh-notebooks',
+  'export-to-folder',
+  'export-to-pdf',
+  'export-to-word'
 ])
 
 // --- Responsive state ---

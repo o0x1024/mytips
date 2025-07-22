@@ -100,23 +100,10 @@ async fn create_updater_builder_with_proxy(app: &tauri::AppHandle) -> Result<tau
     match get_proxy_settings_internal(db_manager.inner()).await {
         Ok(proxy_settings) => {
             if proxy_settings.enabled {
-                let proxy_url = if proxy_settings.auth && !proxy_settings.username.is_empty() {
-                    format!(
-                        "{}://{}:{}@{}:{}",
-                        proxy_settings.r#type,
-                        proxy_settings.username,
-                        proxy_settings.password,
-                        proxy_settings.host,
-                        proxy_settings.port
-                    )
-                } else {
-                    format!(
-                        "{}://{}:{}",
-                        proxy_settings.r#type,
-                        proxy_settings.host,
-                        proxy_settings.port
-                    )
-                };
+                let proxy_url = format!(
+                    "{}://{}:{}",
+                    proxy_settings.protocol, proxy_settings.host, proxy_settings.port
+                );
                 
                 println!("更新器使用代理: {}", proxy_url);
                 
@@ -276,23 +263,10 @@ pub async fn check_for_updates_no_signature(
         match get_proxy_settings_internal(db_manager.inner()).await {
             Ok(proxy_settings) => {
                 if proxy_settings.enabled {
-                    let proxy_url = if proxy_settings.auth && !proxy_settings.username.is_empty() {
-                        format!(
-                            "{}://{}:{}@{}:{}",
-                            proxy_settings.r#type,
-                            proxy_settings.username,
-                            proxy_settings.password,
-                            proxy_settings.host,
-                            proxy_settings.port
-                        )
-                    } else {
-                        format!(
-                            "{}://{}:{}",
-                            proxy_settings.r#type,
-                            proxy_settings.host,
-                            proxy_settings.port
-                        )
-                    };
+                    let proxy_url = format!(
+                        "{}://{}:{}",
+                        proxy_settings.protocol, proxy_settings.host, proxy_settings.port
+                    );
                     
                     if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
                         client_builder = client_builder.proxy(proxy);

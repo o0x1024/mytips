@@ -37,7 +37,7 @@ pub async fn create_genai_client(
         // 构建代理URL
         let proxy_url = format!(
             "{}://{}:{}",
-            proxy_settings.r#type, proxy_settings.host, proxy_settings.port
+            proxy_settings.protocol, proxy_settings.host, proxy_settings.port
         );
 
         println!("为GenAI客户端配置代理: {}", proxy_url);
@@ -46,10 +46,6 @@ pub async fn create_genai_client(
         std::env::set_var("HTTP_PROXY", &proxy_url);
         std::env::set_var("HTTPS_PROXY", &proxy_url);
 
-        // 如果需要认证，目前不支持，打印警告
-        if proxy_settings.auth {
-            println!("警告：通过环境变量设置代理时不支持认证");
-        }
     } else {
         // 确保代理环境变量被清除
         std::env::remove_var("HTTP_PROXY");
@@ -654,15 +650,12 @@ pub async fn create_custom_genai_client(
     if proxy_settings.enabled {
         let proxy_url = format!(
             "{}://{}:{}",
-            proxy_settings.r#type, proxy_settings.host, proxy_settings.port
+            proxy_settings.protocol, proxy_settings.host, proxy_settings.port
         );
         println!("为自定义GenAI客户端配置代理: {}", proxy_url);
         std::env::set_var("HTTP_PROXY", &proxy_url);
         std::env::set_var("HTTPS_PROXY", &proxy_url);
 
-        if proxy_settings.auth {
-            println!("警告：通过环境变量设置代理时不支持认证");
-        }
     } else {
         std::env::remove_var("HTTP_PROXY");
         std::env::remove_var("HTTPS_PROXY");

@@ -267,11 +267,11 @@ pub fn run() -> anyhow::Result<()> {
             // Export and backup APIs
             api::export::backup_database,
             api::export::restore_database,
+            api::export::export_notebook_to_folder,
+            api::export::export_notebook_to_pdf,
+            api::export::export_notebook_to_word,
 
             api::import::cancel_import,
-            export_as_markdown,
-            export_as_html,
-            export_as_pdf,
             // Clipboard history APIs
             get_clipboard_history,
             delete_clipboard_entries,
@@ -308,6 +308,8 @@ pub fn run() -> anyhow::Result<()> {
             get_platform_info,
             show_confirm_dialog,
             open_url,
+
+            api::import::import_from_github,
             // Encryption-related APIs
             api::encryption::get_encryption_statuses,
             api::encryption::encrypt_note,

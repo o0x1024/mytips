@@ -29,31 +29,71 @@
                   <input type="radio" name="import-type" class="radio radio-primary" v-model="importType" value="file" />
                   <span class="label-text ml-2">从单个文件导入</span>
                 </label>
+                <label class="label cursor-pointer">
+                  <input type="radio" name="import-type" class="radio radio-primary" v-model="importType" value="github" />
+                  <span class="label-text ml-2">从 GitHub 导入</span>
+                </label>
               </div>
             </div>
 
-            <div class="form-control">
-              <label class="label">
-                <span class="label-text">{{ importType === 'directory' ? '选择文件夹' : '选择文件' }}</span>
-              </label>
-              <div class="input-group">
-                <input 
-                  type="text" 
-                  placeholder="点击选择..." 
-                  class="input input-bordered flex-1" 
-                  :value="selectedPath"
-                  readonly
-                />
-                <button class="btn btn-primary" @click="selectPath">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                  </svg>
-                  选择
-                </button>
+            <div v-if="importType === 'directory' || importType === 'file'">
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">{{ importType === 'directory' ? '选择文件夹' : '选择文件' }}</span>
+                </label>
+                <div class="input-group">
+                  <input 
+                    type="text" 
+                    placeholder="点击选择..." 
+                    class="input input-bordered flex-1" 
+                    :value="selectedPath"
+                    readonly
+                  />
+                  <button class="btn btn-primary" @click="selectPath">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    选择
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div v-if="importType === 'directory'" class="space-y-2">
+            <!-- GitHub Import Options -->
+            <div v-if="importType === 'github'" class="space-y-4">
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">GitHub 仓库 URL</span>
+                </label>
+                <input type="text" placeholder="例如: https://github.com/user/repo" class="input input-bordered w-full" v-model="githubOptions.repo_url" />
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">分支或 Tag (可选)</span>
+                  </label>
+                  <input type="text" placeholder="默认主分支" class="input input-bordered w-full" v-model="githubOptions.branch" />
+                </div>
+                <div class="form-control">
+                  <label class="label">
+                    <span class="label-text">子目录 (可选)</span>
+                  </label>
+                  <input type="text" placeholder="例如: docs" class="input input-bordered w-full" v-model="githubOptions.subdirectory" />
+                </div>
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">Personal Access Token (可选)</span>
+                  <span class="label-text-alt">
+                    <a href="https://github.com/settings/tokens" target="_blank" class="link link-primary text-xs">用于私有仓库</a>
+                  </span>
+                </label>
+                <input type="password" placeholder="粘贴你的 Token" class="input input-bordered w-full" v-model="githubOptions.token" />
+              </div>
+            </div>
+
+
+            <div v-if="importType === 'directory' || importType === 'github'" class="space-y-2">
               <div class="form-control">
                 <label class="label">
                   <span class="label-text">导入选项</span>
@@ -358,6 +398,14 @@ const importStatusMessage = ref('正在准备导入...')
 let unlisten: UnlistenFn | null = null
 const isMinimized = ref(false)
 
+// GitHub 导入选项
+const githubOptions = ref({
+  repo_url: '',
+  branch: '',
+  subdirectory: '',
+  token: ''
+})
+
 // 导入选项
 const options = ref({
   include_subdirs: true,
@@ -379,9 +427,13 @@ const importResult = ref<any>(null)
 const canProceedFromStep1 = computed(() => {
   if (importType.value === 'directory') {
     return selectedPath.value !== ''
-  } else {
+  } else if (importType.value === 'file') {
     return selectedPath.value !== '' && targetNotebookId.value !== ''
+  } else if (importType.value === 'github') {
+    // 简单校验 GitHub URL
+    return githubOptions.value.repo_url.startsWith('https://github.com/')
   }
+  return false
 })
 
 // 方法
@@ -411,7 +463,7 @@ async function nextStep() {
     if (importType.value === 'directory') {
       // 获取预览
       await loadPreview()
-    } else {
+    } else if (importType.value === 'file') {
       // 对于单个文件，创建简单的预览数据
       const fileName = selectedPath.value.split(/[/\\]/).pop() || '未知文件'
       const fileTitle = fileName.replace(/\.(md|markdown)$/i, '')
@@ -430,6 +482,20 @@ async function nextStep() {
         }],
         total_notes: 1,
         total_images: 0
+      }
+    } else if (importType.value === 'github') {
+      // 对于 GitHub 导入，跳过预览，直接进入下一步
+      // 后端会扫描文件，所以可以创建一个简单的占位符
+       const repoName = githubOptions.value.repo_url.split('/').pop() || 'GitHub Repo';
+      preview.value = {
+        notebooks: [{
+          name: repoName,
+          path: githubOptions.value.repo_url,
+          notes: [],
+          children: []
+        }],
+        total_notes: '未知', // 显示未知，因为我们跳过了预览
+        total_images: '未知'
       }
     }
     currentStep.value = 2
@@ -505,6 +571,40 @@ async function startImport() {
         options: options.value
       })
 
+    } else if (importType.value === 'github') {
+      // GitHub 导入也使用事件监听
+      unlisten = await listen('import-progress', (event: any) => {
+        const progress = event.payload
+        
+        importStatusMessage.value = getStatusMessage(progress.status)
+        importTotalFiles.value = progress.totalFiles
+        importProgress.value = progress.processedFiles
+        currentImportFile.value = progress.currentFile
+
+        if (progress.status === 'completed' || progress.status === 'error') {
+            importResult.value = progress.result
+            isImporting.value = false
+            if (isMinimized.value) {
+                const { success, notes_imported, notebooks_created, errors } = progress.result;
+                const message = success
+                    ? `后台导入完成: 导入 ${notes_imported} 篇笔记, 创建 ${notebooks_created} 个笔记本。`
+                    : `后台导入失败: ${errors && errors.length > 0 ? errors[0] : '未知错误'}`;
+                showToast(message, success ? 'success' : 'error', 10000);
+            }
+            if (unlisten) {
+                unlisten()
+                unlisten = null
+            }
+        }
+      })
+
+      // 异步调用 GitHub 导入
+      await invoke('import_from_github', {
+        githubOptions: githubOptions.value,
+        targetNotebookId: targetNotebookId.value || null,
+        options: options.value
+      })
+
     } else {
       // 单文件导入保持同步逻辑
       const result = await invoke('import_markdown_file', {
@@ -543,6 +643,8 @@ function getStatusMessage(status: string): string {
   switch (status) {
     case 'starting':
       return '正在开始...'
+    case 'cloning':
+      return '正在克隆仓库...'
     case 'scanning':
       return '正在扫描文件...'
     case 'inProgress':
@@ -593,6 +695,12 @@ function resetDialog() {
   importTotalFiles.value = 0
   currentImportFile.value = ''
   isMinimized.value = false
+  githubOptions.value = {
+    repo_url: '',
+    branch: '',
+    subdirectory: '',
+    token: ''
+  }
   options.value = {
     include_subdirs: true,
     process_images: true,

@@ -1,5 +1,5 @@
 use crate::db::{models::{Tip, TipType, Category}, operations, manager::UnifiedDbManager};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,9 @@ use tokio::sync::Mutex;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use std::sync::atomic::{AtomicBool, Ordering};
 use once_cell::sync::Lazy;
+use git2::Repository;
+use tempfile::tempdir;
+use crate::api::settings;
 
 // 导入取消标志
 static IMPORT_CANCELLATION_TOKEN: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
@@ -31,6 +34,7 @@ pub async fn cancel_import() -> Result<(), String> {
 #[serde(rename_all = "camelCase")]
 pub enum ImportStatus {
     Starting,
+    Cloning,
     Scanning,
     InProgress,
     Completed,
@@ -85,6 +89,15 @@ pub struct ImportResult {
     pub warnings: Vec<String>,
 }
 
+// GitHub 导入选项
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GithubImportOptions {
+    pub repo_url: String,
+    pub branch: Option<String>,
+    pub subdirectory: Option<String>,
+    pub token: Option<String>,
+}
+
 // 预览结构
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ImportPreview {
@@ -121,21 +134,15 @@ impl Default for ImportResult {
     }
 }
 
-// 从目录导入（修改为异步API）
+// 新增：从GitHub导入
 #[tauri::command]
-pub async fn import_from_directory(
+pub async fn import_from_github(
     app: tauri::AppHandle,
-    directory_path: String,
+    github_options: GithubImportOptions,
     target_notebook_id: Option<String>,
     options: ImportOptions,
 ) -> Result<(), String> {
-    
-    // 每次导入开始时重置取消标志
-    IMPORT_CANCELLATION_TOKEN.store(false, Ordering::SeqCst);
-
     tauri::async_runtime::spawn(async move {
-        let root_path = PathBuf::from(directory_path);
-        
         let emit_progress = |status: ImportStatus, total: usize, processed: usize, file: &str, res: Option<ImportResult>| {
             let _ = app.emit("import-progress", ImportProgress {
                 status,
@@ -146,113 +153,272 @@ pub async fn import_from_directory(
             });
         };
 
-        emit_progress(ImportStatus::Scanning, 0, 0, "Scanning files...", None);
+        // 1. 立刻发送克隆状态
+        let clone_msg = format!("Cloning repository: {}", github_options.repo_url);
+        emit_progress(ImportStatus::Cloning, 0, 0, &clone_msg, None);
 
-        let files_to_import = match scan_directory_for_files(&root_path, options.include_subdirs) {
-            Ok(files) => files,
+        // 2. 获取数据库和网络设置
+        let manager = match app.try_state::<UnifiedDbManager>() {
+            Some(m) => m.inner().clone(),
+            None => {
+                let mut result = ImportResult::default();
+                result.errors.push("Database manager not initialized.".to_string());
+                emit_progress(ImportStatus::Error, 0, 0, "Error", Some(result));
+                return;
+            }
+        };
+        let conn = match manager.get_conn().await {
+            Ok(c) => c,
             Err(e) => {
                 let mut result = ImportResult::default();
-                result.errors.push(format!("Scanning directory failed: {}", e));
-                emit_progress(ImportStatus::Error, 0, 0, "", Some(result));
+                result.errors.push(format!("Failed to get db connection: {}", e));
+                emit_progress(ImportStatus::Error, 0, 0, "Error", Some(result));
+                return;
+            }
+        };
+        let network_settings = settings::get_network_settings_from_db(&conn).await.unwrap_or_default();
+
+        // 3. 执行克隆
+        let temp_dir = match tempdir() {
+            Ok(dir) => dir,
+            Err(e) => {
+                let mut result = ImportResult::default();
+                result.errors.push(format!("Failed to create temporary directory: {}", e));
+                emit_progress(ImportStatus::Error, 0, 0, "Error", Some(result));
+                return;
+            }
+        };
+        let temp_path = temp_dir.path().to_path_buf();
+        let repo_url = github_options.repo_url.clone();
+        let token = github_options.token.clone();
+
+        let clone_result = tokio::task::spawn_blocking(move || {
+            let mut fetch_opts = git2::FetchOptions::new();
+            if network_settings.proxy.enabled {
+                let proxy_url = format!(
+                    "{}://{}:{}",
+                    network_settings.proxy.protocol,
+                    network_settings.proxy.host,
+                    network_settings.proxy.port
+                );
+                let mut proxy_opts = git2::ProxyOptions::new();
+                proxy_opts.url(&proxy_url);
+                fetch_opts.proxy_options(proxy_opts);
+            }
+            if let Some(token) = token {
+                let mut callbacks = git2::RemoteCallbacks::new();
+                callbacks.credentials(move |_url, _username_from_url, _allowed_types| {
+                    git2::Cred::userpass_plaintext(&token, "")
+                });
+                fetch_opts.remote_callbacks(callbacks);
+            }
+            let mut repo_builder = git2::build::RepoBuilder::new();
+            repo_builder.fetch_options(fetch_opts);
+            repo_builder.clone(&repo_url, &temp_path)
+                .map(|_| temp_path)
+                .map_err(|e| format!("Failed to clone GitHub repository: {}", e))
+        }).await.map_err(|e| format!("Clone task panicked: {}", e));
+
+        let repo_path = match clone_result {
+            Ok(Ok(path)) => path,
+            Ok(Err(e)) | Err(e) => {
+                let mut result = ImportResult::default();
+                result.errors.push(e);
+                emit_progress(ImportStatus::Error, 0, 0, "Error", Some(result));
+                let _ = temp_dir.close();
                 return;
             }
         };
 
-        if files_to_import.is_empty() {
+        // 4. 确定导入路径并执行导入
+        let import_path = if let Some(subdir) = &github_options.subdirectory {
+            repo_path.join(subdir)
+        } else {
+            repo_path
+        };
+
+        if !import_path.exists() {
             let mut result = ImportResult::default();
-            result.warnings.push("No markdown files found to import.".to_string());
-            result.success = true;
-            emit_progress(ImportStatus::Completed, 0, 0, "", Some(result));
+            result.errors.push(format!("Subdirectory '{}' does not exist in the repository.", github_options.subdirectory.unwrap_or_default()));
+            emit_progress(ImportStatus::Error, 0, 0, "Error", Some(result));
+            let _ = temp_dir.close();
             return;
         }
 
-        let total_files = files_to_import.len();
-        let manager = app.state::<UnifiedDbManager>().inner().clone();
-        
-        let result = Arc::new(Mutex::new(ImportResult::default()));
-        let notebook_cache = Arc::new(Mutex::new(HashMap::<PathBuf, String>::new()));
-        let processed_files_count = Arc::new(Mutex::new(0_usize));
-        
-        let concurrency = 10; // 设置并发处理的文件数量
+        let import_result = do_import_from_directory(
+            app.clone(),
+            manager,
+            import_path.to_str().unwrap().to_string(),
+            target_notebook_id,
+            options,
+        ).await;
 
-        let import_result_future = stream::iter(files_to_import)
-            .map(Ok) // for try_for_each_concurrent
-            .try_for_each_concurrent(concurrency, |file| {
-                let file_path_display = file.path.display().to_string();
-                let result = Arc::clone(&result);
-                let notebook_cache = Arc::clone(&notebook_cache);
-                let manager = manager.clone();
-                let root_path = root_path.clone();
-                let target_notebook_id = target_notebook_id.clone();
-                let options = options.clone();
-                let app = app.clone();
-                let processed_files_count = Arc::clone(&processed_files_count);
-
-                async move {
-                    if IMPORT_CANCELLATION_TOKEN.load(Ordering::SeqCst) {
-                        return Err(anyhow!("Import cancelled by user"));
-                    }
-
-                    let import_one_file_result = async {
-                        let conn = manager.get_conn().await?;
-                        let parent_dir = file.relative_path.parent().unwrap_or(Path::new(""));
-                        
-                        let parent_notebook_id = get_or_create_parent_notebook_concurrent(
-                            &conn,
-                            &root_path,
-                            parent_dir,
-                            &target_notebook_id,
-                            &result,
-                            &notebook_cache,
-                        ).await?;
-
-                        import_single_file_to_notebook_concurrent(
-                            &conn,
-                            &file.path,
-                            &parent_notebook_id,
-                            &options,
-                            &result,
-                        ).await
-                    }.await;
-
-                    if let Err(e) = import_one_file_result {
-                        let error_msg = format!("Failed to import file {}: {}", file_path_display, e);
-                        result.lock().await.errors.push(error_msg.clone());
-                        tracing::error!("{}", error_msg);
-                    }
-                    
-                    let mut processed = processed_files_count.lock().await;
-                    *processed += 1;
-
-                    let _ = app.emit("import-progress", ImportProgress {
-                        status: ImportStatus::InProgress,
-                        total_files: total_files,
-                        processed_files: *processed,
-                        current_file: file_path_display,
-                        result: None,
-                    });
-                    
-                    Ok(())
-                }
-            })
-            .await;
-
-        let mut final_result = Arc::try_unwrap(result).unwrap().into_inner();
-        let final_processed_count = *processed_files_count.lock().await;
-        
-        if let Err(e) = import_result_future {
-            if e.to_string() == "Import cancelled by user" {
-                final_result.warnings.push("Import was cancelled.".to_string());
-            } else {
-                final_result.errors.push(e.to_string());
+        // 5. 清理临时目录
+        if let Err(e) = temp_dir.close() {
+            if let Ok(mut res) = import_result {
+                res.warnings.push(format!("Failed to clean up temporary directory: {}", e));
+                // 重新发送最终结果，包含新的警告信息
+                emit_progress(ImportStatus::Completed, res.notes_imported as usize, res.notes_imported as usize, "Completed", Some(res));
             }
         }
+    });
+    
+    Ok(())
+}
 
-        final_result.success = final_result.errors.is_empty();
-        emit_progress(ImportStatus::Completed, total_files, final_processed_count, "Completed", Some(final_result));
+
+// 从目录导入（修改为异步API）
+#[tauri::command]
+pub async fn import_from_directory(
+    app: tauri::AppHandle,
+    directory_path: String,
+    target_notebook_id: Option<String>,
+    options: ImportOptions,
+) -> Result<(), String> {
+    let manager = app.state::<UnifiedDbManager>().inner().clone();
+    
+    tauri::async_runtime::spawn(async move {
+        let _ = do_import_from_directory(
+            app,
+            manager,
+            directory_path,
+            target_notebook_id,
+            options
+        ).await;
     });
 
     Ok(())
+}
+
+// 提取核心导入逻辑到一个新的辅助函数中
+async fn do_import_from_directory(
+    app: tauri::AppHandle,
+    manager: UnifiedDbManager,
+    directory_path: String,
+    target_notebook_id: Option<String>,
+    options: ImportOptions,
+) -> Result<ImportResult, String> {
+    
+    // 每次导入开始时重置取消标志
+    IMPORT_CANCELLATION_TOKEN.store(false, Ordering::SeqCst);
+
+    let root_path = PathBuf::from(directory_path);
+    
+    let emit_progress = |status: ImportStatus, total: usize, processed: usize, file: &str, res: Option<ImportResult>| {
+        let _ = app.emit("import-progress", ImportProgress {
+            status,
+            total_files: total,
+            processed_files: processed,
+            current_file: file.to_string(),
+            result: res,
+        });
+    };
+
+    emit_progress(ImportStatus::Scanning, 0, 0, "Scanning files...", None);
+
+    let files_to_import = match scan_directory_for_files(&root_path, options.include_subdirs) {
+        Ok(files) => files,
+        Err(e) => {
+            let mut result = ImportResult::default();
+            result.errors.push(format!("Scanning directory failed: {}", e));
+            emit_progress(ImportStatus::Error, 0, 0, "", Some(result.clone()));
+            return Err(e.to_string());
+        }
+    };
+
+    if files_to_import.is_empty() {
+        let mut result = ImportResult::default();
+        result.warnings.push("No markdown files found to import.".to_string());
+        result.success = true;
+        emit_progress(ImportStatus::Completed, 0, 0, "", Some(result.clone()));
+        return Ok(result);
+    }
+
+    let total_files = files_to_import.len();
+    
+    let result = Arc::new(Mutex::new(ImportResult::default()));
+    let notebook_cache = Arc::new(Mutex::new(HashMap::<PathBuf, String>::new()));
+    let processed_files_count = Arc::new(Mutex::new(0_usize));
+    
+    let concurrency = 10; // 设置并发处理的文件数量
+
+    let import_result_future = stream::iter(files_to_import)
+        .map(Ok) // for try_for_each_concurrent
+        .try_for_each_concurrent(concurrency, |file| {
+            let file_path_display = file.path.display().to_string();
+            let result = Arc::clone(&result);
+            let notebook_cache = Arc::clone(&notebook_cache);
+            let manager = manager.clone();
+            let root_path = root_path.clone();
+            let target_notebook_id = target_notebook_id.clone();
+            let options = options.clone();
+            let app = app.clone();
+            let processed_files_count = Arc::clone(&processed_files_count);
+
+            async move {
+                if IMPORT_CANCELLATION_TOKEN.load(Ordering::SeqCst) {
+                    return Err(anyhow!("Import cancelled by user"));
+                }
+
+                let import_one_file_result = async {
+                    let conn = manager.get_conn().await?;
+                    let parent_dir = file.relative_path.parent().unwrap_or(Path::new(""));
+                    
+                    let parent_notebook_id = get_or_create_parent_notebook_concurrent(
+                        &conn,
+                        &root_path,
+                        parent_dir,
+                        &target_notebook_id,
+                        &result,
+                        &notebook_cache,
+                    ).await?;
+
+                    import_single_file_to_notebook_concurrent(
+                        &conn,
+                        &file.path,
+                        &parent_notebook_id,
+                        &options,
+                        &result,
+                    ).await
+                }.await;
+
+                if let Err(e) = import_one_file_result {
+                    let error_msg = format!("Failed to import file {}: {}", file_path_display, e);
+                    result.lock().await.errors.push(error_msg.clone());
+                    tracing::error!("{}", error_msg);
+                }
+                
+                let mut processed = processed_files_count.lock().await;
+                *processed += 1;
+
+                let _ = app.emit("import-progress", ImportProgress {
+                    status: ImportStatus::InProgress,
+                    total_files: total_files,
+                    processed_files: *processed,
+                    current_file: file_path_display,
+                    result: None,
+                });
+                
+                Ok(())
+            }
+        })
+        .await;
+
+    let mut final_result = Arc::try_unwrap(result).unwrap().into_inner();
+    let final_processed_count = *processed_files_count.lock().await;
+    
+    if let Err(e) = import_result_future {
+        if e.to_string() == "Import cancelled by user" {
+            final_result.warnings.push("Import was cancelled.".to_string());
+        } else {
+            final_result.errors.push(e.to_string());
+        }
+    }
+
+    final_result.success = final_result.errors.is_empty();
+    emit_progress(ImportStatus::Completed, total_files, final_processed_count, "Completed", Some(final_result.clone()));
+
+    Ok(final_result)
 }
 
 // 从单个文件导入（修改为同步API）

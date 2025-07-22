@@ -42,21 +42,31 @@
         </svg>
         
         <!-- 笔记本名称 -->
-        <span v-if="!isCollapsed" class="notebook-name">
+        <span v-if="!isCollapsed && !isEditing" class="notebook-name">
           <slot name="name" :name="notebook.name">
             {{ notebook.name }}
           </slot>
         </span>
+        <input 
+          v-if="!isCollapsed && isEditing"
+          type="text"
+          ref="editInput"
+          v-model="newName"
+          class="input input-xs w-full"
+          @keyup.enter="finishEditing"
+          @blur="finishEditing"
+          @click.stop
+        />
         
         <!-- 加密状态指示器 -->
-        <span v-if="!isCollapsed && isNotebookEncrypted(notebook.id)" title="已加密" class="text-warning ml-1">
+        <span v-if="!isCollapsed && isNotebookEncrypted(notebook.id) && !isEditing" title="已加密" class="text-warning ml-1">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </span>
         
         <!-- 笔记数量指示器 -->
-        <span v-if="!isCollapsed" class="badge badge-sm ml-auto">{{ notebook.count || 0 }}</span>
+        <span v-if="!isCollapsed && !isEditing" class="badge badge-sm ml-auto">{{ notebook.count || 0 }}</span>
       </a>
       
       <!-- 操作菜单 -->
@@ -80,9 +90,20 @@
             </svg>
             解密笔记本
           </a></li>
-          <li class="divider"></li>
-          <li><a @click="editNotebook">重命名</a></li>.
+          <div class="divider my-0"></div>
+          <li><a @click="editNotebook">重命名</a></li>
           <li><a @click="addChildNotebook">添加子笔记本</a></li>
+          <li>
+            <details>
+              <summary>导出</summary>
+              <ul>
+                <li><a @click="exportToFolder">到文件夹</a></li>
+                <li><a @click="exportToPdf">为 PDF</a></li>
+                <li><a @click="exportToWord">为 Word</a></li>
+              </ul>
+            </details>
+          </li>
+          <div class="divider my-0"></div>
           <li><a @click="deleteNotebook" class="text-error">删除</a></li>
         </ul>
       </div>
@@ -98,7 +119,7 @@
         :is-collapsed="isCollapsed"
         :selected-id="selectedId"
         @select="id => $emit('select', id)"
-        @edit="id => $emit('edit', id)"
+        @edit="data => $emit('edit', data)"
         @add-child="id => $emit('add-child', id)"
         @delete="id => $emit('delete', id)"
         @encrypt="id => $emit('encrypt', id)"
@@ -112,6 +133,8 @@
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { useEncryptionStore } from '../stores/encryptionStore'
+import { invoke } from '@tauri-apps/api/core'
+import { useNotificationStore } from '../stores/notificationStore'
 
 // 定义类型
 interface NotebookType {
@@ -147,17 +170,24 @@ const emit = defineEmits([
   'add-grandchild',
   'delete-child',
   'encrypt',
-  'decrypt'
+  'decrypt',
+  'export-to-folder',
+  'export-to-pdf',
+  'export-to-word'
 ])
 
 // 加密存储
 const encryptionStore = useEncryptionStore()
+const notificationStore = useNotificationStore()
 
 // 状态
 const isExpanded = ref(false)
 const showContextMenu = ref(false)
 const menuX = ref(0)
 const menuY = ref(0)
+const isEditing = ref(false)
+const newName = ref('')
+const editInput = ref<HTMLInputElement | null>(null)
 
 // 检查笔记本是否加密
 function isNotebookEncrypted(notebookId: string): boolean {
@@ -179,9 +209,25 @@ function selectThis() {
   emit('select', props.notebook.id)
 }
 
+function startEditing() {
+  isEditing.value = true
+  newName.value = props.notebook.name
+  nextTick(() => {
+    editInput.value?.focus()
+    editInput.value?.select()
+  })
+}
+
+function finishEditing() {
+  if (isEditing.value && newName.value.trim() && newName.value.trim() !== props.notebook.name) {
+    emit('edit', { id: props.notebook.id, name: newName.value.trim() })
+  }
+  isEditing.value = false
+}
+
 function editNotebook(event: Event) {
   event.stopPropagation()
-  emit('edit', props.notebook.id)
+  startEditing()
 }
 
 function addChildNotebook(event: Event) {
@@ -202,6 +248,36 @@ function encryptNotebook(event: Event) {
 function decryptNotebook(event: Event) {
   event.stopPropagation()
   emit('decrypt', props.notebook.id)
+}
+
+async function exportToFolder(event: Event) {
+  event.stopPropagation()
+  try {
+    await invoke('export_notebook_to_folder', { notebookId: props.notebook.id })
+    notificationStore.addToast('笔记本已成功导出为文件夹。', 'success')
+  } catch (error) {
+    notificationStore.addToast(`导出失败: ${error}`, 'error')
+  }
+}
+
+async function exportToPdf(event: Event) {
+  event.stopPropagation()
+  try {
+    await invoke('export_notebook_to_pdf', { notebookId: props.notebook.id })
+    notificationStore.addToast('笔记本已成功导出为 PDF。', 'success')
+  } catch (error) {
+    notificationStore.addToast(`导出失败: ${error}`, 'error')
+  }
+}
+
+async function exportToWord(event: Event) {
+  event.stopPropagation()
+  try {
+    await invoke('export_notebook_to_word', { notebookId: props.notebook.id })
+    notificationStore.addToast('笔记本已成功导出为 Word 文档。', 'success')
+  } catch (error) {
+    notificationStore.addToast(`导出失败: ${error}`, 'error')
+  }
 }
 
 function onContextMenu(e: MouseEvent) {
