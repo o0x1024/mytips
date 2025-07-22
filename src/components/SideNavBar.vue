@@ -47,6 +47,11 @@
         <div v-if="!(isCollapsed && !isMobile)" class="flex justify-between items-center mt-2 px-2">
           <span class="text-base font-bold uppercase text-base-content/80 ">笔记本</span>
           <div class="flex gap-1">
+            <button class="btn btn-xs btn-ghost" @click="refreshAll" title="刷新笔记本">
+              <svg  xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            </button>
             <button class="btn btn-xs btn-ghost" @click="$emit('import')" title="导入文档">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
@@ -322,7 +327,7 @@ import { showConfirm } from '../services/dialog'
 import { useUIStore } from '../stores/uiStore'
 import { useUpdateStore } from '../stores/updateStore'
 import { useResponsive } from '../composables/useResponsive'
-// const encryptionStore = useEncryptionStore()
+import { useTipsStore } from '../stores/tipsStore'
 
 // 获取UI存储
 const uiStore = useUIStore()
@@ -360,6 +365,10 @@ const props = defineProps({
   selectedTags: {
     type: Array as () => string[],
     default: () => []
+  },
+  isRefreshingNotebooks: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -381,7 +390,8 @@ const emit = defineEmits([
   'clipboard',
   'import',
   'encrypt-notebook',
-  'decrypt-notebook'
+  'decrypt-notebook',
+  'refresh-notebooks'
 ])
 
 // --- Responsive state ---
@@ -652,6 +662,14 @@ const highlightKeyword = (text: string, keyword: string) => {
   if (!keyword) return text
   const reg = new RegExp(`(${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
   return text.replace(reg, '<span class="text-primary font-bold bg-yellow-100">$1</span>')
+}
+
+const tipsStore = useTipsStore()
+
+async function refreshAll() {
+  await tipsStore.fetchAllCategories()
+  await tipsStore.fetchAllTipSummaries()
+  
 }
 </script>
 

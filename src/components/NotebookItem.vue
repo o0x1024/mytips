@@ -81,7 +81,7 @@
             解密笔记本
           </a></li>
           <li class="divider"></li>
-          <li><a @click="editNotebook">编辑</a></li>.
+          <li><a @click="editNotebook">重命名</a></li>.
           <li><a @click="addChildNotebook">添加子笔记本</a></li>
           <li><a @click="deleteNotebook" class="text-error">删除</a></li>
         </ul>

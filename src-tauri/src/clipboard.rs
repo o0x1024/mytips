@@ -561,8 +561,14 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                         }
                     }
                     Err(e) => {
-                        warn!("读取剪贴板文本失败: {}", e);
-                        consecutive_failures += 1;
+                        let error_message = e.to_string();
+                        // 忽略由于剪贴板为空或内容为图片等非文本格式而导致的“错误”
+                        // "format" 对应 "not available in the requested format"
+                        // "empty" 对应 "clipboard is empty"
+                        if !error_message.contains("format") && !error_message.contains("empty") {
+                            warn!("读取剪贴板文本失败: {}", error_message);
+                            consecutive_failures += 1;
+                        }
                     }
                 }
 
@@ -679,8 +685,10 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                 }
                             }
                         }
-                        Err(_) => {
-                            // 忽略无图片内容的错误，这是正常情况
+                        Err(e) => {
+                            // 通常是剪贴板没有图片，这是正常情况。
+                            // 记录到debug日志以备调试。
+                            debug!("无法读取剪贴板图片 (这通常是正常的，因为剪贴板内容可能不是图片): {}", e);
                         }
                     }
                 }

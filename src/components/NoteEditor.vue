@@ -173,6 +173,42 @@
     @close="showAudioPlayer = false"
     @insert-audio="handleAudioPlayerInsert"
   />
+
+  <!-- Image Zoom Modal -->
+  <div v-if="showImageModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[99999] image-modal" @click="closeImageModal">
+    <div class="relative w-full h-full overflow-hidden">
+      <img 
+        :src="modalImageSrc" 
+        :alt="modalImageAlt" 
+        class="absolute top-1/2 left-1/2 object-contain transition-transform duration-200 ease-out"
+        @load="modalImageLoading = false"
+        @wheel.prevent="handleZoom"
+        @mousedown="startPan"
+        @click.stop
+        :class="{ 'cursor-grab': zoomLevel > 1, 'active:cursor-grabbing': isPanning }"
+        :style="{ 
+          transform: `translate(-50%, -50%) scale(${zoomLevel}) translate(${panX}px, ${panY}px)`,
+          maxWidth: 'none',
+          maxHeight: 'none',
+        }"
+      />
+      <div v-if="modalImageLoading" class="absolute inset-0 flex items-center justify-center">
+        <span class="loading loading-spinner loading-lg text-white"></span>
+      </div>
+    </div>
+    
+    <button @click.stop="closeImageModal" class="absolute top-4 right-4 text-white text-3xl btn btn-ghost btn-circle z-10">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+    </button>
+    
+    <div @click.stop class="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-base-300/80 backdrop-blur-sm p-2 rounded-lg shadow-lg z-10">
+      <button @click.stop="zoomOut" class="btn btn-sm btn-ghost">-</button>
+      <input type="range" min="0.5" max="5" step="0.1" v-model.number="zoomLevel" @input="onZoomSliderChange" class="range range-xs w-40" />
+      <button @click.stop="zoomIn" class="btn btn-sm btn-ghost">+</button>
+      <div class="divider divider-horizontal mx-0"></div>
+      <button @click.stop="resetZoom" class="btn btn-sm btn-ghost">重置</button>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -221,6 +257,14 @@ import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
 import { getCachedAudioUrl, setCachedAudioUrl } from '../utils/audioCache'
+
+// Image Zoom/Pan state
+const zoomLevel = ref(0.7)
+const panX = ref(0)
+const panY = ref(0)
+const isPanning = ref(false)
+const panStart = ref({ x: 0, y: 0 })
+const imageStart = ref({ x: 0, y: 0 })
 
 // 简化的语言组件初始化函数
 async function loadPrismLanguages() {
@@ -2651,6 +2695,7 @@ const modalImageLoading = ref(false)
 
 function closeImageModal() {
   showImageModal.value = false
+  resetZoom()
 }
 
 // 设置图片点击放大功能
@@ -3643,6 +3688,86 @@ const templateStore = useTipTemplateStore();
 
 // 在其他 script 顶层常量之后添加音频缓存
 const audioUrlCache = new Map<string, string>()
+
+// --- Start: Image Zoom & Pan Functions ---
+
+function onZoomSliderChange(event: Event) {
+  zoomLevel.value = parseFloat((event.target as HTMLInputElement).value);
+  if (zoomLevel.value <= 1) {
+    panX.value = 0;
+    panY.value = 0;
+  }
+}
+
+function handleZoom(event: WheelEvent) {
+  event.preventDefault();
+  const scaleAmount = 0.1;
+  
+  if (event.deltaY < 0) {
+    zoomLevel.value = Math.min(5, zoomLevel.value + scaleAmount);
+  } else {
+    zoomLevel.value = Math.max(0.5, zoomLevel.value - scaleAmount);
+  }
+
+  if (zoomLevel.value <= 1) {
+    panX.value = 0;
+    panY.value = 0;
+  }
+}
+
+function zoomIn() {
+  zoomLevel.value = Math.min(5, zoomLevel.value + 0.5);
+  if (zoomLevel.value <= 1) {
+    panX.value = 0;
+    panY.value = 0;
+  }
+}
+
+function zoomOut() {
+  zoomLevel.value = Math.max(0.5, zoomLevel.value - 0.5);
+  if (zoomLevel.value <= 1) {
+    panX.value = 0;
+    panY.value = 0;
+  }
+}
+
+function resetZoom() {
+  zoomLevel.value = 0.7;
+  panX.value = 0;
+  panY.value = 0;
+}
+
+function startPan(event: MouseEvent) {
+  if (event.button !== 0 || zoomLevel.value <= 1) return;
+  event.preventDefault();
+  
+  isPanning.value = true;
+  panStart.value = { x: event.clientX, y: event.clientY };
+  imageStart.value = { x: panX.value, y: panY.value };
+  
+  document.addEventListener('mousemove', doPan);
+  document.addEventListener('mouseup', endPan);
+}
+
+function doPan(event: MouseEvent) {
+  if (!isPanning.value) return;
+  event.preventDefault();
+  
+  const dx = event.clientX - panStart.value.x;
+  const dy = event.clientY - panStart.value.y;
+  
+  panX.value = imageStart.value.x + dx / zoomLevel.value;
+  panY.value = imageStart.value.y + dy / zoomLevel.value;
+}
+
+function endPan(event: MouseEvent) {
+  if (!isPanning.value) return;
+  event.preventDefault();
+  isPanning.value = false;
+  document.removeEventListener('mousemove', doPan);
+  document.removeEventListener('mouseup', endPan);
+}
+// --- End: Image Zoom & Pan Functions ---
 
 </script>
 

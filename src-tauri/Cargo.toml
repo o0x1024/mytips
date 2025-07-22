@@ -20,23 +20,23 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
+tauri = { version = "2.7.0", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
 libsql = { version = "0.9.17", features = ["core", "replication", "remote"] }
-uuid = { version = "1.6.1", features = ["v4", "serde"] }
-chrono = { version = "0.4.31", features = ["serde"] }
+uuid = { version = "1.8.0", features = ["v4"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 dirs = "6.0.0"
 thiserror = "2.0.12"
-anyhow = "1.0.75"
+anyhow = "1.0.86"
 tauri-plugin-dialog = "2.2.1"
 tauri-plugin-fs = "2"
-reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls", "multipart"] }
-base64 = "0.21"
-tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12.22", default-features = false, features = ["json", "stream", "rustls-tls", "multipart"] }
+base64 = "0.22.1"
+tokio = { version = "1.37.0", features = ["full"] }
 futures-util = "0.3"
 lazy_static = "1.4"
 genai = "0.3.0"
 tokio-stream = "0.1.14"
-futures = "0.3"
+futures = "0.3.30"
 tauri-plugin-clipboard-manager = "2"
 once_cell = "1.19.0"
 pulldown-cmark = "0.9.3"
@@ -46,12 +46,12 @@ blake3 = "1.8.2"
 sha2 = "0.10"
 fs_extra = "1.3.0"
 lru = "0.12"
-regex = "1.0"
+regex = "1.10.4"
 tauri-plugin-global-shortcut = "2"
 flate2 = "1.0"
 md5 = "0.7"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "fmt"] }
 rand = "0.8"
 tauri-plugin-updater = "2"
 zip = "0.6"
@@ -61,7 +61,7 @@ aes-gcm = "0.10"
 pbkdf2 = "0.12"
 zeroize = "1.7"
 open = "5.3.0"
-
+image = "0.25.1"
 
 
 [dev-dependencies]

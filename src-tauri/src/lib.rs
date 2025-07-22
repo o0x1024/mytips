@@ -41,7 +41,7 @@ use api::database_manager::{
 
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use db::UnifiedDbManager;
-use tracing_subscriber::Layer;
+use tracing_subscriber::prelude::*;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::api::database_manager::cleanup_local_database_files;
@@ -52,7 +52,7 @@ fn init_logging() {
     use tracing_subscriber::{fmt, EnvFilter};
 
     // 设置默认日志级别为 info，可以通过环境变量 RUST_LOG 覆盖
-    let default_level = "debug";
+    let default_level = "info";
     
     // 创建自定义环境过滤器，过滤掉包含 handshake 的模块
     let mut filter = EnvFilter::try_from_default_env()
@@ -267,6 +267,8 @@ pub fn run() -> anyhow::Result<()> {
             // Export and backup APIs
             api::export::backup_database,
             api::export::restore_database,
+
+            api::import::cancel_import,
             export_as_markdown,
             export_as_html,
             export_as_pdf,
@@ -289,6 +291,8 @@ pub fn run() -> anyhow::Result<()> {
             // Clipboard monitoring control
             clipboard::start_clipboard_monitoring,
             clipboard::stop_clipboard_monitoring,
+
+            api::database_manager::optimize_database_wal,
             // Shortcut-related APIs
             get_global_shortcut_config,
             update_global_shortcut,
@@ -410,13 +414,9 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                     ..
                 } => {
                     if let Some(app) = tray.app_handle().get_webview_window("main") {
-                        if app.is_visible().unwrap_or(false) {
-                            let _ = app.hide();
-                        } else {
-                            let _ = app.show();
-                            let _ = app.unminimize();
-                            let _ = app.set_focus();
-                        }
+                        let _ = app.show();
+                        let _ = app.unminimize();
+                        let _ = app.set_focus();
                     }
                 }
                 TrayIconEvent::DoubleClick {

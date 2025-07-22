@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { invoke } from '@tauri-apps/api/core'
 import { DatabaseService, DatabaseModeManager } from '../services/databaseService'
 import type { DatabaseStatusResponse } from '../types/database'
+import { useTipsStore } from '../stores/tipsStore'
 
 /**
  * 数据库状态管理Store
@@ -17,7 +19,7 @@ export const useDatabaseStore = defineStore('database', () => {
   const databaseChangeCounter = ref(0)
 
   // 计算属性
-  const currentMode = computed(() => databaseStatus.value?.current_mode || 'local')
+  const currentMode = ref('local'); // 默认值
   const isConnected = computed(() => databaseStatus.value?.is_connected || false)
   const supportsSync = computed(() => DatabaseModeManager.supportsSync(currentMode.value))
   const isOnline = computed(() => databaseStatus.value?.sync_status?.is_online || false)
@@ -44,6 +46,7 @@ export const useDatabaseStore = defineStore('database', () => {
     try {
       const status = await DatabaseService.getDatabaseStatus()
       databaseStatus.value = status
+      currentMode.value = status.current_mode
       lastUpdated.value = Date.now()
       return status
     } catch (err) {
@@ -57,48 +60,55 @@ export const useDatabaseStore = defineStore('database', () => {
 
   /**
    * 切换数据库模式
+   * @param mode 要切换到的模式
+   * @param params 特定模式需要的参数
    */
-  async function switchMode(mode: string, params: any = {}) {
-    isLoading.value = true
-    error.value = null
-
+  async function switchMode(mode: string, params: any) {
+    console.log(`[DatabaseStore] Attempting to switch to ${mode} mode with params:`, params);
     try {
-      let result: string
+        let command;
+        let payload: any = { ...params };
 
-      switch (mode) {
-        case 'local':
-          result = await DatabaseService.switchToLocalMode(params.path)
-          break
-        case 'remote':
-          result = await DatabaseService.switchToRemoteMode(params.url, params.auth_token)
-          break
-        case 'embedded_replica':
-          console.log('[DatabaseStore] switchToEmbeddedReplicaMode params:', params)
-          result = await DatabaseService.switchToEmbeddedReplicaMode(
-            params.local_path || undefined,
-            params.remote_url,
-            params.auth_token,
-            params.sync_interval_seconds || params.sync_interval || 300
-          )
-          break
-        default:
-          throw new Error(`Unsupported database mode: ${mode}`)
-      }
+        switch (mode) {
+            case 'local':
+                command = 'switch_to_local_mode';
+                break;
+            case 'remote':
+                command = 'switch_to_remote_mode';
+                if (payload.remote_url) {
+                    payload.url = payload.remote_url;
+                    delete payload.remote_url;
+                }
+                break;
+            case 'embedded_replica':
+                command = 'switch_to_embedded_replica_mode';
+                if (payload.remote_url) {
+                  payload.url = payload.remote_url
+                  delete payload.remote_url
+                }
+                break;
+            default:
+                throw new Error(`Unsupported database mode: ${mode}`);
+        }
 
-      // 切换成功后立即刷新状态
-      await loadStatus(true)
-      
-      // 触发数据库切换事件，通知其他组件刷新数据
-      databaseChangeCounter.value++
-      console.log('[DatabaseStore] Database switched successfully, notifying other stores to refresh data')
-      
-      return result
-    } catch (err) {
-      error.value = (err as Error).message
-      console.error('[DatabaseStore] Failed to switch database mode:', err)
-      throw err
-    } finally {
-      isLoading.value = false
+        console.log(`[DatabaseStore] Invoking command: ${command} with payload:`, payload);
+        const result = await invoke(command, { config: payload });
+
+        // 切换成功后更新当前模式
+        currentMode.value = mode;
+        console.log(`[DatabaseStore] Switched to ${mode} mode successfully.`);
+        
+        // 重新加载状态
+        await loadStatus(true);
+        
+        // 重新加载笔记和分类
+        const tipsStore = useTipsStore();
+        await tipsStore.initializeData();
+
+        return result;
+    } catch (error) {
+        console.error(`[DatabaseStore] Failed to switch to ${mode} mode:`, error);
+        throw error;
     }
   }
 

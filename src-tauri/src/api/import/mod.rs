@@ -3,10 +3,59 @@ use anyhow::{anyhow, Result};
 use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use uuid::Uuid;
+use image::{DynamicImage, GenericImageView, ImageFormat};
+use std::io::Cursor;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use futures::stream::{self, StreamExt, TryStreamExt};
+use std::sync::atomic::{AtomicBool, Ordering};
+use once_cell::sync::Lazy;
+
+// 导入取消标志
+static IMPORT_CANCELLATION_TOKEN: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+
+// 新增：取消导入命令
+#[tauri::command]
+pub async fn cancel_import() -> Result<(), String> {
+    IMPORT_CANCELLATION_TOKEN.store(true, Ordering::SeqCst);
+    Ok(())
+}
+
+// 新增：导入进度状态
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub enum ImportStatus {
+    Starting,
+    Scanning,
+    InProgress,
+    Completed,
+    Error,
+}
+
+// 新增：导入进度事件的有效载荷
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportProgress {
+    status: ImportStatus,
+    total_files: usize,
+    processed_files: usize,
+    current_file: String,
+    result: Option<ImportResult>,
+}
+
+// 图片压缩选项
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ImageCompressionOptions {
+    pub enabled: bool,
+    pub quality: u8,
+    pub max_width: u32,
+    pub max_height: u32,
+}
 
 // 导入选项
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -14,6 +63,7 @@ pub struct ImportOptions {
     pub conflict_resolution: ConflictResolution, // 冲突解决策略
     pub include_subdirs: bool,                   // 是否包含子目录
     pub process_images: bool,                    // 是否处理图片
+    pub image_compression: ImageCompressionOptions, // 图片压缩选项
 }
 
 // 冲突解决策略
@@ -25,7 +75,7 @@ pub enum ConflictResolution {
 }
 
 // 导入结果
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ImportResult {
     pub success: bool,
     pub notebooks_created: u32,
@@ -71,60 +121,239 @@ impl Default for ImportResult {
     }
 }
 
-// 从目录导入（修改为同步API）
+// 从目录导入（修改为异步API）
 #[tauri::command]
 pub async fn import_from_directory(
     app: tauri::AppHandle,
     directory_path: String,
     target_notebook_id: Option<String>,
     options: ImportOptions,
-) -> Result<ImportResult, String> {
-    let manager = app.state::<UnifiedDbManager>();
-    let conn = manager.get_conn().await
-        .map_err(|e| format!("数据库连接失败: {}", e))?;
-    let mut result = ImportResult::default();
+) -> Result<(), String> {
+    
+    // 每次导入开始时重置取消标志
+    IMPORT_CANCELLATION_TOKEN.store(false, Ordering::SeqCst);
 
-    let path = Path::new(&directory_path);
-    if !path.exists() {
-        return Err("指定的目录不存在".to_string());
-    }
+    tauri::async_runtime::spawn(async move {
+        let root_path = PathBuf::from(directory_path);
+        
+        let emit_progress = |status: ImportStatus, total: usize, processed: usize, file: &str, res: Option<ImportResult>| {
+            let _ = app.emit("import-progress", ImportProgress {
+                status,
+                total_files: total,
+                processed_files: processed,
+                current_file: file.to_string(),
+                result: res,
+            });
+        };
 
-    match process_directory_sync(&conn, &path, target_notebook_id, &options, &mut result).await {
-        Ok(_) => {
+        emit_progress(ImportStatus::Scanning, 0, 0, "Scanning files...", None);
+
+        let files_to_import = match scan_directory_for_files(&root_path, options.include_subdirs) {
+            Ok(files) => files,
+            Err(e) => {
+                let mut result = ImportResult::default();
+                result.errors.push(format!("Scanning directory failed: {}", e));
+                emit_progress(ImportStatus::Error, 0, 0, "", Some(result));
+                return;
+            }
+        };
+
+        if files_to_import.is_empty() {
+            let mut result = ImportResult::default();
+            result.warnings.push("No markdown files found to import.".to_string());
             result.success = true;
-            Ok(result)
+            emit_progress(ImportStatus::Completed, 0, 0, "", Some(result));
+            return;
         }
-        Err(e) => {
-            result.errors.push(e.to_string());
-            Ok(result)
+
+        let total_files = files_to_import.len();
+        let manager = app.state::<UnifiedDbManager>().inner().clone();
+        
+        let result = Arc::new(Mutex::new(ImportResult::default()));
+        let notebook_cache = Arc::new(Mutex::new(HashMap::<PathBuf, String>::new()));
+        let processed_files_count = Arc::new(Mutex::new(0_usize));
+        
+        let concurrency = 10; // 设置并发处理的文件数量
+
+        let import_result_future = stream::iter(files_to_import)
+            .map(Ok) // for try_for_each_concurrent
+            .try_for_each_concurrent(concurrency, |file| {
+                let file_path_display = file.path.display().to_string();
+                let result = Arc::clone(&result);
+                let notebook_cache = Arc::clone(&notebook_cache);
+                let manager = manager.clone();
+                let root_path = root_path.clone();
+                let target_notebook_id = target_notebook_id.clone();
+                let options = options.clone();
+                let app = app.clone();
+                let processed_files_count = Arc::clone(&processed_files_count);
+
+                async move {
+                    if IMPORT_CANCELLATION_TOKEN.load(Ordering::SeqCst) {
+                        return Err(anyhow!("Import cancelled by user"));
+                    }
+
+                    let import_one_file_result = async {
+                        let conn = manager.get_conn().await?;
+                        let parent_dir = file.relative_path.parent().unwrap_or(Path::new(""));
+                        
+                        let parent_notebook_id = get_or_create_parent_notebook_concurrent(
+                            &conn,
+                            &root_path,
+                            parent_dir,
+                            &target_notebook_id,
+                            &result,
+                            &notebook_cache,
+                        ).await?;
+
+                        import_single_file_to_notebook_concurrent(
+                            &conn,
+                            &file.path,
+                            &parent_notebook_id,
+                            &options,
+                            &result,
+                        ).await
+                    }.await;
+
+                    if let Err(e) = import_one_file_result {
+                        let error_msg = format!("Failed to import file {}: {}", file_path_display, e);
+                        result.lock().await.errors.push(error_msg.clone());
+                        tracing::error!("{}", error_msg);
+                    }
+                    
+                    let mut processed = processed_files_count.lock().await;
+                    *processed += 1;
+
+                    let _ = app.emit("import-progress", ImportProgress {
+                        status: ImportStatus::InProgress,
+                        total_files: total_files,
+                        processed_files: *processed,
+                        current_file: file_path_display,
+                        result: None,
+                    });
+                    
+                    Ok(())
+                }
+            })
+            .await;
+
+        let mut final_result = Arc::try_unwrap(result).unwrap().into_inner();
+        let final_processed_count = *processed_files_count.lock().await;
+        
+        if let Err(e) = import_result_future {
+            if e.to_string() == "Import cancelled by user" {
+                final_result.warnings.push("Import was cancelled.".to_string());
+            } else {
+                final_result.errors.push(e.to_string());
+            }
         }
-    }
+
+        final_result.success = final_result.errors.is_empty();
+        emit_progress(ImportStatus::Completed, total_files, final_processed_count, "Completed", Some(final_result));
+    });
+
+    Ok(())
 }
 
 // 从单个文件导入（修改为同步API）
 #[tauri::command]
-pub async fn import_markdown_file(
+pub fn import_markdown_file(
     app: tauri::AppHandle,
     file_path: String,
     target_notebook_id: String,
 ) -> Result<ImportResult, String> {
-    let manager = app.state::<UnifiedDbManager>();
-    let conn = manager.get_conn().await
-        .map_err(|e| format!("数据库连接失败: {}", e))?;
-    let mut result = ImportResult::default();
-
     let path = Path::new(&file_path);
     if !path.exists() {
         return Err("指定的文件不存在".to_string());
     }
 
-    match import_single_file_sync(&conn, &path, &target_notebook_id, &mut result).await {
-        Ok(_) => {
-            result.success = true;
-            Ok(result)
-        }
-        Err(e) => {
-            result.errors.push(e.to_string());
+    let manager = app.state::<UnifiedDbManager>().inner().clone();
+    let path_buf = path.to_path_buf();
+    let options = ImportOptions {
+        conflict_resolution: ConflictResolution::Rename, // 单文件导入的默认策略
+        include_subdirs: false,
+        process_images: true, // 单文件导入总是处理图片
+        image_compression: ImageCompressionOptions { // 使用默认压缩设置
+            enabled: true,
+            quality: 80,
+            max_width: 1920,
+            max_height: 1920,
+        },
+    };
+
+    let import_handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        rt.block_on(async {
+            let mut result = ImportResult::default();
+            let conn = match manager.get_conn().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    result.errors.push(format!("数据库连接失败: {}", e));
+                    return result;
+                }
+            };
+
+            let import_logic = async {
+                let content = fs::read_to_string(&path_buf).map_err(|e| anyhow!("读取文件失败: {}", e))?;
+                let title = path_buf.file_stem().and_then(|s| s.to_str()).unwrap_or("未命名").to_string();
+                let (processed_content, image_data) = process_markdown_images(&content, &path_buf, &options.image_compression)?;
+
+                let tip_id = Uuid::new_v4().to_string();
+                let now = Utc::now().timestamp_millis();
+                let tip = Tip {
+                    id: tip_id.clone(),
+                    title,
+                    content: processed_content,
+                    tip_type: TipType::Markdown,
+                    language: None,
+                    category_id: Some(target_notebook_id),
+                    created_at: now,
+                    updated_at: now,
+                    version: Some(1),
+                    last_synced_at: Some(0),
+                    sync_hash: None,
+                    is_encrypted: Some(false),
+                    encryption_key_id: None,
+                    encrypted_content: None,
+                };
+
+                // 首先创建 Tip
+                operations::create_tip(&conn, &tip).await?;
+                result.notes_imported += 1;
+
+                // 然后处理图片
+                for (image_id, base64_data) in image_data {
+                    if let Err(e) = operations::save_tip_image(&conn, &tip.id, &image_id, &base64_data).await {
+                        result.warnings.push(format!("保存图片 {} 失败: {}", image_id, e));
+                        tracing::warn!("Failed to save image {} for tip {}: {}", image_id, &tip.id, e);
+                    } else {
+                        result.images_processed += 1;
+                    }
+                }
+                Ok::<(), anyhow::Error>(())
+            };
+
+            match import_logic.await {
+                Ok(_) => {
+                    result.success = true;
+                }
+                Err(e) => {
+                    result.errors.push(e.to_string());
+                }
+            }
+            result
+        })
+    });
+
+    match import_handle.join() {
+        Ok(import_result) => Ok(import_result),
+        Err(_) => {
+            let mut result = ImportResult::default();
+            result.errors.push("Import task panicked".to_string());
             Ok(result)
         }
     }
@@ -149,195 +378,11 @@ pub fn get_import_preview(directory_path: String) -> Result<ImportPreview, Strin
     Ok(preview)
 }
 
-// 同步处理目录
-fn process_directory_sync<'a>(
-    conn: &'a crate::db::DbConnection,
-    dir_path: &'a Path,
-    parent_notebook_id: Option<String>,
-    options: &'a ImportOptions,
-    result: &'a mut ImportResult,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<String>> + Send + 'a>> {
-    Box::pin(async move {
-        // 创建或获取笔记本
-        let dir_name = dir_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("未命名文件夹")
-            .to_string();
-
-        let notebook_id = if let Some(parent_id) = parent_notebook_id {
-            // 为子目录创建新的子笔记本，parent_id作为父笔记本ID
-            let now = Utc::now().timestamp_millis();
-            let category = Category {
-                id: Uuid::new_v4().to_string(),
-                name: dir_name.clone(),
-                parent_id: Some(parent_id),
-                created_at: now,
-                updated_at: now,
-                version: Some(1),
-                last_synced_at: Some(0),
-                sync_hash: None,
-                is_encrypted: Some(false),
-                encryption_key_id: None,
-            };
-            operations::create_category(conn, &category).await
-                .map_err(|e| anyhow!("创建子笔记本失败: {}", e))?;
-            result.notebooks_created += 1;
-            category.id
-        } else {
-            // 创建顶级笔记本
-            let now = Utc::now().timestamp_millis();
-            let category = Category {
-                id: Uuid::new_v4().to_string(),
-                name: dir_name.clone(),
-                parent_id: None,
-                created_at: now,
-                updated_at: now,
-                version: Some(1),
-                last_synced_at: Some(0),
-                sync_hash: None,
-                is_encrypted: Some(false),
-                encryption_key_id: None,
-            };
-            operations::create_category(conn, &category).await
-                .map_err(|e| anyhow!("创建笔记本失败: {}", e))?;
-            result.notebooks_created += 1;
-            category.id
-        };
-
-        // 处理当前目录下的Markdown文件
-        if let Ok(entries) = fs::read_dir(dir_path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-
-                if path.is_file() && is_markdown_file(&path) {
-                    if let Err(e) = import_single_file_sync(conn, &path, &notebook_id, result).await {
-                        result
-                            .errors
-                            .push(format!("导入文件 {} 失败: {}", path.display(), e));
-                    }
-                } else if path.is_dir() && options.include_subdirs {
-                    // 递归处理子目录，将当前笔记本ID作为父ID传递
-                    if let Err(e) =
-                        process_directory_sync(conn, &path, Some(notebook_id.clone()), options, result).await
-                    {
-                        result
-                            .errors
-                            .push(format!("处理目录 {} 失败: {}", path.display(), e));
-                    }
-                }
-            }
-        }
-
-        Ok(notebook_id)
-    })
-}
-
-// 导入单个文件（同步版本）
-async fn import_single_file_sync(
-    conn: &crate::db::DbConnection,
-    file_path: &Path,
-    notebook_id: &str,
-    result: &mut ImportResult,
-) -> Result<()> {
-    // 读取文件内容
-    let content = fs::read_to_string(file_path).map_err(|e| anyhow!("读取文件失败: {}", e))?;
-
-    // 获取文件名作为标题
-    let title = file_path
-        .file_stem()
-        .and_then(|n| n.to_str())
-        .unwrap_or("未命名")
-        .to_string();
-
-    // 创建笔记
-    let tip_id = Uuid::new_v4().to_string();
-    let now = Utc::now().timestamp_millis();
-
-    // 处理图片引用并获取图片数据
-    let (processed_content, image_data) = process_markdown_images(&content, file_path)?;
-
-    // 如果没有图片，直接保存笔记
-    if image_data.is_empty() {
-        let tip = Tip {
-            id: tip_id.clone(),
-            title: title.clone(),
-            content: processed_content,
-            tip_type: TipType::Markdown,
-            language: None,
-            category_id: Some(notebook_id.to_string()),
-            created_at: now,
-            updated_at: now,
-            version: Some(1),
-            last_synced_at: Some(0),
-            sync_hash: None,
-            is_encrypted: Some(false),
-            encryption_key_id: None,
-            encrypted_content: None,
-        };
-
-        // 保存笔记
-        match operations::create_tip(conn, &tip).await {
-            Ok(_) => {
-                result.notes_imported += 1;
-                Ok(())
-            }
-            Err(e) => Err(anyhow!("保存笔记失败: {}", e)),
-        }
-    } else {
-        // 有图片的情况，需要先保存笔记再保存图片
-        let tip = Tip {
-            id: tip_id.clone(),
-            title: title.clone(),
-            content: processed_content,
-            tip_type: TipType::Markdown,
-            language: None,
-            category_id: Some(notebook_id.to_string()),
-            created_at: now,
-            updated_at: now,
-            version: Some(1),
-            last_synced_at: Some(0),
-            sync_hash: None,
-            is_encrypted: Some(false),
-            encryption_key_id: None,
-            encrypted_content: None,
-        };
-
-        // 保存笔记
-        match operations::create_tip(conn, &tip).await {
-            Ok(_) => {
-                // 使用传入的笔记ID保存图片
-                let actual_tip_id = &tip.id;
-
-                // 保存图片
-                for (image_id, base64_data) in image_data {
-                    match operations::save_tip_image(conn, actual_tip_id, &image_id, &base64_data).await {
-                        Ok(_) => {
-                            result.images_processed += 1;
-                            tracing::info!("Successfully saved image {} for tip {}", image_id, actual_tip_id);
-                        }
-                        Err(e) => {
-                            result.warnings.push(format!(
-                                "保存图片 {} 失败: {}",
-                                image_id, e
-                            ));
-                            tracing::warn!("Failed to save image {} for tip {}: {}", image_id, actual_tip_id, e);
-                        }
-                    }
-                }
-
-                result.notes_imported += 1;
-                Ok(())
-            }
-            Err(e) => Err(anyhow!("保存笔记失败: {}", e)),
-        }
-    }
-}
-
 // 处理Markdown中的图片引用
 fn process_markdown_images(
     content: &str,
     file_path: &Path,
+    compression_options: &ImageCompressionOptions,
 ) -> Result<(String, Vec<(String, String)>)> {
     let mut processed_content = content.to_string();
     let mut image_data = Vec::new();
@@ -371,14 +416,24 @@ fn process_markdown_images(
         if let Ok(image_bytes) = fs::read(&image_file_path) {
             let image_id = Uuid::new_v4().to_string();
 
-            // 检测图片格式
-            let image_format = detect_image_format(&image_file_path, &image_bytes)?;
-
-            // 生成完整的Data URL格式，与前端粘贴功能保持一致
-            let base64_data = general_purpose::STANDARD.encode(&image_bytes);
-            let data_url = format!("data:image/{};base64,{}", image_format, base64_data);
-
-            // 替换Markdown中的图片引用，使用local://前缀以匹配前端处理逻辑
+            // 图片处理（压缩和调整大小）
+            let (final_image_bytes, image_format_str) = if compression_options.enabled {
+                match process_image(&image_bytes, compression_options) {
+                    Ok((processed_bytes, format)) => (processed_bytes, format!("{:?}", format).to_lowercase()),
+                    Err(e) => {
+                        // 如果处理失败，使用原始图片并记录警告
+                        (image_bytes, "png".to_string()) // 假设为 png
+                    }
+                }
+            } else {
+                (image_bytes, "png".to_string()) // 未启用压缩，假设为 png
+            };
+            
+            // 生成完整的Data URL格式
+            let base64_data = general_purpose::STANDARD.encode(&final_image_bytes);
+            let data_url = format!("data:image/{};base64,{}", image_format_str, base64_data);
+            
+            // 替换Markdown中的图片引用
             let new_image_ref = format!("![{}](local://{})", alt_text, image_id);
 
             let start = mat.start() as i32 + offset;
@@ -399,6 +454,40 @@ fn process_markdown_images(
 
     Ok((processed_content, image_data))
 }
+
+// 新增：图片处理函数
+fn process_image(
+    image_bytes: &[u8],
+    options: &ImageCompressionOptions,
+) -> Result<(Vec<u8>, ImageFormat)> {
+    // 尝试解码图片
+    let mut img = image::load_from_memory(image_bytes)?;
+    let original_format = image::guess_format(image_bytes)?;
+
+    // 先根据最大宽高进行缩放
+    let (width, height) = img.dimensions();
+    if width > options.max_width || height > options.max_height {
+        img = img.resize(options.max_width, options.max_height, image::imageops::FilterType::Triangle);
+    }
+
+    // 重新编码为 JPEG 以获得更好的压缩率（对 PNG 等无损格式尤其有效）
+    let mut compressed_bytes: Vec<u8> = Vec::new();
+    {
+        let mut cursor = Cursor::new(&mut compressed_bytes);
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, options.quality);
+        img.write_with_encoder(encoder)?;
+    }
+
+    // 与原始大小进行对比，如果压缩后反而更大，则保留原始字节
+    let (final_bytes, final_format) = if compressed_bytes.len() < image_bytes.len() {
+        (compressed_bytes, ImageFormat::Jpeg)
+    } else {
+        (image_bytes.to_vec(), original_format)
+    };
+
+    Ok((final_bytes, final_format))
+}
+
 
 // 检查是否为Markdown文件
 fn is_markdown_file(path: &Path) -> bool {
@@ -483,6 +572,205 @@ fn scan_directory_preview_sync(dir_path: &Path, preview: &mut ImportPreview) -> 
     Ok(())
 }
 
+#[derive(Debug, Clone)]
+struct FileToImport {
+    path: PathBuf,
+    relative_path: PathBuf,
+}
+
+// 扫描目录以获取文件列表
+fn scan_directory_for_files(
+    dir_path: &Path,
+    include_subdirs: bool,
+) -> Result<Vec<FileToImport>> {
+    let mut files_to_import = Vec::new();
+    let mut dirs_to_visit = vec![dir_path.to_path_buf()];
+
+    while let Some(current_dir) = dirs_to_visit.pop() {
+        for entry in fs::read_dir(&current_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() && include_subdirs {
+                if let Ok(metadata) = entry.metadata() {
+                    if !metadata.is_symlink() {
+                        dirs_to_visit.push(path);
+                    }
+                }
+            } else if path.is_file() && is_markdown_file(&path) {
+                let relative_path = path.strip_prefix(dir_path)?.to_path_buf();
+                files_to_import.push(FileToImport {
+                    path,
+                    relative_path,
+                });
+            }
+        }
+    }
+    Ok(files_to_import)
+}
+
+// 辅助函数: 逐级创建或获取父笔记本
+async fn get_or_create_parent_notebook_concurrent(
+    conn: &crate::db::DbConnection,
+    root_path: &Path,
+    relative_dir: &Path,
+    target_notebook_id: &Option<String>,
+    result: &Arc<Mutex<ImportResult>>,
+    cache: &Arc<Mutex<HashMap<PathBuf, String>>>,
+) -> Result<String> {
+    // 案例1: 指定了目标笔记本
+    if let Some(target_id) = target_notebook_id {
+        let mut current_parent_id = target_id.clone();
+        // 使用一个虚拟的基础路径来构建缓存键，以避免与文件系统根目录冲突
+        let mut cache_path_key = PathBuf::from("__target__");
+
+        for component in relative_dir.components() {
+            let component_str = component.as_os_str().to_string_lossy().to_string();
+            cache_path_key.push(&component_str);
+            
+            let notebook_id = create_or_get_notebook_concurrent(
+                conn,
+                &component_str,
+                Some(current_parent_id.clone()),
+                result,
+                cache,
+                &cache_path_key,
+            )
+            .await?;
+            current_parent_id = notebook_id;
+        }
+        return Ok(current_parent_id);
+    }
+
+    // 案例2: 未指定目标笔记本，从根目录开始创建
+    let root_dir_name = root_path.file_name().and_then(|s| s.to_str()).unwrap_or("Imported Notes").to_string();
+    let mut current_path_key = root_path.to_path_buf();
+    let mut current_parent_id = create_or_get_notebook_concurrent(conn, &root_dir_name, None, result, cache, &current_path_key).await?;
+
+    for component in relative_dir.components() {
+        let component_str = component.as_os_str().to_string_lossy().to_string();
+        current_path_key.push(&component_str);
+
+        let notebook_id = create_or_get_notebook_concurrent(
+            conn,
+            &component_str,
+            Some(current_parent_id.clone()),
+            result,
+            cache,
+            &current_path_key,
+        )
+        .await?;
+        current_parent_id = notebook_id;
+    }
+
+    Ok(current_parent_id)
+}
+
+// 辅助函数: 创建或获取笔记本ID
+async fn create_or_get_notebook_concurrent(
+    conn: &crate::db::DbConnection,
+    name: &str,
+    parent_id: Option<String>,
+    result: &Arc<Mutex<ImportResult>>,
+    cache: &Arc<Mutex<HashMap<PathBuf, String>>>,
+    path_key: &PathBuf,
+) -> Result<String> {
+    // 检查缓存中是否已存在
+    {
+        let cache_guard = cache.lock().await;
+        if let Some(id) = cache_guard.get(path_key) {
+            return Ok(id.clone());
+        }
+    } // 在这里释放锁
+
+    // 再次锁定以进行创建
+    let mut cache_guard = cache.lock().await;
+    // 双重检查，防止在释放锁和再次获取锁之间有其他线程创建了该笔记本
+    if let Some(id) = cache_guard.get(path_key) {
+        return Ok(id.clone());
+    }
+    
+    let now = Utc::now().timestamp_millis();
+    let category = Category {
+        id: Uuid::new_v4().to_string(),
+        name: name.to_string(),
+        parent_id,
+        created_at: now,
+        updated_at: now,
+        version: Some(1),
+        last_synced_at: Some(0),
+        sync_hash: None,
+        is_encrypted: Some(false),
+        encryption_key_id: None,
+    };
+
+    let cat_id = category.id.clone();
+    operations::create_category(conn, &category).await?;
+    
+    result.lock().await.notebooks_created += 1;
+    cache_guard.insert(path_key.clone(), cat_id.clone());
+    Ok(cat_id)
+}
+
+// 新辅助函数: 导入单个文件到指定笔记本
+async fn import_single_file_to_notebook_concurrent(
+    conn: &crate::db::DbConnection,
+    file_path: &Path,
+    notebook_id: &str,
+    options: &ImportOptions,
+    result: &Arc<Mutex<ImportResult>>,
+) -> Result<()> {
+    let content = fs::read_to_string(file_path).map_err(|e| anyhow!("Failed to read file {}: {}", file_path.display(), e))?;
+    let title = file_path.file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled").to_string();
+    
+    let (processed_content, image_data) = if options.process_images {
+        process_markdown_images(&content, file_path, &options.image_compression)?
+    } else {
+        (content, Vec::new())
+    };
+
+    let tip_id = Uuid::new_v4().to_string();
+    let now = Utc::now().timestamp_millis();
+    let tip = Tip {
+        id: tip_id.clone(),
+        title,
+        content: processed_content,
+        tip_type: TipType::Markdown,
+        language: None,
+        category_id: Some(notebook_id.to_string()),
+        created_at: now,
+        updated_at: now,
+        version: Some(1),
+        last_synced_at: Some(0),
+        sync_hash: None,
+        is_encrypted: Some(false),
+        encryption_key_id: None,
+        encrypted_content: None,
+    };
+
+    operations::create_tip(conn, &tip).await?;
+    result.lock().await.notes_imported += 1;
+    
+    let mut images_processed_count = 0;
+    let mut warnings_list = vec![];
+    for (image_id, base64_data) in image_data {
+        if operations::save_tip_image(conn, &tip.id, &image_id, &base64_data).await.is_ok() {
+            images_processed_count += 1;
+        } else {
+            let warning_msg = format!("Failed to save image for note '{}' from file {}", tip.title, file_path.display());
+            warnings_list.push(warning_msg);
+        }
+    }
+
+    if images_processed_count > 0 || !warnings_list.is_empty() {
+        let mut result_guard = result.lock().await;
+        result_guard.images_processed += images_processed_count;
+        result_guard.warnings.extend(warnings_list);
+    }
+
+    Ok(())
+}
+
+
 // 检测图片格式的辅助函数
 fn detect_image_format(file_path: &Path, file_data: &[u8]) -> Result<&'static str> {
     // 首先通过文件头（魔数）检测真实格式
@@ -537,3 +825,4 @@ fn detect_image_format(file_path: &Path, file_data: &[u8]) -> Result<&'static st
         Err(anyhow!("文件没有扩展名，无法确定图片格式"))
     }
 }
+

@@ -431,6 +431,13 @@ const navSearchQuery = ref('')
 const notebooks = ref<any[]>([])
 const flatNotebooks = ref<any[]>([])
 
+function rebuildNotebookTree() {
+  notebooks.value = buildNotebookTree(storeCategories.value, storeTips.value, null)
+  flatNotebooks.value = flattenNotebooks(notebooks.value)
+}
+
+watch([storeCategories, storeTips], rebuildNotebookTree, { immediate: true })
+
 // Modals and Dialogs state
 const showAddNotebookModal = ref(false)
 const newNotebookName = ref('')
@@ -560,8 +567,6 @@ const fetchInitialData = async () => {
   await tipsStore.fetchAllCategories()
   await tipsStore.fetchAllTags()
   await tipsStore.fetchAllTipSummaries(); 
-  notebooks.value = buildNotebookTree(storeCategories.value, storeTips.value, null)
-  flatNotebooks.value = flattenNotebooks(notebooks.value)
 }
 
 

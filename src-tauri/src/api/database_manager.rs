@@ -9,6 +9,16 @@ use crate::db::{
 };
 use crate::db::manager::SyncStatus as ManagerSyncStatus;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RemoteModeConfig {
+    url: String,
+    auth_token: String,
+    // 允许接收其他未定义字段，避免反序列化错误
+    #[serde(flatten)]
+    extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+
 /// 数据库模式切换请求
 #[derive(Debug, Deserialize)]
 pub struct SwitchModeRequest {
@@ -209,12 +219,14 @@ pub async fn switch_to_local_mode(app: AppHandle, path: Option<String>) -> Resul
 #[command]
 pub async fn switch_to_remote_mode(
     app: AppHandle,
-    url: String,
-    auth_token: String,
+    config: RemoteModeConfig
 ) -> Result<String, String> {
     let request = SwitchModeRequest {
         mode: "remote".to_string(),
-        params: ModeParams::Remote { url, auth_token },
+        params: ModeParams::Remote {
+            url: config.url,
+            auth_token: config.auth_token,
+        },
     };
 
     switch_database_mode(app, request).await
