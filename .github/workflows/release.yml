@@ -83,8 +83,6 @@ jobs:
     - name: Setup Android signing
       if: matrix.platform == 'android'
       run: |
-        # 强制删除 gen 目录，确保 CI 环境重新生成
-        rm -rf src-tauri/gen
         KEYSTORE_PATH=$RUNNER_TEMP/keystore.jks
         echo "storeFile=$KEYSTORE_PATH" > src-tauri/keystore.properties
         echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> src-tauri/keystore.properties
@@ -108,7 +106,10 @@ jobs:
 
     - name: Build Android App Bundle (AAB)
       if: matrix.platform == 'android'
-      run: yarn tauri android build
+      run: |
+        rm -rf src-tauri/gen
+        yarn tauri android init
+        yarn tauri android build
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
