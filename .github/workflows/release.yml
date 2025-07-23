@@ -69,6 +69,7 @@ jobs:
     - name: Install additional Rust targets for Android
       if: matrix.platform == 'android'
       run: |
+        rustup target add armv7-linux-androideabi
         rustup target add x86_64-linux-android
 
     - name: Install Rust dependencies for Linux
@@ -109,7 +110,7 @@ jobs:
       run: |
         rm -rf src-tauri/gen
         yarn tauri android init
-        yarn tauri android build -target aarch64 --target armv7
+        yarn tauri android build
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
