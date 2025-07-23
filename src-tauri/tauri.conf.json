@@ -49,9 +49,6 @@
       "minimumSystemVersion": "10.13",
       "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)"
     },
-    "android": {
-      "abiFilters": ["arm64-v8a", "x86_64"]
-    },
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
