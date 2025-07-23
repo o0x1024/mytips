@@ -166,11 +166,9 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { useTipsStore } from '../stores/tipsStore'
 
-const { t } = useI18n();
 
 // 类型定义
 interface Tag {

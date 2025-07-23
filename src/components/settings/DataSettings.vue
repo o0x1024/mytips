@@ -806,7 +806,7 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="postcss">
 /* 卡片悬停效果 */
 .card:hover {
   transform: translateY(-2px);

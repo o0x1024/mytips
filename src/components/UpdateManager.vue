@@ -143,5 +143,5 @@ async function checkForUpdatesQuiet() {
 defineExpose({
   checkForUpdatesQuiet,
   startPeriodicCheck
-})
+})  
 </script> 

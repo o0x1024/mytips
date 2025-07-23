@@ -126,7 +126,7 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '../../stores/uiStore'
 
-const { t, locale } = useI18n()
+const {  locale } = useI18n()
 const uiStore = useUIStore()
 
 // 语言设置

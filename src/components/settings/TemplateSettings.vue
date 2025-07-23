@@ -53,7 +53,6 @@ import { ref, onMounted } from 'vue'
 import { useTipTemplateStore } from '../../stores/tipTemplateStore'
 import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
 const templateStore = useTipTemplateStore()
 const templateName = ref('')
 const templateContent = ref('')
