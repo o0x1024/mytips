@@ -51,7 +51,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useTipTemplateStore } from '../../stores/tipTemplateStore'
-import { useI18n } from 'vue-i18n'
 
 const templateStore = useTipTemplateStore()
 const templateName = ref('')

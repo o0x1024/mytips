@@ -17,9 +17,8 @@ import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
-import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+
 
 interface Props {
   type?: 'confirm' | 'alert'
