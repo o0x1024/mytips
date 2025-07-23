@@ -1,4 +1,4 @@
-<template>
+报错<template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title text-primary mb-4">{{ $t('networkSettings.title') }}</h2>
