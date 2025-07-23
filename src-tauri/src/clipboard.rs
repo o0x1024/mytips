@@ -1,16 +1,16 @@
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use base64::{engine::general_purpose, Engine as _};
-use chrono::{TimeZone, Utc};
+use chrono:: Utc;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering}, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
     thread,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 use tracing::{info, warn, error, debug};
 
 use crate::db::UnifiedDbManager;
@@ -161,7 +161,7 @@ pub fn get_selected_text(app: &AppHandle) -> Option<String> {
     }
 
     // 5. Reset the simulation flag after a delay to avoid race conditions.
-    let reset_handle = app.clone();
+    let _ = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(500)).await;
         SIMULATING_COPY.store(false, Ordering::SeqCst);
@@ -297,6 +297,7 @@ pub fn get_active_process_name() -> Option<String> {
 }
 
 /// 判断内容是否可能是敏感信息
+#[allow(unused)]
 fn is_sensitive_content(content: &str) -> bool {
     // 检查是否是密码形式（只包含特定字符且长度在一定范围内）
     let is_password_like = content.len() >= 6

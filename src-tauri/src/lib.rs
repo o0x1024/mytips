@@ -3,6 +3,7 @@ mod api;
 mod clipboard;
 mod db;
 mod sync;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod global_shortcut;
 
 #[cfg(desktop)]
@@ -39,9 +40,9 @@ use api::database_manager::{
     get_supported_database_modes,
 };
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use db::UnifiedDbManager;
-use tracing_subscriber::prelude::*;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::api::database_manager::cleanup_local_database_files;
@@ -95,10 +96,13 @@ pub fn run() -> anyhow::Result<()> {
     #[cfg(desktop)]
     {
         builder = builder
-            .plugin(tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                Some(vec!["--flag1", "--flag2"]),
-            ))
+            .plugin(
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    Some(vec!["--flag1", "--flag2"]),
+                ),
+            )
             .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
                 println!("{}, {args:?}, {cwd}", app.package_info().name);
                 if let Some(window) = app.get_webview_window("main") {
@@ -107,14 +111,7 @@ pub fn run() -> anyhow::Result<()> {
                     let _ = window.set_focus();
                 }
             }))
-            .plugin(tauri_plugin_window_state::Builder::new().build())
-            .on_window_event(|window, event| match event {
-                tauri::WindowEvent::CloseRequested { api, .. } => {
-                    window.hide().unwrap();
-                    api.prevent_close();
-                }
-                _ => {}
-            });
+            .plugin(tauri_plugin_window_state::Builder::new().build());
     }
 
     builder
@@ -132,22 +129,25 @@ pub fn run() -> anyhow::Result<()> {
             app.manage(unified_manager);
             
             // Setup global shortcut handler when building the plugin
-            let handler_app_handle = app.handle().clone();
-            app.handle().plugin(
-                tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(move |_app, shortcut, event| {
-                        if event.state() == ShortcutState::Pressed {
-                            let app_clone = handler_app_handle.clone();
-                            let shortcut = shortcut.clone();
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e) = global_shortcut::handle_shortcut_triggered(&app_clone).await {
-                                    tracing::error!("Failed to handle shortcut {:?}: {}", shortcut, e);
-                                }
-                            });
-                        }
-                    })
-                    .build()
-            )?;
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            {
+                app.handle().plugin(
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    tauri_plugin_global_shortcut::Builder::new()
+                        .with_handler(move |_app, shortcut, event| {
+                            if event.state() == ShortcutState::Pressed {
+                                let app_clone = app_handle.clone();
+                                let shortcut = shortcut.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    if let Err(e) = global_shortcut::handle_shortcut_triggered(&app_clone).await {
+                                        tracing::error!("Failed to handle shortcut {:?}: {}", shortcut, e);
+                                    }
+                                });
+                            }
+                        })
+                        .build()
+                )?;
+            }
 
             // Start the clipboard listener and initial shortcut setup
             #[cfg(desktop)]
@@ -267,6 +267,7 @@ pub fn run() -> anyhow::Result<()> {
             // Export and backup APIs
             api::export::backup_database,
             api::export::restore_database,
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             api::export::export_notebook_to_folder,
             api::export::export_notebook_to_pdf,
             api::export::export_notebook_to_word,

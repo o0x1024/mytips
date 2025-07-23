@@ -10,7 +10,6 @@ pub mod export;
 pub mod import;
 pub mod settings;
 pub mod shortcuts;
-pub mod sync;
 pub mod tags;
 pub mod templates;
 pub mod tips;
@@ -33,7 +32,6 @@ pub use export::*;
 pub use import::*;
 pub use settings::*;
 pub use shortcuts::*;
-pub use sync::*; // Enable sync API exports
 pub use tags::*;
 pub use tips::*;
 pub use updater::*;

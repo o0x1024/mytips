@@ -860,6 +860,7 @@ fn convert_to_safe_text(text: &str) -> String {
 }
 
 #[tauri::command]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn export_notebook_to_folder(app: AppHandle, notebook_id: String) -> Result<(), String> {
     // 1. 弹出对话框
     let dialog = app.dialog();

@@ -16,15 +16,11 @@ open class BuildTask : DefaultTask() {
 
     @TaskAction
     fun assemble() {
-        val executable = """yarn""";
+        val executable = if (Os.isFamily(Os.FAMILY_WINDOWS)) "npx.cmd" else "npx";
         try {
             runTauriCli(executable)
         } catch (e: Exception) {
-            if (Os.isFamily(Os.FAMILY_WINDOWS)) {
-                runTauriCli("$executable.cmd")
-            } else {
-                throw e;
-            }
+            throw e;
         }
     }
 

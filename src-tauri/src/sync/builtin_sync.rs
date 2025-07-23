@@ -1,12 +1,10 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex, RwLock};
 use libsql::Database;
-use tracing::{info, warn, error, debug};
 use super::monitoring::{PerformanceMonitor, StructuredLogger};
 use super::error_handling::{SmartRetryExecutor, ErrorAnalyzer, LibSqlErrorType};
 

@@ -27,7 +27,7 @@ jobs:
             rust_target: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             platform: 'android'
-            rust_target: 'aarch64-linux-android' # 默认编译 aarch64 架构
+            rust_target: 'aarch64-linux-android' 
 
     steps:
     - name: Checkout repository
@@ -44,6 +44,16 @@ jobs:
       with:
         distribution: 'zulu'
         java-version: '17'
+
+    - name: Set up Android SDK
+      if: matrix.platform == 'android'
+      uses: android-actions/setup-android@v3
+
+    - name: Install NDK and set NDK_HOME
+      if: matrix.platform == 'android'
+      run: |
+        echo "y" | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
+        echo "NDK_HOME=${ANDROID_HOME}/ndk/25.1.8937393" >> $GITHUB_ENV
 
     - name: Set up Rust
       uses: actions-rs/toolchain@v1

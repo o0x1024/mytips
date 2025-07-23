@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use std::sync::atomic::{AtomicBool, Ordering};
 use once_cell::sync::Lazy;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use git2::Repository;
 use tempfile::tempdir;
 use crate::api::settings;
@@ -135,6 +136,7 @@ impl Default for ImportResult {
 }
 
 // 新增：从GitHub导入
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 pub async fn import_from_github(
     app: tauri::AppHandle,
@@ -264,6 +266,17 @@ pub async fn import_from_github(
     });
     
     Ok(())
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+pub async fn import_from_github(
+    _app: tauri::AppHandle,
+    _github_options: GithubImportOptions,
+    _target_notebook_id: Option<String>,
+    _options: ImportOptions,
+) -> Result<(), String> {
+    Err("Importing from GitHub is not supported on mobile.".to_string())
 }
 
 
