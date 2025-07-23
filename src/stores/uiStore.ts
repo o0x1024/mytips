@@ -27,6 +27,7 @@ export interface UISettings {
   exactListWidth: number;
   isSidebarCollapsed: boolean;
   theme: string;
+  language: string; // 新增语言设置
   clipboard: {
     ignoreSensitiveContent: boolean;
     captureImages: boolean;
@@ -47,6 +48,7 @@ const defaultSettings: UISettings = {
   exactListWidth: 300,
   isSidebarCollapsed: false,
   theme: 'mytheme',
+  language: 'zh', // 默认语言为中文
   clipboard: {
     ignoreSensitiveContent: true,
     captureImages: false,
@@ -90,28 +92,28 @@ export const useUIStore = defineStore('ui', () => {
   
   // DaisyUI主题选项
   const themeOptions = [
-    { name: '默认主题', value: 'mytheme' },
-    { name: '暗色', value: 'dark' },
-    { name: '光明', value: 'light' },
-    { name: '复古', value: 'retro' },
-    { name: '赛博朋克', value: 'cyberpunk' },
-    { name: '万圣节', value: 'halloween' },
-    { name: '花园', value: 'garden' },
-    { name: '森林', value: 'forest' },
-    { name: '水族', value: 'aqua' },
-    { name: '罗莱', value: 'lofi' },
-    { name: '粉彩', value: 'pastel' },
-    { name: '幻想', value: 'fantasy' },
-    { name: '黑色', value: 'black' },
-    { name: '豪华', value: 'luxury' },
-    { name: '沙龙', value: 'dracula' },
-    { name: '秋天', value: 'autumn' },
-    { name: '商务', value: 'business' },
-    { name: '酸性', value: 'acid' },
-    { name: '柠檬水', value: 'lemonade' },
-    { name: '夜晚', value: 'night' },
-    { name: '咖啡', value: 'coffee' },
-    { name: '冬季', value: 'winter' }
+    { name: 'themes.mytheme', value: 'mytheme' },
+    { name: 'themes.dark', value: 'dark' },
+    { name: 'themes.light', value: 'light' },
+    { name: 'themes.retro', value: 'retro' },
+    { name: 'themes.cyberpunk', value: 'cyberpunk' },
+    { name: 'themes.halloween', value: 'halloween' },
+    { name: 'themes.garden', value: 'garden' },
+    { name: 'themes.forest', value: 'forest' },
+    { name: 'themes.aqua', value: 'aqua' },
+    { name: 'themes.lofi', value: 'lofi' },
+    { name: 'themes.pastel', value: 'pastel' },
+    { name: 'themes.fantasy', value: 'fantasy' },
+    { name: 'themes.black', value: 'black' },
+    { name: 'themes.luxury', value: 'luxury' },
+    { name: 'themes.dracula', value: 'dracula' },
+    { name: 'themes.autumn', value: 'autumn' },
+    { name: 'themes.business', value: 'business' },
+    { name: 'themes.acid', value: 'acid' },
+    { name: 'themes.lemonade', value: 'lemonade' },
+    { name: 'themes.night', value: 'night' },
+    { name: 'themes.coffee', value: 'coffee' },
+    { name: 'themes.winter', value: 'winter' }
   ]
   
   // 从本地存储加载设置
@@ -124,6 +126,7 @@ export const useUIStore = defineStore('ui', () => {
         return { 
           ...defaultSettings, 
           ...parsed,
+          language: parsed.language || defaultSettings.language, // 确保 language 属性被加载
           clipboard: {
             ...defaultSettings.clipboard,
             ...(parsed.clipboard || {})
@@ -226,6 +229,12 @@ export const useUIStore = defineStore('ui', () => {
   function setTheme(theme: string) {
     settings.value.theme = theme
     document.documentElement.setAttribute('data-theme', theme)
+    saveSettings()
+  }
+  
+  // 设置语言
+  function setLanguage(lang: string) {
+    settings.value.language = lang
     saveSettings()
   }
   
@@ -341,6 +350,7 @@ export const useUIStore = defineStore('ui', () => {
     setTheme,
     resetToDefaults,
     setClipboardSettings,
+    setLanguage,
     initialize
   }
 }) 

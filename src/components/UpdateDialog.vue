@@ -6,15 +6,15 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-primary mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
-          <h3 class="text-lg font-semibold">发现新版本</h3>
+          <h3 class="text-lg font-semibold">{{ $t('updateDialog.newVersionTitle') }}</h3>
         </div>
         
         <div class="mb-4">
           <p class="text-base-content mb-2">
-            <strong>版本 {{ updateInfo?.version }}</strong>
+            <strong>{{ $t('updateDialog.version') }} {{ updateInfo?.version }}</strong>
           </p>
           <p class="text-sm text-base-content/80 mb-2">
-            发布时间: {{ formatDate(updateInfo?.pub_date) }}
+            {{ $t('updateDialog.releaseDate') }}: {{ formatDate(updateInfo?.pub_date) }}
           </p>
           <div v-if="updateInfo?.body" class="bg-base-200 p-3 rounded text-sm max-h-32 overflow-y-auto">
             <div v-html="formatReleaseNotes(updateInfo.body)"></div>
@@ -24,7 +24,7 @@
         <!-- 下载进度 -->
         <div v-if="isDownloading" class="mb-4">
           <div class="flex justify-between text-sm mb-2">
-            <span>下载进度</span>
+            <span>{{ $t('updateDialog.downloadProgress') }}</span>
             <span>{{ downloadProgress }}%</span>
           </div>
           <progress class="progress progress-primary w-full" :value="downloadProgress" max="100"></progress>
@@ -37,7 +37,7 @@
         <div v-if="isInstalling" class="mb-4">
           <div class="flex items-center justify-center">
             <span class="loading loading-spinner loading-md mr-2"></span>
-            <span>正在安装更新...</span>
+            <span>{{ $t('updateDialog.installing') }}</span>
           </div>
         </div>
 
@@ -53,21 +53,21 @@
             class="btn btn-ghost" 
             @click="closeDialog"
           >
-            稍后提醒
+            {{ $t('updateDialog.remindLater') }}
           </button>
           <button 
             v-if="!isDownloading && !isInstalling" 
             class="btn btn-primary" 
             @click="downloadAndInstall"
           >
-            立即更新
+            {{ $t('updateDialog.updateNow') }}
           </button>
           <button 
             v-if="isDownloading" 
             class="btn btn-ghost" 
             @click="cancelDownload"
           >
-            取消下载
+            {{ $t('updateDialog.cancelDownload') }}
           </button>
         </div>
       </div>
@@ -77,12 +77,14 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useUpdateStore } from '../stores/updateStore'
 import { showConfirm } from '../services/dialog'
 
+const { t, locale } = useI18n()
 const updateStore = useUpdateStore()
 
 // Props
@@ -220,10 +222,10 @@ function cancelDownload() {
 
 // 显示重启提示
 async function showRestartPrompt() {
-  const confirmed = await showConfirm('更新安装完成！是否立即重启应用程序？', {
-    title: '更新完成',
-    confirmText: '立即重启',
-    cancelText: '稍后重启'
+  const confirmed = await showConfirm(t('updateDialog.restartPromptMessage'), {
+    title: t('updateDialog.restartPromptTitle'),
+    confirmText: t('updateDialog.restartNow'),
+    cancelText: t('updateDialog.restartLater')
   })
   
   if (confirmed) {
@@ -247,7 +249,7 @@ function closeDialog() {
 
 // 格式化日期
 function formatDate(dateString?: string): string {
-  if (!dateString) return '未知'
+  if (!dateString) return t('updateDialog.unknownDate')
   
   try {
     // 尝试解析日期字符串
@@ -260,7 +262,7 @@ function formatDate(dateString?: string): string {
     }
     
     // 返回本地化的日期格式
-    return date.toLocaleDateString('zh-CN', {
+    return date.toLocaleDateString(locale.value, {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'

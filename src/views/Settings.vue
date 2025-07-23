@@ -8,15 +8,15 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
-        <h1 v-if="!isMobile" class="text-xl font-bold">设置 - {{ getCurrentPageTitle() }}</h1>
-        <h1 v-else class="text-xl font-bold">设置</h1>
+        <h1 v-if="!isMobile" class="text-xl font-bold">{{ $t('settings.title') }} - {{ getCurrentPageTitle() }}</h1>
+        <h1 v-else class="text-xl font-bold">{{ $t('settings.title') }}</h1>
       </div>
 
       <!-- Mobile Page Selector -->
       <div v-if="isMobile" class="flex-none">
         <select class="select select-bordered" v-model="currentPage">
           <option v-for="page in settingsPages" :key="page.id" :value="page.id">
-            {{ page.title }}
+            {{ $t(page.title) }}
           </option>
         </select>
       </div>
@@ -26,7 +26,7 @@
       <!-- 左侧导航栏 (仅桌面) -->
       <nav v-if="!isMobile" class="w-64 min-w-[240px] max-w-[280px] bg-base-100 flex flex-col py-6 px-3 gap-2 shadow-lg border-r border-base-200">
         <div>
-          <h2 class="text-lg font-semibold text-base-content px-3 mb-4">设置选项</h2>
+          <h2 class="text-lg font-semibold text-base-content px-3 mb-4">{{ $t('settings.optionsTitle') }}</h2>
         </div>
         
         <button 
@@ -89,7 +89,7 @@
           </div>
           
           <!-- 标题 -->
-          <span class="font-medium text-sm flex-1">{{ page.title }}</span>
+          <span class="font-medium text-sm flex-1">{{ $t(page.title) }}</span>
           
           <!-- 活跃状态指示器 -->
           <div v-if="currentPage === page.id" class="w-2 h-2 bg-primary-content rounded-full opacity-80"></div>
@@ -103,7 +103,7 @@
         <!-- 底部装饰 -->
         <div class="mt-auto pt-4 border-t border-base-200">
           <div class="text-xs text-base-content/60 px-3 text-center">
-            MyTips 设置中心
+            {{ $t('settings.footer') }}
           </div>
         </div>
       </nav>
@@ -122,6 +122,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 // 导入所有设置组件
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue'
@@ -135,6 +136,7 @@ import TemplateSettings from '../components/settings/TemplateSettings.vue'
 import AboutSettings from '../components/settings/AboutSettings.vue'
 
 const router = useRouter()
+const { t } = useI18n()
 
 // 响应式状态
 const windowWidth = ref(window.innerWidth)
@@ -143,15 +145,15 @@ const isMobile = computed(() => windowWidth.value < 768)
 // 页面管理
 const currentPage = ref('appearance')
 const settingsPages = [
-  { id: 'appearance', title: '外观' },
-  { id: 'clipboard', title: '临时笔记' },
-  { id: 'network', title: '网络' },
-  { id: 'data', title: '数据管理' },
-  { id: 'app', title: '应用设置' },
-  { id: 'ai', title: 'AI助手' },
-  { id: 'templates', title: '提示词模板' },
-  { id: 'update', title: '更新' },
-  { id: 'about', title: '关于' }
+  { id: 'appearance', title: 'settings.pages.appearance' },
+  { id: 'clipboard', title: 'settings.pages.clipboard' },
+  { id: 'network', title: 'settings.pages.network' },
+  { id: 'data', title: 'settings.pages.data' },
+  { id: 'app', title: 'settings.pages.app' },
+  { id: 'ai', title: 'settings.pages.ai' },
+  { id: 'templates', title: 'settings.pages.templates' },
+  { id: 'update', title: 'settings.pages.update' },
+  { id: 'about', title: 'settings.pages.about' }
 ]
 
 // 组件映射
@@ -180,7 +182,7 @@ function setCurrentPage(pageId: string) {
 // 获取当前页面标题
 function getCurrentPageTitle() {
   const page = settingsPages.find(p => p.id === currentPage.value)
-  return page ? page.title : '设置'
+  return page ? t(page.title) : t('settings.fallbackTitle')
 }
 
 // 返回上一页

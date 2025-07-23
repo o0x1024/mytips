@@ -1,26 +1,26 @@
 <template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-primary mb-4">提示词模板管理</h2>
+      <h2 class="card-title text-primary mb-4">{{ $t('templateSettings.title') }}</h2>
 
       <!-- 新增/编辑模板表单 -->
       <div class="form-control mb-3">
         <label class="label">
-          <span class="label-text">模板名称</span>
+          <span class="label-text">{{ $t('templateSettings.form.name') }}</span>
         </label>
-        <input type="text" v-model="templateName" placeholder="输入模板名称" class="input input-bordered w-full" />
+        <input type="text" v-model="templateName" :placeholder="$t('templateSettings.form.namePlaceholder')" class="input input-bordered w-full" />
       </div>
       <div class="form-control mb-3">
         <label class="label">
-          <span class="label-text">模板内容</span>
+          <span class="label-text">{{ $t('templateSettings.form.content') }}</span>
         </label>
-        <textarea v-model="templateContent" class="textarea textarea-bordered w-full h-32" placeholder="输入模板内容"></textarea>
+        <textarea v-model="templateContent" class="textarea textarea-bordered w-full h-32" :placeholder="$t('templateSettings.form.contentPlaceholder')"></textarea>
       </div>
       <div class="flex gap-2 mb-4">
         <button class="btn btn-primary" @click="saveTemplate" :disabled="!templateName.trim() || !templateContent.trim()">
-          {{ isEditingTemplate ? '更新模板' : '添加模板' }}
+          {{ isEditingTemplate ? $t('templateSettings.form.updateButton') : $t('templateSettings.form.addButton') }}
         </button>
-        <button v-if="isEditingTemplate" class="btn btn-ghost" @click="cancelEdit">取消编辑</button>
+        <button v-if="isEditingTemplate" class="btn btn-ghost" @click="cancelEdit">{{ $t('templateSettings.form.cancelButton') }}</button>
       </div>
 
       <div class="divider"></div>
@@ -30,7 +30,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
       <div v-else>
-        <div v-if="templateStore.templates.value.length === 0" class="text-center text-base-content/60">暂无模板</div>
+        <div v-if="templateStore.templates.value.length === 0" class="text-center text-base-content/60">{{ $t('templateSettings.list.noTemplates') }}</div>
         <div v-else class="space-y-2">
           <div v-for="tpl in templateStore.templates.value" :key="tpl.name" class="flex items-start justify-between p-3 bg-base-200 rounded">
             <div class="flex-1">
@@ -38,8 +38,8 @@
               <div class="text-sm text-base-content/70 whitespace-pre-wrap">{{ tpl.content }}</div>
             </div>
             <div class="flex gap-2 ml-3">
-              <button class="btn btn-xs btn-outline" @click="editTemplate(tpl)">编辑</button>
-              <button class="btn btn-xs btn-error btn-outline" @click="deleteTemplate(tpl.name)">删除</button>
+              <button class="btn btn-xs btn-outline" @click="editTemplate(tpl)">{{ $t('templateSettings.list.editButton') }}</button>
+              <button class="btn btn-xs btn-error btn-outline" @click="deleteTemplate(tpl.name)">{{ $t('templateSettings.list.deleteButton') }}</button>
             </div>
           </div>
         </div>
@@ -51,7 +51,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useTipTemplateStore } from '../../stores/tipTemplateStore'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const templateStore = useTipTemplateStore()
 const templateName = ref('')
 const templateContent = ref('')

@@ -10,7 +10,7 @@
       <button 
         class="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost"
         @click="closeDragOverlay"
-        title="关闭"
+        :title="t('common.close')"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -21,9 +21,9 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <h3 class="text-xl font-bold mb-2">拖拽Markdown文件到此处</h3>
-        <p class="text-base-content/70">支持 .md 和 .markdown 文件</p>
-        <p class="text-xs text-base-content/50 mt-2">按 ESC 键或点击关闭按钮可关闭此覆盖层</p>
+        <h3 class="text-xl font-bold mb-2">{{ t('markdownDropPreview.dropTitle') }}</h3>
+        <p class="text-base-content/70">{{ t('markdownDropPreview.dropSubtitle') }}</p>
+        <p class="text-xs text-base-content/50 mt-2">{{ t('markdownDropPreview.dropHint') }}</p>
       </div>
     </div>
   </div>
@@ -39,7 +39,7 @@
             @click="importAsNote"
             :disabled="!previewContent"
           >
-            导入为笔记
+            {{ t('markdownDropPreview.importAsNote') }}
           </button>
           <button class="btn btn-sm btn-ghost" @click="closePreview">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -62,7 +62,7 @@
           <span class="loading loading-spinner loading-lg"></span>
         </div>
         <div v-else class="flex items-center justify-center h-full text-base-content/50">
-          无法读取文件内容
+          {{ t('markdownDropPreview.cannotReadFile') }}
         </div>
       </div>
     </div>
@@ -72,11 +72,11 @@
   <!-- 导入选项模态框 -->
   <div class="modal" :class="{'modal-open': showImportOptions}">
     <div class="modal-box">
-      <h3 class="font-bold text-lg">导入选项</h3>
+      <h3 class="font-bold text-lg">{{ t('markdownDropPreview.importOptions') }}</h3>
       
       <div class="form-control w-full mt-4">
         <label class="label">
-          <span class="label-text">笔记标题</span>
+          <span class="label-text">{{ t('markdownDropPreview.noteTitle') }}</span>
         </label>
         <input 
           type="text" 
@@ -88,10 +88,10 @@
 
       <div class="form-control w-full mt-4">
         <label class="label">
-          <span class="label-text">选择笔记本</span>
+          <span class="label-text">{{ t('markdownDropPreview.selectNotebook') }}</span>
         </label>
         <select class="select select-bordered w-full" v-model="selectedNotebookId">
-          <option value="">选择笔记本</option>
+          <option value="">{{ t('markdownDropPreview.selectNotebookPlaceholder') }}</option>
           <option v-for="notebook in notebooks" :key="notebook.id" :value="notebook.id">
             {{ notebook.name }}
           </option>
@@ -99,13 +99,13 @@
       </div>
 
       <div class="modal-action">
-        <button class="btn" @click="cancelImport">取消</button>
+        <button class="btn" @click="cancelImport">{{ t('common.cancel') }}</button>
         <button 
           class="btn btn-primary" 
           @click="confirmImport"
           :disabled="!importTitle.trim() || !selectedNotebookId"
         >
-          确认导入
+          {{ t('markdownDropPreview.confirmImport') }}
         </button>
       </div>
     </div>
@@ -131,6 +131,9 @@ import DOMPurify from 'dompurify'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { readTextFile, exists } from '@tauri-apps/plugin-fs'
 import { showAlert } from '../services/dialog'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // Props
 interface Props {
@@ -236,8 +239,8 @@ const renderedContent = computed(() => {
       ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
     });
   } catch (error) {
-    console.error('Markdown渲染错误:', error)
-    return '<p>渲染错误</p>'
+    console.error('Markdown rendering error:', error)
+    return `<p>${t('markdownDropPreview.renderError')}</p>`
   }
 })
 
@@ -264,12 +267,12 @@ async function handleTauriDragDrop(event: any) {
         
         if (markdownFiles.length > 0) {
           const markdownFile = markdownFiles[0]
-          console.log('选择markdown文件进行预览:', markdownFile)
+          console.log('Choosing markdown file to preview:', markdownFile)
           await previewMarkdownFileFromPath(markdownFile)
         } else {
-          console.log('没有找到markdown文件')
+          console.log('No markdown files found')
           const fileNames = paths.map((path: string) => path.split('/').pop() || path).join(', ')
-          await showAlert(`检测到文件: ${fileNames}\n\n请拖拽 Markdown 文件（支持 .md, .markdown, .mdown, .mkd 等格式）`, { title: '文件类型提示' })
+          await showAlert(t('markdownDropPreview.fileTypeHintMessage', { files: fileNames }), { title: t('markdownDropPreview.fileTypeHintTitle') })
         }
       }
     } else if (event.payload.type === 'cancelled') {
@@ -335,11 +338,11 @@ async function previewMarkdownFileFromPath(filePath: string) {
   try {
     const content = await readTextFile(filePath)
     previewContent.value = content
-    console.log(`成功读取文件 ${fileName}，内容长度: ${content.length}`)
+    console.log(`Successfully read file ${fileName}, content length: ${content.length}`)
   } catch (error) {
-    console.error('读取文件失败:', error)
+    console.error('Failed to read file:', error)
     previewContent.value = ''
-    await showAlert(`读取文件失败: ${error}`, { title: '读取失败' })
+    await showAlert(t('markdownDropPreview.readFileError', { error }), { title: t('markdownDropPreview.readFileErrorTitle') })
   } finally {
     isLoading.value = false
   }
@@ -375,7 +378,7 @@ function confirmImport() {
   })
   
   // 显示成功提示
-  console.log(`Markdown文件 "${previewFile.value.name}" 导入成功！`)
+  console.log(`Markdown file "${previewFile.value.name}" imported successfully!`)
   
   // 重置状态
   showImportOptions.value = false

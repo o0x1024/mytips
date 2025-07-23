@@ -65,12 +65,12 @@ fn init_logging() {
 
     // 创建格式化层
     let fmt_layer = fmt::layer()
-        .with_target(true)  // 显示模块路径
-        .with_level(true)   // 显示日志级别
-        .with_thread_ids(false)  // 不显示线程ID（减少噪音）
-        .with_file(true)   // 显示文件名
-        .with_line_number(true)  // 显示行号
-        .compact();  // 使用紧凑格式
+        .with_target(true)  // show module path
+        .with_level(true)   // show log level
+        .with_thread_ids(false)  // do not show thread id (less noise)
+        .with_file(true)   // show file name
+        .with_line_number(true)  // show line number
+        .compact();  // use compact format
 
     // 初始化订阅器
     tracing_subscriber::registry()
@@ -376,9 +376,9 @@ pub fn run() -> anyhow::Result<()> {
 fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     
     // Create tray menu items
-    let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
-    let hide = MenuItem::with_id(app, "hide", "隐藏窗口", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Main Window", true, None::<&str>)?;
+    let hide = MenuItem::with_id(app, "hide", "Hide Window", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     
     // Create the tray menu
     let menu = Menu::with_items(app, &[&show, &hide, &quit])?;

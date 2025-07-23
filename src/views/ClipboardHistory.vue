@@ -9,8 +9,8 @@
           </svg>
         </button>
         <div>
-          <h1 class="text-xl font-bold">临时笔记区</h1>
-          <p class="text-base-content/70">在这里管理您的临时笔记，可以合并为正式笔记或进行其他操作</p>
+          <h1 class="text-xl font-bold">{{ $t('clipboardHistory.title') }}</h1>
+          <p class="text-base-content/70">{{ $t('clipboardHistory.description') }}</p>
         </div>
       </div>
       <div class="flex gap-2">
@@ -19,7 +19,7 @@
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
-          创建笔记
+          {{ $t('clipboardHistory.createNote') }}
         </button>
         <button @click="deleteSelected" :disabled="selectedIds.length === 0" class="btn btn-error btn-sm">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
@@ -27,7 +27,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          删除选中
+          {{ $t('clipboardHistory.deleteSelected') }}
         </button>
         <button @click="confirmClearAll" :disabled="history.length === 0" class="btn btn-error btn-sm">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
@@ -35,14 +35,14 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          清空全部
+          {{ $t('clipboardHistory.clearAll') }}
         </button>
         <button @click="openSummaryDialog" :disabled="history.length === 0 || summarizing" class="btn btn-secondary btn-sm">
           <span v-if="summarizing" class="loading loading-spinner loading-xs mr-1"></span>
           <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 14a1 1 0 011-1h10m4 0h2a1 1 0 001-1v-2a1 1 0 00-1-1h-2m-4 0H4a1 1 0 00-1 1v2a1 1 0 001 1h10" />
           </svg>
-          {{ summarizing ? '总结中...' : 'AI总结' }}
+          {{ summarizing ? $t('clipboardHistory.summarizing') : $t('clipboardHistory.aiSummary') }}
         </button>
       </div>
     </div>
@@ -57,7 +57,7 @@
             <input 
               type="text" 
               v-model="searchQuery" 
-              placeholder="搜索临时笔记..." 
+              :placeholder="$t('clipboardHistory.searchPlaceholder')" 
               class="input input-bordered w-full pr-10"
               @input="handleSearch"
             />
@@ -77,14 +77,14 @@
         <div class="flex justify-between items-center mb-4">
           <div class="text-sm text-base-content/70">
             <span v-if="searchQuery && totalEntries > 0">
-              找到 {{ totalEntries }} 条匹配结果
+              {{ $t('clipboardHistory.foundMatches', { count: totalEntries }) }}
             </span>
             <span v-else-if="totalEntries > 0">
-              共 {{ totalEntries }} 条记录
+              {{ $t('clipboardHistory.totalRecords', { count: totalEntries }) }}
             </span>
           </div>
           <div v-if="totalPages > 1" class="text-sm text-base-content/70">
-            第 {{ currentPage }} / {{ totalPages }} 页
+            {{ $t('clipboardHistory.pagination.info', { current: currentPage, total: totalPages }) }}
           </div>
         </div>
 
@@ -97,8 +97,8 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p>{{ searchQuery ? '未找到匹配的临时笔记' : '临时笔记区为空' }}</p>
-            <p class="text-sm mt-2">{{ searchQuery ? '请尝试其他搜索关键词' : '复制文本到剪贴板将自动添加到此处' }}</p>
+            <p>{{ searchQuery ? $t('clipboardHistory.noMatches') : $t('clipboardHistory.empty') }}</p>
+            <p class="text-sm mt-2">{{ searchQuery ? $t('clipboardHistory.tryDifferentKeywords') : $t('clipboardHistory.copyToAutoAdd') }}</p>
           </div>
           <div v-else class="space-y-3">
             <div v-for="item in history" :key="item.id"
@@ -113,7 +113,7 @@
                     <div class="text-sm whitespace-pre-wrap"
                       :class="{ 'max-h-32 overflow-y-auto': !expandedItems.includes(item.id) }">
                       <span v-if="searchQuery" v-html="highlightText(item.content, searchQuery)"></span>
-                      <span v-else-if="isImageContent(item.content)" ><img :src="item.content" alt="图片预览" /></span>
+                      <span v-else-if="isImageContent(item.content)" ><img :src="item.content" :alt="$t('clipboardHistory.imagePreviewAlt')" /></span>
                       <span v-else>{{ item.content }}</span>
                     </div>
                     <div v-if="isContentLong(item.content)" class="text-xs mt-1">
@@ -124,14 +124,14 @@
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
                           </svg>
-                          收起
+                          {{ $t('clipboardHistory.collapse') }}
                         </span>
                         <span v-else>
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                           </svg>
-                          展开
+                          {{ $t('clipboardHistory.expand') }}
                         </span>
                       </button>
                     </div>
@@ -140,19 +140,19 @@
                       <div class="flex items-center gap-2">
                         <div class="text-xs text-base-content/60">{{ formatDateTime(item.created_at) }}</div>
                         <div v-if="item.source" class="text-xs bg-base-300 px-2 py-0.5 rounded-full">
-                          来源: {{ item.source }}
+                          {{ $t('clipboardHistory.source', { source: item.source }) }}
                         </div>
                       </div>
 
                       <div class="flex gap-1">
-                        <button class="btn btn-xs btn-ghost" @click.stop="copyToClipboard(item.content)" title="复制">
+                        <button class="btn btn-xs btn-ghost" @click.stop="copyToClipboard(item.content)" :title="$t('clipboardHistory.copy')">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                           </svg>
                         </button>
-                        <button class="btn btn-xs btn-ghost" @click.stop="previewContent(item)" title="预览">
+                        <button class="btn btn-xs btn-ghost" @click.stop="previewContent(item)" :title="$t('clipboardHistory.preview')">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -161,7 +161,7 @@
                               d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
                         </button>
-                        <button class="btn btn-xs btn-ghost" @click.stop="deleteItem(item.id)" title="删除">
+                        <button class="btn btn-xs btn-ghost" @click.stop="deleteItem(item.id)" :title="$t('clipboardHistory.delete')">
                           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -186,7 +186,7 @@
               @click="goToPage(1)"
               :disabled="currentPage === 1"
             >
-              «
+              {{ $t('clipboardHistory.pagination.first') }}
             </button>
             <button 
               class="join-item btn btn-sm" 
@@ -194,7 +194,7 @@
               @click="goToPage(currentPage - 1)"
               :disabled="currentPage === 1"
             >
-              ‹
+              {{ $t('clipboardHistory.pagination.previous') }}
             </button>
             
             <!-- 页码按钮 -->
@@ -207,7 +207,7 @@
               >
                 {{ page }}
               </button>
-              <span v-else class="join-item btn btn-sm btn-disabled">...</span>
+              <span v-else class="join-item btn btn-sm btn-disabled">{{ $t('clipboardHistory.pagination.ellipsis') }}</span>
             </template>
             
             <button 
@@ -216,7 +216,7 @@
               @click="goToPage(currentPage + 1)"
               :disabled="currentPage === totalPages"
             >
-              ›
+              {{ $t('clipboardHistory.pagination.next') }}
             </button>
             <button 
               class="join-item btn btn-sm" 
@@ -224,7 +224,7 @@
               @click="goToPage(totalPages)"
               :disabled="currentPage === totalPages"
             >
-              »
+              {{ $t('clipboardHistory.pagination.last') }}
             </button>
           </div>
         </div>
@@ -233,7 +233,7 @@
       <!-- 右侧预览区 -->
       <div v-if="previewItem" class="hidden md:flex md:w-1/2 h-full flex-col p-4 bg-base-100 border-l border-base-300 overflow-hidden">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-medium">内容预览</h3>
+          <h3 class="text-lg font-medium">{{ $t('clipboardHistory.previewTitle') }}</h3>
           <button @click="closePreview" class="btn btn-sm btn-ghost">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -242,18 +242,18 @@
         </div>
         
         <div v-if="previewItem.source" class="text-sm bg-base-300 px-2 py-1 rounded-md inline-block mb-2">
-          来源: {{ previewItem.source }}
+          {{ $t('clipboardHistory.source', { source: previewItem.source }) }}
         </div>
         
         <div class="text-xs text-base-content/60 mb-4">
-          创建时间: {{ formatDateTime(previewItem.created_at) }}
+          {{ $t('clipboardHistory.creationTime', { time: formatDateTime(previewItem.created_at) }) }}
         </div>
         
         <!-- 渲染预览内容 -->
         <div class="flex-1 overflow-auto p-4 bg-base-200 rounded-lg markdown-preview">
           <!-- 图片内容 -->
           <div v-if="isImageContent(previewItem.content)" class="text-center">
-            <img :src="previewItem.content" alt="图片预览" class="max-w-full" />
+            <img :src="previewItem.content" :alt="$t('clipboardHistory.imagePreviewAlt')" class="max-w-full" />
           </div>
           <!-- 代码内容 -->
           <pre v-else-if="isCodeContent(previewItem.content)" class="p-4 bg-base-300 rounded-lg overflow-auto"><code>{{ previewItem.content }}</code></pre>
@@ -268,14 +268,14 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
             </svg>
-            复制内容
+            {{ $t('clipboardHistory.copyContent') }}
           </button>
           <button @click="createNoteFromPreview" class="btn btn-sm btn-primary">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
               stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
-            创建笔记
+            {{ $t('clipboardHistory.createNote') }}
           </button>
         </div>
       </div>
@@ -284,14 +284,14 @@
     <!-- AI总结天数输入对话框 -->
     <div class="modal" :class="{ 'modal-open': showSummaryDialog }">
       <div class="modal-box w-11/12 max-w-2xl">
-        <h3 class="font-bold text-lg">AI总结临时笔记</h3>
+        <h3 class="font-bold text-lg">{{ $t('clipboardHistory.summaryDialogTitle') }}</h3>
 
         <div class="form-control mt-4">
           <label class="label">
-            <span class="label-text">选择AI模型</span>
+            <span class="label-text">{{ $t('clipboardHistory.selectModel') }}</span>
           </label>
           <select v-model="selectedAiModel" class="select select-bordered w-full">
-            <option disabled value="">请选择一个模型</option>
+            <option disabled value="">{{ $t('clipboardHistory.selectModelPlaceholder') }}</option>
             <option v-for="model in availableModels" :key="model.id" :value="model.id">
               {{ model.name }}
             </option>
@@ -300,20 +300,20 @@
 
         <div class="form-control mt-4">
           <label class="label">
-            <span class="label-text">总结最近天数</span>
+            <span class="label-text">{{ $t('clipboardHistory.summaryDays') }}</span>
           </label>
           <input 
             type="number"
             v-model.number="summaryDays"
             class="input input-bordered w-full"
-            placeholder="例如：7"
+            :placeholder="$t('clipboardHistory.summaryDaysPlaceholder')"
           />
         </div>
 
         <div class="form-control mt-4">
           <label class="label">
-            <span class="label-text">自定义提示词 (可选)</span>
-             <span class="label-text-alt">使用 {{ PROMPT_CONTENT_PLACEHOLDER }} 作为内容占位符</span>
+            <span class="label-text">{{ $t('clipboardHistory.customPrompt') }}</span>
+             <span class="label-text-alt">{{ $t('clipboardHistory.promptPlaceholder', { placeholder: PROMPT_CONTENT_PLACEHOLDER }) }}</span>
           </label>
           <textarea
             v-model="summaryPrompt"
@@ -323,8 +323,8 @@
         </div>
 
         <div class="modal-action">
-          <button class="btn" @click="showSummaryDialog = false">取消</button>
-          <button class="btn btn-primary" @click="summarizeNotes" :disabled="!summaryDays || summaryDays <= 0 || !selectedAiModel">确认</button>
+          <button class="btn" @click="showSummaryDialog = false">{{ $t('clipboardHistory.cancel') }}</button>
+          <button class="btn btn-primary" @click="summarizeNotes" :disabled="!summaryDays || summaryDays <= 0 || !selectedAiModel">{{ $t('clipboardHistory.confirm') }}</button>
         </div>
       </div>
     </div>
@@ -332,11 +332,11 @@
     <!-- 确认清空全部对话框 -->
     <div class="modal" :class="{ 'modal-open': showClearAllConfirm }">
       <div class="modal-box">
-        <h3 class="font-bold text-lg">确认清空</h3>
-        <p class="py-4">您确定要清空所有临时笔记吗？此操作不可撤销。</p>
+        <h3 class="font-bold text-lg">{{ $t('clipboardHistory.confirmClearTitle') }}</h3>
+        <p class="py-4">{{ $t('clipboardHistory.confirmClearMessage') }}</p>
         <div class="modal-action">
-          <button class="btn" @click="showClearAllConfirm = false">取消</button>
-          <button class="btn btn-error" @click="clearAllEntries">确认清空</button>
+          <button class="btn" @click="showClearAllConfirm = false">{{ $t('clipboardHistory.cancel') }}</button>
+          <button class="btn btn-error" @click="clearAllEntries">{{ $t('clipboardHistory.confirmClearButton') }}</button>
         </div>
       </div>
     </div>
@@ -344,7 +344,7 @@
     <!-- 复制成功通知 -->
     <div v-if="showCopyNotification"
       class="fixed bottom-4 right-4 bg-success text-success-content px-4 py-2 rounded shadow-lg animate-fade-in-out">
-      已复制到剪贴板
+      {{ $t('clipboardHistory.copiedNotification') }}
     </div>
   </div>
 </template>
@@ -369,9 +369,12 @@ import 'prismjs/components/prism-sql'
 import DOMPurify from 'dompurify'
 import { showAlert } from '../services/dialog'
 import { getAIConfig } from '../services/aiService'
+import { useI18n } from 'vue-i18n'
+
+const { t, locale } = useI18n()
 
 const PROMPT_CONTENT_PLACEHOLDER = '{{CONTENT}}'
-const DEFAULT_SUMMARIZE_PROMPT = '请你扮演一个信息总结专家，擅长从多个独立的文本片段中提取核心要点，并整合成一段通顺、精炼的摘要。我会提供给你一个JSON格式的文本列表，每个文本都有一个唯一的ID。请你仔细阅读所有文本内容，然后生成一个不超过200字的摘要，总结这些文本共同讨论的主题或表达的核心信息。你的回答应该直接是摘要内容，不要包含任何额外的解释或客套话。这是你需要处理的文本列表：\n\n```json\n{{CONTENT}}\n```'
+const DEFAULT_SUMMARIZE_PROMPT = computed(() => t('clipboardHistory.defaultSummaryPrompt'))
 
 interface ClipboardHistory {
   id: number;
@@ -599,7 +602,7 @@ const goBack = () => {
 // 格式化日期时间
 function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp * 1000);
-  return date.toLocaleString('zh-CN', {
+  return date.toLocaleString(locale.value, {
     year: 'numeric',
     month: 'numeric',
     day: 'numeric',
@@ -711,11 +714,11 @@ const loadAvailableModels = async () => {
 // AI总结最近N天的临时笔记
 async function summarizeNotes() {
   if (!summaryDays.value || summaryDays.value <= 0) {
-    await showAlert('请输入有效的天数', { title: '错误' })
+    await showAlert(t('clipboardHistory.notifications.invalidDays'), { title: t('clipboardHistory.notifications.errorTitle') })
     return
   }
   if (!selectedAiModel.value) {
-    await showAlert('请选择一个AI模型', { title: '错误' })
+    await showAlert(t('clipboardHistory.notifications.selectModelError'), { title: t('clipboardHistory.notifications.errorTitle') })
     return
   }
 
@@ -728,7 +731,7 @@ async function summarizeNotes() {
     summarizing.value = true
     const entryIds = await invoke('get_clipboard_ids_for_last_days', { days });
     if (!Array.isArray(entryIds) || entryIds.length === 0) {
-      await showAlert(`最近${days}天内没有找到临时笔记。`, { title: '提示' });
+      await showAlert(t('clipboardHistory.notifications.noNotesFound', { days }), { title: t('clipboardHistory.notifications.tipTitle') });
       return;
     }
 
@@ -738,11 +741,11 @@ async function summarizeNotes() {
       prompt: summaryPrompt.value || null, // 如果为空则发送null
     }) as { reply: string };
 
-    await showAlert(result.reply, { title: `AI总结（最近${days}天）` })
+    await showAlert(result.reply, { title: t('clipboardHistory.notifications.summaryTitle', { days }) })
   } catch (error) {
     console.error('AI summarization failed:', error)
     const errorMessage = error instanceof Error ? error.message : String(error)
-    await showAlert(`AI总结失败: ${errorMessage}`, { title: '错误' })
+    await showAlert(t('clipboardHistory.notifications.summaryFailed', { error: errorMessage }), { title: t('clipboardHistory.notifications.errorTitle') })
   } finally {
     summarizing.value = false
   }
@@ -764,7 +767,7 @@ function isPrismLanguageAvailable(lang: string): boolean {
       typeof Prism.highlight === 'function'
     );
   } catch (error) {
-    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
+    console.warn(`Error checking Prism language ${lang}:`, error);
     return false;
   }
 }
@@ -824,9 +827,9 @@ const renderMarkdown = (content: string): string => {
 
     return cleanHtml;
   } catch (err) {
-    console.error('Markdown渲染错误:', err);
+    console.error('Markdown rendering error:', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
-    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+    return `<div class="text-error">${t('clipboardHistory.markdownRenderError', { error: errorMessage })}</div>
             <pre>${DOMPurify.sanitize(content)}</pre>`;
   }
 };

@@ -4,8 +4,8 @@
       <h3 v-if="title" class="font-bold text-lg">{{ title }}</h3>
       <div class="py-4" v-html="renderedMessage"></div>
       <div class="modal-action">
-        <button v-if="type === 'confirm'" class="btn" @click="onCancel">{{ cancelText }}</button>
-        <button class="btn btn-primary" @click="onConfirm">{{ confirmText }}</button>
+        <button v-if="type === 'confirm'" class="btn" @click="onCancel">{{ $t(cancelText) }}</button>
+        <button class="btn btn-primary" @click="onConfirm">{{ $t(confirmText) }}</button>
       </div>
     </div>
   </div>
@@ -17,6 +17,9 @@ import { Marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface Props {
   type?: 'confirm' | 'alert'
@@ -29,8 +32,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   type: 'alert',
   title: '',
-  confirmText: '确定',
-  cancelText: '取消'
+  confirmText: 'common.confirm',
+  cancelText: 'common.cancel'
 })
 
 const emit = defineEmits(['confirm', 'cancel'])

@@ -141,18 +141,18 @@ export const defaultProviders: Record<string, AIProvider> = {
     default_model: 'deepseek-chat',
     models: []
   },
-  ali: {
-    id: 'ali',
-    provider: 'ali',
-    name: 'qwen',
+  qwen: {
+    id: 'qwen',
+    provider: 'qwen',
+    name: 'Qwen',
     enabled: true,
-    default_model: 'qwen-max',
+    default_model: 'qwen3-coder-plus',
     models: []
   },
   doubao: {
     id: 'doubao',
     provider: 'doubao',
-    name: '豆包',
+    name: 'Doubao',
     enabled: true,
     default_model: 'doubao-seed-1.6',
     models: []
@@ -160,7 +160,7 @@ export const defaultProviders: Record<string, AIProvider> = {
   xai: {
     id: 'xai',
     provider: 'xai',
-    name: 'xAI Grok',
+    name: 'Grok',
     enabled: true,
     default_model: 'grok-3',
     models: []
@@ -168,7 +168,7 @@ export const defaultProviders: Record<string, AIProvider> = {
   custom: {
     id: 'custom',
     provider: 'custom',
-    name: '自定义',
+    name: 'Custom',
     enabled: true,
     default_model: '',
     models: []

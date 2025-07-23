@@ -3,8 +3,8 @@
     <!-- 加密内容视图 -->
     <div v-if="isNoteEncrypted && !isNoteUnlocked" class="h-full">
       <EncryptedContent 
-        :title="`笔记已加密: ${note.title}`"
-        :description="'此笔记受密码保护，请输入正确的密码来查看内容。'"
+        :title="t('noteEditor.encryptedNoteTitle', { title: note.title })"
+        :description="t('noteEditor.encryptedNoteDescription')"
         :loading="encryptionStore.isLoading"
         :encrypted-at="note.updated_at"
         @unlock="handleUnlockRequest"
@@ -63,12 +63,12 @@
             class="context-menu absolute bg-base-200 text-base-content rounded-md shadow-lg p-2 z-30"
             :style="{ top: contextMenuY + 'px', left: contextMenuX + 'px' }">
             <ul class="menu menu-sm p-0">
-              <li><a @click="copySelectedText" :class="{ 'disabled': !hasSelectedText }">复制</a></li>
-              <li><a @click="pasteFromClipboard">粘贴</a></li>
+              <li><a @click="copySelectedText" :class="{ 'disabled': !hasSelectedText }">{{ t('common.copy') }}</a></li>
+              <li><a @click="pasteFromClipboard">{{ t('common.paste') }}</a></li>
               <li class="menu-title"><span></span></li>
-              <li><a @click="explainWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">AI解释</a></li>
-              <li><a @click="translateWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">AI翻译</a></li>
-              <li><a @click="tipWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">TIP一下</a></li>
+              <li><a @click="explainWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">{{ t('noteEditor.aiExplain') }}</a></li>
+              <li><a @click="translateWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">{{ t('noteEditor.aiTranslate') }}</a></li>
+              <li><a @click="tipWithAI" :class="{ 'disabled': !hasSelectedText || isAIProcessing }">{{ t('noteEditor.tipWithAI') }}</a></li>
             </ul>
           </div>
             
@@ -83,7 +83,7 @@
               <div class="toc-header flex items-center justify-between mb-3 pb-2 border-b border-base-300">
                 <h3 class="text-sm font-bold text-base-content flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                  目录
+                  {{ t('noteEditor.toc') }}
                 </h3>
               <button @click="showToc = false" class="btn btn-xs btn-ghost btn-square" @mousedown.stop @touchstart.stop>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -206,13 +206,13 @@
       <input type="range" min="0.5" max="5" step="0.1" v-model.number="zoomLevel" @input="onZoomSliderChange" class="range range-xs w-40" />
       <button @click.stop="zoomIn" class="btn btn-sm btn-ghost">+</button>
       <div class="divider divider-horizontal mx-0"></div>
-      <button @click.stop="resetZoom" class="btn btn-sm btn-ghost">重置</button>
+      <button @click.stop="resetZoom" class="btn btn-sm btn-ghost">{{ t('common.reset') }}</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, defineProps, defineEmits, nextTick, onMounted, onActivated, onBeforeUnmount, onDeactivated } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { Marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -257,6 +257,9 @@ import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
 import { getCachedAudioUrl, setCachedAudioUrl } from '../utils/audioCache'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // Image Zoom/Pan state
 const zoomLevel = ref(0.7)
@@ -404,7 +407,7 @@ const lastSavedContent = ref<string>('')
 
 // 动态响应式工具栏相关函数
 function initResponsiveToolbar() {
-  if (!toolbarContainer.value || !toolbarLeft.value || !toolbarRight.value) return
+  if (typeof window === 'undefined' || !toolbarContainer.value || !toolbarLeft.value || !toolbarRight.value) return
   
   // 创建ResizeObserver来监听工具栏容器大小变化
   resizeObserver.value = new ResizeObserver(() => {
@@ -570,16 +573,14 @@ onMounted(() => {
   lastSavedContent.value = localNote.value.content
   
   // 初始化响应式工具栏
-  nextTick(() => {
-    initResponsiveToolbar()
-  })
+  initResponsiveToolbar()
 
   markdownWorker.value = new Worker(new URL('../workers/markdown.worker.ts', import.meta.url), { type: 'module' });
 
   markdownWorker.value.onmessage = async (event: MessageEvent<{html?: string, error?: string}>) => {
     if (event.data.error) {
       console.error('Markdown rendering error:', event.data.error);
-      renderedContent.value = `<div class="text-error">Markdown rendering error: ${event.data.error}</div>`;
+      renderedContent.value = `<div class="text-error">${t('noteEditor.markdownRenderError', { error: event.data.error })}</div>`;
       return;
     }
     if(event.data.html) {
@@ -841,8 +842,8 @@ watch(() => props.note, async (newNote, oldNote) => {
     // 如果内容发生变化且笔记已解锁，则更新本地内容
     // 或者如果当前显示的是占位符，而新内容不是占位符，也要更新
     if (newNote.content !== localNote.value.content) {
-      const isCurrentPlaceholder = localNote.value.content === "[此笔记已加密，请解锁后查看]"
-      const isNewContentDecrypted = newNote.content !== "[此笔记已加密，请解锁后查看]" && 
+      const isCurrentPlaceholder = localNote.value.content === t('noteEditor.encryptedPlaceholder')
+      const isNewContentDecrypted = newNote.content !== t('noteEditor.encryptedPlaceholder') && 
                                    !newNote.content.includes('"salt"') && 
                                    !newNote.content.includes('"encrypted_data"')
       
@@ -894,8 +895,8 @@ watch(
     
     // 如果内容从占位符变为真实内容，也要更新
     if (oldState && 
-        oldState.noteContent === "[此笔记已加密，请解锁后查看]" &&
-        newState.noteContent !== "[此笔记已加密，请解锁后查看]" &&
+        oldState.noteContent === t('noteEditor.encryptedPlaceholder') &&
+        newState.noteContent !== t('noteEditor.encryptedPlaceholder') &&
         newState.isEncrypted &&
         newState.isUnlocked) {
       console.log('NoteEditor: 检测到内容从占位符变为解密内容')
@@ -903,8 +904,8 @@ watch(
     }
     
     // 如果当前本地内容是占位符，但传入的内容是解密后的内容，也要更新
-    if (localNote.value.content === "[此笔记已加密，请解锁后查看]" &&
-        newState.noteContent !== "[此笔记已加密，请解锁后查看]" &&
+    if (localNote.value.content === t('noteEditor.encryptedPlaceholder') &&
+        newState.noteContent !== t('noteEditor.encryptedPlaceholder') &&
         !newState.noteContent.includes('"salt"') &&
         !newState.noteContent.includes('"encrypted_data"') &&
         newState.isUnlocked) {
@@ -952,7 +953,7 @@ function handleKeyDown(event: KeyboardEvent) {
   // 链接: Ctrl+K
   if (isCtrlOrCmd && event.key === 'k') {
     event.preventDefault()
-    insertMarkdown('[', '](https://)')
+    insertMarkdown('[', `](${t('noteEditor.linkUrlPlaceholder')})`)
     return
   }
 
@@ -2686,6 +2687,14 @@ onBeforeUnmount(() => {
   window.removeEventListener('prism-theme-changed', handleThemeChange)
 })
 
+onDeactivated(() => {
+  // 清理响应式工具栏资源
+  if (resizeObserver.value) {
+    resizeObserver.value.disconnect()
+    resizeObserver.value = null
+  }
+})
+
 // 添加图片放大模态框的逻辑
 const showImageModal = ref(false)
 const modalImageSrc = ref('')
@@ -3104,7 +3113,7 @@ const isNoteEncrypted = computed(() => {
   }
   
   // 如果内容是占位符，也认为是加密状态
-  if (props.note.content === "[此笔记已加密，请解锁后查看]") {
+  if (props.note.content === t('noteEditor.encryptedPlaceholder')) {
     return true
   }
   
@@ -3120,7 +3129,7 @@ const isNoteEncrypted = computed(() => {
 // 计算属性 - 检查笔记是否已解锁
 const isNoteUnlocked = computed(() => {
   // 如果内容是占位符，说明未解锁
-  if (props.note.content === "[此笔记已加密，请解锁后查看]") {
+  if (props.note.content === t('noteEditor.encryptedPlaceholder')) {
     return false
   }
   
@@ -3252,7 +3261,7 @@ function handleToolbarCommand(command: string, ...args: any[]) {
 function toggleAudioRecording() {
   // 确保笔记已保存（有ID）
   if (!localNote.value.id) {
-    showAlert('请先保存笔记再录制音频', { title: '提示' })
+    showAlert(t('noteEditor.saveNoteForAudio'), { title: t('common.tip') })
     return
   }
   
@@ -3263,7 +3272,7 @@ function toggleAudioRecording() {
 function toggleAudioPlayer() {
   // 确保笔记已保存（有ID）
   if (!localNote.value.id) {
-    showAlert('请先保存笔记再打开播放器', { title: '提示' })
+    showAlert(t('noteEditor.saveNoteForPlayer'), { title: t('common.tip') })
     return
   }
   
@@ -3325,7 +3334,7 @@ function handleAudioPlayerInsert(data: { text: string, type: 'link' | 'transcrip
     if (data.type === 'link') {
       insertText = `\n${data.text}\n`
     } else if (data.type === 'transcription') {
-      insertText = `\n**转录文本：**\n${data.text}\n`
+      insertText = `\n**${t('noteEditor.transcriptionText')}:**\n${data.text}\n`
     }
     
     // 在光标位置插入
@@ -3687,7 +3696,6 @@ const updateToc = () => {
 const templateStore = useTipTemplateStore();
 
 // 在其他 script 顶层常量之后添加音频缓存
-const audioUrlCache = new Map<string, string>()
 
 // --- Start: Image Zoom & Pan Functions ---
 

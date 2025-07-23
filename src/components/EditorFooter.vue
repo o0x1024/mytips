@@ -15,13 +15,13 @@
       <!-- 统计信息和状态指示器 -->
       <div class="text-xs text-base-content/80 flex items-center gap-4 shrink-0">
         <!-- 图片加载状态指示器 -->
-        <div v-if="isLoadingImages" class="flex items-center gap-1 text-info" title="图片加载中...">
+        <div v-if="isLoadingImages" class="flex items-center gap-1 text-info" :title="$t('editorFooter.loadingImagesTitle')">
           <span class="loading loading-spinner loading-xs"></span>
-          <span>加载图片</span>
+          <span>{{ $t('editorFooter.loadingImages') }}</span>
         </div>
-        <span title="字数">{{ wordCount }} 字</span>
-        <span title="创建时间">创建: {{ formatDateTime(createdAt) }}</span>
-        <span title="修改时间">修改: {{ formatDateTime(updatedAt) }}</span>
+        <span :title="$t('editorFooter.wordCountTitle')">{{ $t('editorFooter.wordCount', { count: wordCount }) }}</span>
+        <span :title="$t('editorFooter.createdAtTitle')">{{ $t('editorFooter.createdAt', { time: formatDateTime(createdAt) }) }}</span>
+        <span :title="$t('editorFooter.updatedAtTitle')">{{ $t('editorFooter.updatedAt', { time: formatDateTime(updatedAt) }) }}</span>
       </div>
     </div>
   </div>
@@ -29,8 +29,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import TagSelector from './TagSelector.vue';
 import { formatDateTime } from '../utils/formatters';
+
+const { t } = useI18n();
 
 interface Tag {
   id: string;

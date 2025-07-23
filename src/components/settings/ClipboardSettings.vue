@@ -1,64 +1,64 @@
 <template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-primary mb-4">临时笔记设置</h2>
+      <h2 class="card-title text-primary mb-4">{{ $t('clipboardSettings.title') }}</h2>
 
-      <div class="divider">内容捕获设置</div>
+      <div class="divider">{{ $t('clipboardSettings.contentCapture.title') }}</div>
 
       <!-- 启用剪贴板监听 -->
       <div class="form-control mb-4">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">启用剪贴板监听</span>
+          <span class="label-text">{{ $t('clipboardSettings.contentCapture.enableMonitoring') }}</span>
           <input type="checkbox" class="toggle toggle-primary"
             v-model="clipboardSettings.enableMonitoring" @change="updateClipboardSettings" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，系统将自动监听并捕获剪贴板变化。关闭后，只能通过快捷键手动添加内容
+          {{ $t('clipboardSettings.contentCapture.enableMonitoringDescription') }}
         </p>
       </div>
 
       <!-- 应用白名单设置 -->
       <div class="form-control mb-4">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">启用应用白名单</span>
+          <span class="label-text">{{ $t('clipboardSettings.contentCapture.enableAppWhitelist') }}</span>
           <input type="checkbox" class="toggle toggle-primary"
             v-model="clipboardSettings.enableAppWhitelist" @change="updateClipboardSettings" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，来自白名单应用的剪贴板内容将不会被添加到临时笔记区
+          {{ $t('clipboardSettings.contentCapture.enableAppWhitelistDescription') }}
         </p>
       </div>
 
       <!-- 捕获图片设置 -->
       <div class="form-control mb-4">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">捕获图片内容</span>
+          <span class="label-text">{{ $t('clipboardSettings.contentCapture.captureImages') }}</span>
           <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.captureImages"
             @change="updateClipboardSettings" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，临时笔记区将同时捕获剪贴板中的图片内容
+          {{ $t('clipboardSettings.contentCapture.captureImagesDescription') }}
         </p>
       </div>
 
       <!-- 捕获来源信息设置 -->
       <div class="form-control mb-4">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">记录来源信息</span>
+          <span class="label-text">{{ $t('clipboardSettings.contentCapture.captureSourceInfo') }}</span>
           <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.captureSourceInfo"
             @change="updateClipboardSettings" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，将记录剪贴板内容的来源应用或窗口名称
+          {{ $t('clipboardSettings.contentCapture.captureSourceInfoDescription') }}
         </p>
       </div>
 
-      <div class="divider">应用白名单管理</div>
+      <div class="divider">{{ $t('clipboardSettings.whitelist.title') }}</div>
 
       <!-- 白名单应用管理 -->
       <div v-if="clipboardSettings.enableAppWhitelist" class="form-control mb-4">
         <label class="label">
-          <span class="label-text">白名单应用管理</span>
+          <span class="label-text">{{ $t('clipboardSettings.whitelist.title') }}</span>
         </label>
         
         <!-- 添加新应用 -->
@@ -66,7 +66,7 @@
           <input 
             type="text" 
             v-model="newWhitelistApp" 
-            placeholder="输入应用名称（如：chrome.exe, notepad.exe）" 
+            :placeholder="$t('clipboardSettings.whitelist.inputPlaceholder')" 
             class="input input-bordered flex-1"
             @keydown.enter="addWhitelistApp"
           />
@@ -78,13 +78,13 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
-            添加
+            {{ $t('clipboardSettings.whitelist.add') }}
           </button>
         </div>
 
         <!-- 预设应用快速添加 -->
         <div class="mb-3">
-          <p class="text-sm text-base-content/80 mb-2">常用应用：</p>
+          <p class="text-sm text-base-content/80 mb-2">{{ $t('clipboardSettings.whitelist.presetApps') }}</p>
           <div class="flex flex-wrap gap-2">
             <button 
               v-for="preset in presetWhitelistApps" 
@@ -104,7 +104,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p class="text-sm">暂无白名单应用</p>
+            <p class="text-sm">{{ $t('clipboardSettings.whitelist.noApps') }}</p>
           </div>
           
           <div v-else class="space-y-2">
@@ -132,11 +132,11 @@
         </div>
 
         <div class="mt-2 text-xs text-base-content/60">
-          <p>💡 提示：</p>
+          <p>{{ $t('clipboardSettings.whitelist.tipTitle') }}</p>
           <ul class="list-disc list-inside ml-2 space-y-1">
-            <li>Windows: 使用进程名称（如 chrome.exe, notepad.exe）</li>
-            <li>macOS: 使用应用名称（如 Google Chrome, TextEdit）</li>
-            <li>Linux: 使用进程名称（如 chrome, gedit）</li>
+            <li>{{ $t('clipboardSettings.whitelist.tipWindows') }}</li>
+            <li>{{ $t('clipboardSettings.whitelist.tipMacos') }}</li>
+            <li>{{ $t('clipboardSettings.whitelist.tipLinux') }}</li>
           </ul>
         </div>
       </div>
@@ -146,15 +146,15 @@
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
-        <span>请先启用应用白名单功能，然后管理白名单应用列表</span>
+        <span>{{ $t('clipboardSettings.whitelist.disabledInfo') }}</span>
       </div>
 
-      <div class="divider">数据保留设置</div>
+      <div class="divider">{{ $t('clipboardSettings.dataRetention.title') }}</div>
 
       <!-- 保留时间设置 -->
       <div class="form-control mb-4">
         <label class="label">
-          <span class="label-text">临时笔记保留时间</span>
+          <span class="label-text">{{ $t('clipboardSettings.dataRetention.retentionTime') }}</span>
         </label>
         <select v-model="clipboardSettings.retentionDays" class="select select-bordered w-full"
           @change="updateClipboardSettings">
@@ -163,13 +163,13 @@
           </option>
         </select>
         <p class="text-xs text-base-content/80 mt-1">
-          设置临时笔记区自动清理数据的时间，选择"永久保留"则不会自动清理
+          {{ $t('clipboardSettings.dataRetention.retentionTimeDescription') }}
         </p>
 
         <button class="btn btn-outline btn-sm mt-2" @click="cleanExpiredEntries" :disabled="isCleaningEntries">
           <span v-if="isCleaningEntries">
             <span class="loading loading-spinner loading-xs mr-2"></span>
-            清理中...
+            {{ $t('clipboardSettings.dataRetention.cleaning') }}
           </span>
           <span v-else>
             <div class="flex items-center">
@@ -178,7 +178,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              立即清理过期内容
+              {{ $t('clipboardSettings.dataRetention.cleanNow') }}
             </div>
           </span>
         </button>
@@ -187,21 +187,21 @@
       <!-- 加密存储设置 -->
       <div class="form-control mb-4">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">加密存储临时笔记</span>
+          <span class="label-text">{{ $t('clipboardSettings.dataRetention.encryptStorage') }}</span>
           <input type="checkbox" class="toggle toggle-primary" v-model="clipboardSettings.encryptStorage"
             @change="updateClipboardSettings" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，临时笔记将使用加密方式存储在数据库中
+          {{ $t('clipboardSettings.dataRetention.encryptStorageDescription') }}
         </p>
       </div>
 
-      <div class="divider">快捷键设置</div>
+      <div class="divider">{{ $t('clipboardSettings.shortcuts.title') }}</div>
 
       <!-- 全局快捷键设置 -->
       <div class="form-control mb-4">
         <label class="label">
-          <span class="label-text">选中文本添加到临时笔记区</span>
+          <span class="label-text">{{ $t('clipboardSettings.shortcuts.addSelectedText') }}</span>
         </label>
         <div class="flex items-center gap-2">
           <div class="join">
@@ -227,22 +227,22 @@
           </select>
         </div>
         <p class="text-xs text-base-content/80 mt-2">
-          选择修饰键和按键组合，用于将选中文本快速添加到临时笔记区
+          {{ $t('clipboardSettings.shortcuts.description') }}
         </p>
         <div class="alert alert-warning mt-3" v-if="isShortcutInvalid">
           <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          <span>快捷键必须至少包含一个修饰键和一个字符键</span>
+          <span>{{ $t('clipboardSettings.shortcuts.invalidWarning') }}</span>
         </div>
         <button class="btn btn-sm btn-outline mt-3" @click="applyShortcutChanges" :disabled="isShortcutInvalid || isApplyingShortcut">
           <span v-if="isApplyingShortcut">
             <span class="loading loading-spinner loading-xs mr-2"></span>
-            应用中...
+            {{ $t('clipboardSettings.shortcuts.applying') }}
           </span>
-          <span v-else>应用快捷键更改</span>
+          <span v-else>{{ $t('clipboardSettings.shortcuts.applyChanges') }}</span>
         </button>
         <div class="alert alert-info mt-3">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          <span>修改快捷键后需要点击"应用快捷键更改"并重启应用才能生效</span>
+          <span>{{ $t('clipboardSettings.shortcuts.restartNote') }}</span>
         </div>
       </div>
     </div>
@@ -254,7 +254,9 @@ import { ref, computed, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useUIStore } from '../../stores/uiStore'
 import { showMessage } from '../../services/dialog'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const uiStore = useUIStore()
 
 // 剪贴板设置
@@ -281,34 +283,34 @@ const isApplyingShortcut = ref(false)
 // 预设的常用应用
 const presetWhitelistApps = [
   // Windows
-  { name: 'chrome.exe', label: 'Chrome' },
-  { name: 'firefox.exe', label: 'Firefox' },
-  { name: 'edge.exe', label: 'Edge' },
-  { name: 'notepad.exe', label: '记事本' },
-  { name: 'winword.exe', label: 'Word' },
-  { name: 'excel.exe', label: 'Excel' },
-  { name: 'powerpnt.exe', label: 'PowerPoint' },
-  { name: 'code.exe', label: 'VS Code' },
-  { name: 'devenv.exe', label: 'Visual Studio' },
-  { name: 'slack.exe', label: 'Slack' },
-  { name: 'discord.exe', label: 'Discord' },
-  { name: 'teams.exe', label: 'Teams' },
+  { name: 'chrome.exe', label: t('clipboardSettings.presets.chrome') },
+  { name: 'firefox.exe', label: t('clipboardSettings.presets.firefox') },
+  { name: 'edge.exe', label: t('clipboardSettings.presets.edge') },
+  { name: 'notepad.exe', label: t('clipboardSettings.presets.notepad') },
+  { name: 'winword.exe', label: t('clipboardSettings.presets.word') },
+  { name: 'excel.exe', label: t('clipboardSettings.presets.excel') },
+  { name: 'powerpnt.exe', label: t('clipboardSettings.presets.powerpoint') },
+  { name: 'code.exe', label: t('clipboardSettings.presets.vscode') },
+  { name: 'devenv.exe', label: t('clipboardSettings.presets.visualstudio') },
+  { name: 'slack.exe', label: t('clipboardSettings.presets.slack') },
+  { name: 'discord.exe', label: t('clipboardSettings.presets.discord') },
+  { name: 'teams.exe', label: t('clipboardSettings.presets.teams') },
   // macOS
-  { name: 'Google Chrome', label: 'Chrome (Mac)' },
-  { name: 'Firefox', label: 'Firefox (Mac)' },
-  { name: 'Safari', label: 'Safari' },
-  { name: 'TextEdit', label: 'TextEdit' },
-  { name: 'Microsoft Word', label: 'Word (Mac)' },
-  { name: 'Microsoft Excel', label: 'Excel (Mac)' },
-  { name: 'Visual Studio Code', label: 'VS Code (Mac)' },
-  { name: 'Slack', label: 'Slack (Mac)' },
-  { name: 'Discord', label: 'Discord (Mac)' },
+  { name: 'Google Chrome', label: t('clipboardSettings.presets.chromeMac') },
+  { name: 'Firefox', label: t('clipboardSettings.presets.firefoxMac') },
+  { name: 'Safari', label: t('clipboardSettings.presets.safari') },
+  { name: 'TextEdit', label: t('clipboardSettings.presets.textedit') },
+  { name: 'Microsoft Word', label: t('clipboardSettings.presets.wordMac') },
+  { name: 'Microsoft Excel', label: t('clipboardSettings.presets.excelMac') },
+  { name: 'Visual Studio Code', label: t('clipboardSettings.presets.vscodeMac') },
+  { name: 'Slack', label: t('clipboardSettings.presets.slackMac') },
+  { name: 'Discord', label: t('clipboardSettings.presets.discordMac') },
   // Linux
-  { name: 'chrome', label: 'Chrome (Linux)' },
-  { name: 'firefox', label: 'Firefox (Linux)' },
-  { name: 'gedit', label: 'Gedit' },
-  { name: 'code', label: 'VS Code (Linux)' },
-  { name: 'slack', label: 'Slack (Linux)' }
+  { name: 'chrome', label: t('clipboardSettings.presets.chromeLinux') },
+  { name: 'firefox', label: t('clipboardSettings.presets.firefoxLinux') },
+  { name: 'gedit', label: t('clipboardSettings.presets.gedit') },
+  { name: 'code', label: t('clipboardSettings.presets.vscodeLinux') },
+  { name: 'slack', label: t('clipboardSettings.presets.slackLinux') }
 ]
 
 // 快捷键相关
@@ -461,10 +463,10 @@ async function applyShortcutChanges() {
     }
     
     await invoke('update_global_shortcut', { config: shortcutConfig })
-    showMessage('快捷键已更新，重启应用后生效', { title: '成功' })
+    showMessage(t('clipboardSettings.notifications.shortcutUpdated'), { title: t('clipboardSettings.notifications.success') })
   } catch (error) {
     console.error('更新快捷键失败:', error)
-    showMessage('更新快捷键失败: ' + error, { title: '错误' })
+    showMessage(t('clipboardSettings.notifications.shortcutUpdateFailed', { error }), { title: t('clipboardSettings.notifications.error') })
   } finally {
     isApplyingShortcut.value = false
   }
@@ -475,10 +477,10 @@ async function cleanExpiredEntries() {
   isCleaningEntries.value = true
   try {
     await invoke('clean_expired_clipboard_entries')
-    showMessage('过期剪贴板条目已清理', { title: '清理成功' })
+    showMessage(t('clipboardSettings.notifications.cleanupSuccess'), { title: t('clipboardSettings.notifications.success') })
   } catch (error) {
     console.error('清理过期剪贴板条目失败:', error)
-    showMessage('清理过期剪贴板条目失败: ' + error, { title: '错误' })
+    showMessage(t('clipboardSettings.notifications.cleanupFailed', { error }), { title: t('clipboardSettings.notifications.error') })
   } finally {
     isCleaningEntries.value = false
   }
@@ -490,7 +492,7 @@ function addWhitelistApp() {
   if (!appName) return
   
   if (clipboardSettings.value.whitelistApps.includes(appName)) {
-    showMessage(`应用 "${appName}" 已在白名单中`, { title: '提示' })
+    showMessage(t('clipboardSettings.notifications.appExists', { appName }), { title: t('clipboardSettings.notifications.tip') })
     return
   }
   
@@ -498,7 +500,7 @@ function addWhitelistApp() {
   newWhitelistApp.value = ''
   updateClipboardSettings()
   
-  showMessage(`已添加 "${appName}" 到白名单`, { title: '成功' })
+  showMessage(t('clipboardSettings.notifications.appAdded', { appName }), { title: t('clipboardSettings.notifications.success') })
 }
 
 function removeWhitelistApp(index: number) {
@@ -506,7 +508,7 @@ function removeWhitelistApp(index: number) {
   clipboardSettings.value.whitelistApps.splice(index, 1)
   updateClipboardSettings()
   
-  showMessage(`已从白名单中移除 "${appName}"`, { title: '成功' })
+  showMessage(t('clipboardSettings.notifications.appRemoved', { appName }), { title: t('clipboardSettings.notifications.success') })
 }
 
 function addPresetApp(appName: string) {
@@ -517,7 +519,7 @@ function addPresetApp(appName: string) {
   clipboardSettings.value.whitelistApps.push(appName)
   updateClipboardSettings()
   
-  showMessage(`已添加 "${appName}" 到白名单`, { title: '成功' })
+  showMessage(t('clipboardSettings.notifications.appAdded', { appName }), { title: t('clipboardSettings.notifications.success') })
 }
 
 // 组件挂载时加载设置

@@ -26,7 +26,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
         </svg>
-        {{ loading ? '解锁中...' : '输入密码解锁' }}
+        {{ loading ? t('encryptedContent.unlocking') : t('encryptedContent.unlockWithPassword') }}
       </button>
 
       <!-- 取消加密按钮 -->
@@ -37,22 +37,22 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-11.83 1.82M15 7a6 6 0 00-11.83 1.82M15 7H9m6 0V1m0 6v6m0 0H9m6 0v6" />
         </svg>
-        取消加密
+        {{ t('encryptedContent.cancelEncryption') }}
       </button>
 
       <!-- 加密信息 -->
       <div class="mt-8 p-4 bg-base-100 rounded-lg border border-base-300">
         <div class="text-sm text-base-content/60 space-y-2">
           <div class="flex items-center justify-between">
-            <span>加密状态:</span>
-            <span class="badge badge-warning badge-sm">已加密</span>
+            <span>{{ t('encryptedContent.encryptionStatus') }}:</span>
+            <span class="badge badge-warning badge-sm">{{ t('encryptedContent.encrypted') }}</span>
           </div>
           <div v-if="encryptedAt" class="flex items-center justify-between">
-            <span>加密时间:</span>
+            <span>{{ t('encryptedContent.encryptionTime') }}:</span>
             <span class="text-xs">{{ formatDate(encryptedAt) }}</span>
           </div>
           <div class="flex items-center justify-between">
-            <span>加密算法:</span>
+            <span>{{ t('encryptedContent.encryptionAlgorithm') }}:</span>
             <span class="text-xs">AES-256</span>
           </div>
         </div>
@@ -63,13 +63,17 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        此内容已加密保护，需要正确的密码才能查看
+        {{ t('encryptedContent.securityTip') }}
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
+
 // 组件属性
 defineProps({
   title: {
@@ -97,7 +101,7 @@ defineEmits(['unlock', 'decrypt'])
 function formatDate(timestamp: number): string {
   if (!timestamp) return ''
   const date = new Date(timestamp)
-  return date.toLocaleString('zh-CN')
+  return date.toLocaleString()
 }
 </script>
 

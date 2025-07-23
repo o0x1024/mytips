@@ -4,7 +4,7 @@
     <textarea v-if="!isPreviewMode || isSplitMode"
       class="flex-1 p-4 h-full resize-none focus:outline-none font-mono text-base overflow-auto"
       :class="{ 'w-1/2': isSplitMode }"
-      placeholder="开始输入内容..."
+      :placeholder="t('markdownEditor.placeholder')"
       :value="modelValue"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
       @contextmenu.prevent="emit('contextmenu', $event)"
@@ -32,6 +32,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps({
   modelValue: {

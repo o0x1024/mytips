@@ -5,7 +5,7 @@
       <!-- 笔记统计信息 -->
       <div class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-2 mt-2">
-          <h2 class="text-lg font-semibold text-base-content">笔记</h2>
+          <h2 class="text-lg font-semibold text-base-content">{{ t('noteList.notes') }}</h2>
           <div class="badge badge-outline">{{ props.totalCount > 0 ? props.totalCount : filteredNotes.length }}</div>
         </div>
         <div class="flex items-center gap-1">
@@ -13,7 +13,7 @@
           <button 
             class="btn btn-sm btn-ghost" 
             @click="$emit('new-note')" 
-            title="新建笔记 (Ctrl+N)">
+            :title="t('noteList.newNoteTooltip')">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
             </svg>
@@ -22,7 +22,7 @@
           <button 
             class="btn btn-sm btn-ghost" 
             @click="$emit('refresh')" 
-            title="刷新列表"
+            :title="t('noteList.refreshList')"
             >
             <svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -40,16 +40,16 @@
       <!-- 排序控制 -->
       <div class="dropdown">
         <label tabindex="0" class="btn btn-sm btn-ghost m-1">
-          <span class="mr-1">排序</span>
+          <span class="mr-1">{{ t('noteList.sort') }}</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
           </svg>
         </label>
         <ul tabindex="0" class="dropdown-content z-10 menu p-2 shadow bg-base-100 rounded-box w-52">
-          <li><a @click="sortBy('updated', 'desc')" :class="{'font-bold': sortField === 'updated' && sortOrder === 'desc'}">最近修改</a></li>
-          <li><a @click="sortBy('created', 'desc')" :class="{'font-bold': sortField === 'created' && sortOrder === 'desc'}">最近创建</a></li>
-          <li><a @click="sortBy('title', 'asc')" :class="{'font-bold': sortField === 'title' && sortOrder === 'asc'}">标题 (A-Z)</a></li>
-          <li><a @click="sortBy('title', 'desc')" :class="{'font-bold': sortField === 'title' && sortOrder === 'desc'}">标题 (Z-A)</a></li>
+          <li><a @click="sortBy('updated', 'desc')" :class="{'font-bold': sortField === 'updated' && sortOrder === 'desc'}">{{ t('noteList.sortBy.updated') }}</a></li>
+          <li><a @click="sortBy('created', 'desc')" :class="{'font-bold': sortField === 'created' && sortOrder === 'desc'}">{{ t('noteList.sortBy.created') }}</a></li>
+          <li><a @click="sortBy('title', 'asc')" :class="{'font-bold': sortField === 'title' && sortOrder === 'asc'}">{{ t('noteList.sortBy.titleAsc') }}</a></li>
+          <li><a @click="sortBy('title', 'desc')" :class="{'font-bold': sortField === 'title' && sortOrder === 'desc'}">{{ t('noteList.sortBy.titleDesc') }}</a></li>
         </ul>
       </div>
     </div>
@@ -66,7 +66,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
         </svg>
-        <p class="text-lg mb-2">没有找到笔记</p>
+        <p class="text-lg mb-2">{{ t('noteList.noNotesFound') }}</p>
         <!-- <button class="btn btn-sm btn-primary" @click="$emit('new-note')">创建新笔记</button> -->
       </div>
       
@@ -90,16 +90,16 @@
           @contextmenu.prevent="openContextMenu($event, filteredNotes[virtualRow.index])">
           
           <div class="flex items-center justify-between">
-            <h3 class="font-medium">{{ filteredNotes[virtualRow.index].title || '无标题' }}</h3>
+            <h3 class="font-medium">{{ filteredNotes[virtualRow.index].title || t('noteList.untitled') }}</h3>
             <div class="flex items-center gap-2">
               <span class="text-xs text-base-content/80">{{ formatDate(filteredNotes[virtualRow.index].updated_at) }}</span>
               <!-- 加密状态指示器 -->
-              <span v-if="isNoteEncrypted(filteredNotes[virtualRow.index].id)" title="已加密" class="text-warning">
+              <span v-if="isNoteEncrypted(filteredNotes[virtualRow.index].id)" :title="t('noteList.encrypted')" class="text-warning">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </span>
-              <span v-if="filteredNotes[virtualRow.index].isPinned" title="已固定" class="text-warning">
+              <span v-if="filteredNotes[virtualRow.index].isPinned" :title="t('noteList.pinned')" class="text-warning">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
@@ -113,10 +113,10 @@
       <!-- 列表底部的加载更多提示 -->
       <div v-if="loading && filteredNotes.length > 0" class="flex justify-center items-center p-4">
         <span class="loading loading-spinner loading-sm"></span>
-        <span class="ml-2 text-sm text-base-content/70">加载中...</span>
+        <span class="ml-2 text-sm text-base-content/70">{{ t('noteList.loading') }}</span>
       </div>
       <div v-if="!hasMoreTips && filteredNotes.length > 0" class="text-center p-4 text-sm text-base-content/50">
-        没有更多笔记了
+        {{ t('noteList.noMoreNotes') }}
       </div>
 
     </div>
@@ -127,7 +127,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
-        创建新笔记
+        {{ t('noteList.createNewNote') }}
       </button>
     </div>
 
@@ -161,31 +161,31 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            加密笔记
+            {{ t('noteList.encryptNote') }}
           </a>
           <a v-else @click="decryptContextNote" class="flex items-center gap-1 text-info hover:bg-info hover:text-info-content">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             </svg>
-            解密笔记
+            {{ t('noteList.decryptNote') }}
           </a>
         </li>
         
-        <li class="menu-title pt-2 pb-1 text-xs">笔记操作</li>
+        <li class="menu-title pt-2 pb-1 text-xs">{{ t('noteList.noteActions') }}</li>
         <li><a @click="deleteContextNote" class="flex items-center gap-1 text-error hover:bg-error hover:text-error-content">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-          删除笔记
+          {{ t('noteList.deleteNote') }}
         </a></li>
-        <li class="menu-title pt-2 pb-1 text-xs">移动到分类</li>
+        <li class="menu-title pt-2 pb-1 text-xs">{{ t('noteList.moveToCategory') }}</li>
         <li class="dropdown dropdown-hover">
           <div tabindex="0" role="button" class="flex items-center gap-1 justify-between p-2 hover:bg-base-200 rounded-lg">
             <div class="flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
               </svg>
-              选择分类
+              {{ t('noteList.selectCategory') }}
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -223,7 +223,7 @@
                 <!-- 子菜单 -->
                 <ul tabindex="0" class="dropdown-content menu z-[3] shadow-lg bg-base-100 rounded-box w-52 p-2 absolute left-[calc(100%-12px)] top-0 -mt-2">
                   <!-- 父分类本身也可以选择 -->
-                  <li class="menu-title text-xs pb-1">选择 {{ notebook.name }}</li>
+                  <li class="menu-title text-xs pb-1">{{ t('noteList.selectParentCategory', { name: notebook.name }) }}</li>
                   <li>
                     <a @click="moveNoteToCategory(notebook.id)" class="whitespace-nowrap flex items-center gap-2 font-medium text-primary">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -233,7 +233,7 @@
                     </a>
                   </li>
                   
-                  <li class="menu-title text-xs pt-2 pb-1">子分类</li>
+                  <li class="menu-title text-xs pt-2 pb-1">{{ t('noteList.subcategories') }}</li>
                   <!-- 子分类列表 -->
                   <template v-for="child in notebook.children" :key="child.id">
                     <!-- 如果子分类没有更深层的子分类 -->
@@ -266,7 +266,7 @@
                       <!-- 三级菜单 -->
                       <ul tabindex="0" class="dropdown-content menu z-[4] shadow-lg bg-base-100 rounded-box w-52 p-2 absolute left-[calc(100%-12px)] top-0 -mt-2">
                         <!-- 当前分类本身 -->
-                        <li class="menu-title text-xs pb-1">选择 {{ child.name }}</li>
+                        <li class="menu-title text-xs pb-1">{{ t('noteList.selectParentCategory', { name: child.name }) }}</li>
                         <li>
                           <a @click="moveNoteToCategory(child.id)" class="whitespace-nowrap flex items-center gap-2 font-medium text-primary">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -276,7 +276,7 @@
                           </a>
                         </li>
                         
-                        <li class="menu-title text-xs pt-2 pb-1">子分类</li>
+                        <li class="menu-title text-xs pt-2 pb-1">{{ t('noteList.subcategories') }}</li>
                         <!-- 孙分类 -->
                         <template v-for="grandchild in child.children" :key="grandchild.id">
                           <li v-if="!grandchild.children || grandchild.children.length === 0">
@@ -308,7 +308,7 @@
                             <!-- 四级菜单 -->
                             <ul tabindex="0" class="dropdown-content menu z-[5] shadow-lg bg-base-100 rounded-box w-52 p-2 absolute left-[calc(100%-12px)] top-0 -mt-2">
                               <!-- 当前分类本身 -->
-                              <li class="menu-title text-xs pb-1">选择 {{ grandchild.name }}</li>
+                              <li class="menu-title text-xs pb-1">{{ t('noteList.selectParentCategory', { name: grandchild.name }) }}</li>
                               <li>
                                 <a @click="moveNoteToCategory(grandchild.id)" class="whitespace-nowrap flex items-center gap-2 font-medium text-primary">
                                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -318,7 +318,7 @@
                                 </a>
                               </li>
                               
-                              <li class="menu-title text-xs pt-2 pb-1">子分类</li>
+                              <li class="menu-title text-xs pt-2 pb-1">{{ t('noteList.subcategories') }}</li>
                               <!-- 最深层分类 -->
                               <li v-for="item in grandchild.children" :key="item.id">
                                 <a @click="moveNoteToCategory(item.id)" class="whitespace-nowrap flex items-center gap-2">
@@ -339,35 +339,35 @@
             </template>
           </ul>
         </li>
-        <li class="menu-title pt-2 pb-1 text-xs">导出格式</li>
+        <li class="menu-title pt-2 pb-1 text-xs">{{ t('noteList.exportFormat') }}</li>
         <li><a @click="exportContextNote('markdown')" class="flex items-center gap-1" :class="{'pointer-events-none opacity-50': loading}">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span v-if="!loading">Markdown (.md)</span>
+          <span v-if="!loading">{{ t('noteList.markdownExport') }}</span>
           <span v-else class="flex items-center">
             <span class="loading loading-spinner loading-xs mr-1"></span>
-            导出中...
+            {{ t('noteList.exporting') }}
           </span>
         </a></li>
         <li><a @click="exportContextNote('pdf')" class="flex items-center gap-1" :class="{'pointer-events-none opacity-50': loading}">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span v-if="!loading">PDF (.pdf)</span>
+          <span v-if="!loading">{{ t('noteList.pdfExport') }}</span>
           <span v-else class="flex items-center">
             <span class="loading loading-spinner loading-xs mr-1"></span>
-            导出中...
+            {{ t('noteList.exporting') }}
           </span>
         </a></li>
         <li><a @click="exportContextNote('html')" class="flex items-center gap-1" :class="{'pointer-events-none opacity-50': loading}">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
           </svg>
-          <span v-if="!loading">HTML (.html)</span>
+          <span v-if="!loading">{{ t('noteList.htmlExport') }}</span>
           <span v-else class="flex items-center">
             <span class="loading loading-spinner loading-xs mr-1"></span>
-            导出中...
+            {{ t('noteList.exporting') }}
           </span>
         </a></li>
       </ul>
@@ -383,6 +383,9 @@ import { useEncryptionStore } from '../stores/encryptionStore'
 import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useResponsive } from '../composables/useResponsive'
+import { useI18n } from 'vue-i18n'
+
+const { t, locale } = useI18n()
 
 // 类型定义
 interface Note extends TipSummary {
@@ -594,7 +597,7 @@ async function selectNote(note: Note) {
     if (!isUnlocked) {
       // 如果笔记已加密且未解锁，可以触发解锁流程
       // 这里暂时只传递ID，具体解锁逻辑在父组件处理
-      emit('select-note', { id: note.id, content: '[此笔记已加密，请解锁后查看]' });
+      emit('select-note', { id: note.id, content: t('noteList.encryptedPreview') });
       return;
     }
   }
@@ -606,7 +609,7 @@ async function selectNote(note: Note) {
     emit('select-note', { ...note, content });
   } else {
     // 处理获取内容失败的情况
-    emit('select-note', { ...note, content: '错误：无法加载笔记内容。' });
+    emit('select-note', { ...note, content: t('noteList.loadContentError') });
   }
 }
 
@@ -702,7 +705,7 @@ function openContextMenu(event: MouseEvent, note: Note) {
 // 删除笔记
 async function deleteContextNote() {
   if (!contextNote.value) {
-    console.error('错误：没有找到要删除的笔记上下文')
+    console.error('Error: No context note found for deletion')
     closeContextMenu()
     return
   }
@@ -717,7 +720,7 @@ async function deleteContextNote() {
 // 导出笔记
 function exportContextNote(format: string) {
   if (!contextNote.value) {
-    console.error('错误：没有找到要导出的笔记上下文')
+    console.error('Error: No context note found for export')
     closeContextMenu()
     return
   }
@@ -738,12 +741,12 @@ function exportContextNote(format: string) {
 
 function getPreviewContent(note: Note): string {
   if (note.is_encrypted) {
-    return '此笔记已加密，需要密码解锁'
+    return t('noteList.encryptedPreview')
   }
   
   // 对于未加密的笔记，我们现在没有内容，可以显示摘要或通用提示
   // 这里可以根据需要从后端获取摘要
-  return '点击查看内容'
+  return t('noteList.clickToView')
 }
 
 function formatDate(dateString: number): string {
@@ -751,20 +754,20 @@ function formatDate(dateString: number): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  const currentLocale = locale.value || 'zh-CN'
   
   if (diffDays === 0) {
     // 今天
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' })
   } else if (diffDays === 1) {
     // 昨天
-    return '昨天'
+    return t('noteList.yesterday')
   } else if (diffDays < 7) {
     // 本周
-    const days = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-    return days[date.getDay()]
+    return new Intl.DateTimeFormat(currentLocale, { weekday: 'long' }).format(date)
   } else {
     // 超过一周
-    return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+    return date.toLocaleDateString(currentLocale, { month: 'numeric', day: 'numeric' })
   }
 }
 

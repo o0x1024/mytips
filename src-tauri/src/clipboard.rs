@@ -53,12 +53,12 @@ impl Default for ClipboardSettings {
 impl ClipboardSettings {
     // 从JSON字符串加载设置
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        serde_json::from_str(json_str).map_err(|e| format!("解析剪贴板设置失败: {}", e))
+        serde_json::from_str(json_str).map_err(|e| format!("Failed to parse clipboard settings: {}", e))
     }
 
     // 将设置转换为JSON字符串
     pub fn to_json(&self) -> Result<String, String> {
-        serde_json::to_string(self).map_err(|e| format!("序列化剪贴板设置失败: {}", e))
+        serde_json::to_string(self).map_err(|e| format!("Failed to serialize clipboard settings: {}", e))
     }
 }
 
@@ -308,13 +308,11 @@ fn is_sensitive_content(content: &str) -> bool {
 
     // 检查是否是特定格式的敏感数据
     let contains_sensitive_pattern = content.contains("password")
-        || content.contains("密码")
+        || content.contains("secret")
         || content.contains("token")
         || content.contains("api key")
-        || content.contains("secret")
         || content.contains("private key")
-        || content.contains("credit card")
-        || content.contains("信用卡");
+        || content.contains("credit card");
 
     is_password_like || contains_sensitive_pattern
 }
@@ -340,7 +338,7 @@ pub async fn clean_expired_entries(app_handle: &AppHandle) {
 
                 // 删除过期条目
                 if let Err(e) = crate::db::operations::delete_expired_clipboard_entries(&conn, expire_timestamp).await {
-                    eprintln!("清理过期剪贴板条目失败: {}", e);
+                    eprintln!("Failed to clean expired clipboard entries: {}", e);
                 }
             }
         }
@@ -358,25 +356,25 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
             let db_manager = match app_handle.try_state::<UnifiedDbManager>() {
                 Some(manager) => manager,
                 None => {
-                    eprintln!("数据库管理器未初始化，剪贴板监听启动失败");
+                    eprintln!("Database manager not initialized, clipboard listener failed to start");
                     return;
                 }
             };
 
             // 验证数据库连接
             if let Err(e) = db_manager.get_conn().await {
-                error!("数据库连接失败，剪贴板监听启动失败: {}", e);
+                error!("Database connection failed, clipboard listener failed to start: {}", e);
                 return;
             }
 
-            debug!("剪贴板监听器启动成功");
+            debug!("Clipboard listener started successfully");
 
             // 初始化剪贴板
             let clipboard = app_handle.clipboard();
 
             // 获取初始剪贴板内容
             let mut last_text = clipboard.read_text().unwrap_or_default();
-            debug!("剪贴板监听已启动，初始内容长度: {} 字符", last_text.len());
+            debug!("Clipboard listener started, initial content length: {} characters", last_text.len());
 
             // 用于比较图片内容的哈希值
             let mut last_image_hash = String::new();
@@ -408,7 +406,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 
                 // 检查连续失败次数
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
-                    error!("剪贴板监听连续失败 {} 次，暂停 30 秒", consecutive_failures);
+                    error!("Clipboard listener failed {} consecutive times, pausing for 30 seconds", consecutive_failures);
                     thread::sleep(Duration::from_secs(30));
                     consecutive_failures = 0;
                     continue;
@@ -440,13 +438,13 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                 }
                                 Ok(None) => ClipboardSettings::default(),
                                 Err(e) => {
-                                    warn!("获取剪贴板设置失败: {}", e);
+                                    warn!("Failed to get clipboard settings: {}", e);
                                     ClipboardSettings::default()
                                 }
                             }
                         }
                         Err(e) => {
-                            error!("获取数据库连接失败: {}", e);
+                            error!("Failed to get database connection: {}", e);
                             consecutive_failures += 1;
                             continue;
                         }
@@ -463,7 +461,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 
                             // 检查此内容是否最近被处理过，防止重复添加
                             if has_recent_content(&current_text, &recent_contents) {
-                                info!("内容最近已处理过，跳过");
+                                info!("Content has been processed recently, skipping");
                                 continue;
                             }
 
@@ -484,7 +482,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                             };
 
                             if let Some(ref source_name) = source {
-                                info!("内容来源: {}", source_name);
+                                info!("Content source: {}", source_name);
                                 
                                 // 检查白名单应用
                                 if settings.enable_app_whitelist && !settings.whitelist_apps.is_empty() {
@@ -515,7 +513,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                     
                                     if should_ignore {
                                         if let Some(ref proc_name) = process_name {
-                                            debug!("进程名称: {}，在白名单中，跳过", proc_name);
+                                            debug!("Process name: {}, in whitelist, skipping", proc_name);
                                         }
                                         continue;
                                     }
@@ -529,31 +527,31 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                     let content_exists = match crate::db::operations::check_clipboard_entry_exists(&conn, &current_text).await {
                                         Ok(exists) => exists,
                                         Err(e) => {
-                                            warn!("检查剪贴板内容是否存在失败: {}", e);
+                                            warn!("Failed to check if clipboard content exists: {}", e);
                                             false // 如果检查失败，继续尝试添加
                                         }
                                     };
 
                                     if content_exists {
-                                        debug!("相同内容已存在于数据库，跳过添加");
+                                        debug!("Same content already exists in the database, skipping");
                                         continue;
                                     }
 
                                     // 添加到数据库
                                     match crate::db::operations::add_clipboard_entry(&conn, &current_text, source.as_deref()).await {
                                         Ok(_) => {
-                                            debug!("剪贴板文本内容已添加到临时笔记区");
+                                            debug!("Clipboard text content has been added to the temporary notes area");
                                             has_new_content = true;
                                             consecutive_failures = 0; // 重置失败计数
                                         }
                                         Err(e) => {
-                                            error!("添加剪贴板内容到数据库失败: {}", e);
+                                            error!("Failed to add clipboard content to the database: {}", e);
                                             consecutive_failures += 1;
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    error!("获取数据库连接失败: {}", e);
+                                    error!("Failed to get database connection: {}", e);
                                     consecutive_failures += 1;
                                     continue;
                                 }
@@ -566,7 +564,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                         // "format" 对应 "not available in the requested format"
                         // "empty" 对应 "clipboard is empty"
                         if !error_message.contains("format") && !error_message.contains("empty") {
-                            warn!("读取剪贴板文本失败: {}", error_message);
+                            warn!("Failed to read clipboard text: {}", error_message);
                             consecutive_failures += 1;
                         }
                     }
@@ -596,7 +594,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 
                                 // 检查此图片内容是否最近被处理过，防止重复添加
                                 if has_recent_content(&img_text, &recent_contents) {
-                                    debug!("图片内容最近已处理过，跳过");
+                                    debug!("Image content has been processed recently, skipping");
                                     continue;
                                 }
 
@@ -611,7 +609,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                 };
 
                                 if let Some(ref source_name) = source {
-                                    debug!("内容来源: {}", source_name);
+                                    debug!("Content source: {}", source_name);
                                     
                                     // 检查白名单应用
                                     if settings.enable_app_whitelist && !settings.whitelist_apps.is_empty() {
@@ -642,7 +640,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                         
                                         if should_ignore {
                                             if let Some(ref proc_name) = process_name {
-                                                debug!("进程名称: {}，在白名单中，跳过", proc_name);
+                                                debug!("Process name: {}, in whitelist, skipping", proc_name);
                                             }
                                             continue;
                                         }
@@ -656,30 +654,30 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                                         let content_exists = match crate::db::operations::check_clipboard_entry_exists(&conn, &img_text).await {
                                             Ok(exists) => exists,
                                             Err(e) => {
-                                                warn!("检查剪贴板图片内容是否存在失败: {}", e);
+                                                warn!("Failed to check if clipboard image content exists: {}", e);
                                                 false // 如果检查失败，继续尝试添加
                                             }
                                         };
 
                                         if content_exists {
-                                            debug!("相同图片内容已存在于数据库，跳过添加");
+                                            debug!("Same image content already exists in the database, skipping");
                                             continue;
                                         }
 
                                         match crate::db::operations::add_clipboard_entry(&conn, &img_text, source.as_deref()).await {
                                             Ok(_) => {
-                                                debug!("剪贴板图片内容已添加到临时笔记区");
+                                                debug!("Clipboard image content has been added to the temporary notes area");
                                                 has_new_content = true;
                                                 consecutive_failures = 0; // 重置失败计数
                                             }
                                             Err(e) => {
-                                                error!("添加剪贴板图片内容到数据库失败: {}", e);
+                                                error!("Failed to add clipboard image content to the database: {}", e);
                                                 consecutive_failures += 1;
                                             }
                                         }
                                     }
                                     Err(e) => {
-                                        error!("获取数据库连接失败: {}", e);
+                                        error!("Failed to get database connection: {}", e);
                                         consecutive_failures += 1;
                                     }
                                 }
@@ -688,7 +686,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                         Err(e) => {
                             // 通常是剪贴板没有图片，这是正常情况。
                             // 记录到debug日志以备调试。
-                            debug!("无法读取剪贴板图片 (这通常是正常的，因为剪贴板内容可能不是图片): {}", e);
+                            debug!("Could not read clipboard image (this is usually normal as clipboard content may not be an image): {}", e);
                         }
                     }
                 }
@@ -697,7 +695,7 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
                 if has_new_content {
                     // 通知前端更新
                     if let Err(e) = app_handle.emit("new-clipboard-entry", ()) {
-                        error!("发送new-clipboard-entry事件失败: {}", e);
+                        error!("Failed to send new-clipboard-entry event: {}", e);
                     }
                 }
             }
@@ -709,12 +707,12 @@ pub fn start_clipboard_listener(app_handle: AppHandle) {
 #[tauri::command]
 pub fn start_clipboard_monitoring() -> Result<String, String> {
     MONITORING_ENABLED.store(true, Ordering::SeqCst);
-    Ok("剪贴板监听已启动".to_string())
+    Ok("Clipboard monitoring started".to_string())
 }
 
 /// 停止剪贴板监听
 #[tauri::command]
 pub fn stop_clipboard_monitoring() -> Result<String, String> {
     MONITORING_ENABLED.store(false, Ordering::SeqCst);
-    Ok("剪贴板监听已停止".to_string())
+    Ok("Clipboard monitoring stopped".to_string())
 }

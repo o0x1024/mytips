@@ -1,16 +1,16 @@
 <template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-primary mb-4">应用设置</h2>
+      <h2 class="card-title text-primary mb-4">{{ $t('appSettings.title') }}</h2>
 
       <div class="form-control">
         <label class="label cursor-pointer justify-start gap-4">
-          <span class="label-text">开机自动启动</span>
+          <span class="label-text">{{ $t('appSettings.autoStart') }}</span>
           <input type="checkbox" class="toggle toggle-primary" v-model="autoStartEnabled"
             @change="toggleAutoStart" />
         </label>
         <p class="text-xs text-base-content/80 mt-1">
-          启用后，系统启动时将自动运行 MyTips
+          {{ $t('appSettings.autoStartDescription') }}
         </p>
       </div>
     </div>
@@ -40,7 +40,7 @@ onMounted(async () => {
     const enabled = await isEnabled()
     autoStartEnabled.value = enabled
   } catch (error) {
-    console.error('检查自动启动状态失败:', error)
+    console.error('Failed to check auto-start status:', error)
   }
 })
 </script> 

@@ -1,10 +1,12 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
 import './assets/main.css'
 import { useUIStore, applyThemeEarly } from './stores/uiStore'
 import { initializeApp } from './services/appInitializer'
+import i18n from './i18n'
 
 // 在应用初始化前尽早应用主题设置
 applyThemeEarly()
@@ -52,11 +54,13 @@ const router = createRouter({
 
 // 创建Pinia状态管理
 const pinia = createPinia()
+pinia.use(piniaPluginPersistedstate)
 
 // 创建并挂载应用
 const app = createApp(App)
 app.use(pinia)
 app.use(router)
+app.use(i18n)
 
 // 初始化应用
 async function startApp() {

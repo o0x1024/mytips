@@ -6,12 +6,10 @@ pub mod service;
 use crate::db::{self, UnifiedDbManager};
 use anyhow::Result;
 use base64::{engine::general_purpose, Engine as _};
-use conversations::{Conversation, Message};
 use futures_util::StreamExt;
-use models::{
-    send_message_to_ai, stream_message_from_ai, stream_message_with_images_from_ai, CustomModel,
+use models::{stream_message_with_images_from_ai, CustomModel,
 };
-use roles::{create_ai_role, get_ai_role};
+use roles::{get_ai_role};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{atomic::{AtomicBool, Ordering}, Arc};

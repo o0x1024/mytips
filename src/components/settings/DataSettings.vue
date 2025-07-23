@@ -3,7 +3,7 @@
     <!-- 初始化加载状态 -->
     <div v-if="isInitializing" class="flex justify-center items-center py-12">
       <span class="loading loading-spinner loading-lg"></span>
-      <span class="ml-3 text-base-content/70">正在加载设置...</span>
+      <span class="ml-3 text-base-content/70">{{ $t('dataSettings.loading') }}</span>
     </div>
     
     <template v-else>
@@ -14,13 +14,13 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
             </svg>
-            数据库配置
+            {{ $t('dataSettings.databaseConfig') }}
           </h2>
 
           <!-- 数据库模式选择 -->
           <div class="form-control mb-6">
             <label class="label">
-              <span class="label-text font-medium">数据库模式</span>
+              <span class="label-text font-medium">{{ $t('dataSettings.databaseMode') }}</span>
               <span v-if="isLoadingStatus" class="loading loading-spinner loading-sm"></span>
             </label>
             
@@ -30,21 +30,21 @@
                 <span class="text-lg">📊</span>
                 <div>
                   <div class="font-semibold">
-                    当前模式: {{ availableModes.find(m => m.value === currentDatabaseMode)?.label || currentDatabaseMode }}
+                    {{ $t('dataSettings.currentMode') }}: {{ $t(`dataSettings.modes.${currentDatabaseMode}.label`) }}
                   </div>
                   <div class="text-sm opacity-70">
-                    {{ availableModes.find(m => m.value === currentDatabaseMode)?.description }}
+                    {{ $t(`dataSettings.modes.${currentDatabaseMode}.description`) }}
                   </div>
                 </div>
               </div>
               <div class="flex gap-2 ml-auto">
                 <div class="badge" :class="databaseStatus.is_connected ? 'badge-success' : 'badge-error'">
-                  {{ databaseStatus.is_connected ? '已连接' : '未连接' }}
+                  {{ databaseStatus.is_connected ? $t('dataSettings.connected') : $t('dataSettings.disconnected') }}
                 </div>
                 <div v-if="databaseStore.supportsSync" 
                      class="badge" 
                      :class="databaseStatus?.sync_status?.is_online ? 'badge-primary' : 'badge-warning'">
-                  {{ databaseStatus?.sync_status?.is_online ? '同步可用' : '同步离线' }}
+                  {{ databaseStatus?.sync_status?.is_online ? $t('dataSettings.syncAvailable') : $t('dataSettings.syncOffline') }}
                 </div>
               </div>
             </div>
@@ -59,10 +59,10 @@
                 <div class="card-body p-4">
                   <div class="flex items-center gap-3">
                     <div class="flex-1">
-                      <h3 class="font-semibold">{{ mode.label }}</h3>
-                      <p class="text-sm opacity-70">{{ mode.description }}</p>
+                      <h3 class="font-semibold">{{ $t(`dataSettings.modes.${mode.value}.label`) }}</h3>
+                      <p class="text-sm opacity-70">{{ $t(`dataSettings.modes.${mode.value}.description`) }}</p>
                     </div>
-                    <div v-if="currentDatabaseMode === mode.value" class="badge badge-primary">当前</div>
+                    <div v-if="currentDatabaseMode === mode.value" class="badge badge-primary">{{ $t('dataSettings.currentMode') }}</div>
                   </div>
                 </div>
               </div>
@@ -76,7 +76,7 @@
                 @click="switchToEmbeddedReplicaMode"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                切换到嵌入式副本模式（推荐）
+                {{ $t('dataSettings.actions.switchToEmbedded') }}
               </button>
               
               <button 
@@ -85,7 +85,7 @@
                 @click="performDatabaseSync"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                立即同步
+                {{ $t('dataSettings.actions.syncNow') }}
               </button>
               
               <button 
@@ -93,7 +93,7 @@
                 @click="testCurrentDatabaseConnection"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                测试连接
+                {{ $t('dataSettings.actions.testConnection') }}
               </button>
               
               <button 
@@ -102,7 +102,7 @@
                 @click="optimizeDatabaseWAL"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                优化WAL文件
+                {{ $t('dataSettings.actions.optimizeWAL') }}
               </button>
               
               <button 
@@ -111,7 +111,7 @@
                 @click="cleanupLocalDatabaseFiles"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
-                清理数据库文件
+                {{ $t('dataSettings.actions.cleanupFiles') }}
               </button>
             </div>
           </div>
@@ -120,33 +120,33 @@
           <div class="space-y-4">
             <div class="form-control">
               <label class="label">
-                <span class="label-text">远程数据库URL</span>
+                <span class="label-text">{{ $t('dataSettings.remoteConfig.url') }}</span>
               </label>
               <input 
                 type="text" 
                 v-model="syncConfig.remote_url" 
-                placeholder="libsql://your-database.turso.io"
+                :placeholder="$t('dataSettings.remoteConfig.urlPlaceholder')"
                 class="input input-bordered"
                 :disabled="isOperationInProgress"
                 v-if="syncConfig"
               />
               <label class="label">
-                <span class="label-text-alt">远程Turso数据库的连接URL</span>
+                <span class="label-text-alt">{{ $t('dataSettings.remoteConfig.urlHelp') }}</span>
               </label>
             </div>
 
             <div class="form-control">
               <label class="label">
-                <span class="label-text">认证令牌</span>
+                <span class="label-text">{{ $t('dataSettings.remoteConfig.token') }}</span>
                 <span v-if="isLocalDevUrl" class="label-text-alt text-info">
-                  (本地环境可选)
+                  {{ $t('dataSettings.remoteConfig.tokenOptional') }}
                 </span>
               </label>
               <div class="join">
                 <input 
                   :type="showSyncToken ? 'text' : 'password'"
                   v-model="syncConfig.auth_token" 
-                  :placeholder="isLocalDevUrl ? '本地开发环境可以为空' : '输入认证令牌'"
+                  :placeholder="isLocalDevUrl ? $t('dataSettings.remoteConfig.tokenPlaceholderLocal') : $t('dataSettings.remoteConfig.tokenPlaceholder')"
                   class="input input-bordered join-item flex-1"
                   :disabled="isOperationInProgress"
                   v-if="syncConfig"
@@ -174,7 +174,7 @@
                 :disabled="!canTestSync || isTestingSync"
               >
                 <span v-if="isTestingSync" class="loading loading-spinner loading-sm mr-2"></span>
-                {{ isTestingSync ? '测试中...' : '测试并保存配置' }}
+                {{ isTestingSync ? $t('dataSettings.remoteConfig.testing') : $t('dataSettings.remoteConfig.testAndSave') }}
               </button>
             </div>
           </div>
@@ -184,23 +184,23 @@
             <!-- 基本信息统计 -->
             <div class="stats shadow bg-base-200">
               <div class="stat">
-                <div class="stat-title">数据库大小</div>
+                <div class="stat-title">{{ $t('dataSettings.databaseInfo.size') }}</div>
                 <div class="stat-value text-sm">{{ databaseInfo.size }}</div>
                 <div v-if="databaseInfo.mode_description" class="stat-desc">{{ databaseInfo.mode_description }}</div>
               </div>
               <div class="stat">
-                <div class="stat-title">笔记数量</div>
+                <div class="stat-title">{{ $t('dataSettings.databaseInfo.noteCount') }}</div>
                 <div class="stat-value text-sm">{{ databaseInfo.noteCount }}</div>
               </div>
               <div class="stat">
-                <div class="stat-title">分类数量</div>
+                <div class="stat-title">{{ $t('dataSettings.databaseInfo.categoryCount') }}</div>
                 <div class="stat-value text-sm">{{ databaseInfo.categoryCount }}</div>
               </div>
               <div v-if="databaseInfo.isRemote" class="stat">
-                <div class="stat-title">在线状态</div>
+                <div class="stat-title">{{ $t('dataSettings.databaseInfo.onlineStatus') }}</div>
                 <div class="stat-value text-sm">
                   <div class="badge" :class="databaseInfo.isOnline ? 'badge-success' : 'badge-error'">
-                    {{ databaseInfo.isOnline ? '在线' : '离线' }}
+                    {{ databaseInfo.isOnline ? $t('dataSettings.databaseInfo.online') : $t('dataSettings.databaseInfo.offline') }}
                   </div>
                 </div>
               </div>
@@ -216,18 +216,18 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                           d="M8 5a2 2 0 012-2h2a2 2 0 012 2v0H8v0z" />
                   </svg>
-                  数据库路径
+                  {{ $t('dataSettings.databaseInfo.path') }}
                 </div>
                 <div class="bg-base-100 rounded-lg border p-3 space-y-2">
                   <div class="text-xs font-mono break-all leading-relaxed select-all 
                               bg-base-200 p-2 rounded border-l-4 border-primary
                               hover:bg-base-300 transition-colors cursor-text
                               min-h-[2.5rem] flex items-center"
-                       :title="'点击选择全部 • ' + databaseInfo.database_path">
+                       :title="`${t('dataSettings.databaseInfo.copyPath')} • ${databaseInfo.database_path}`">
                     {{ databaseInfo.database_path }}
                   </div>
                   <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center text-xs opacity-70 gap-1">
-                    <span>最后修改: {{ databaseInfo.lastModified }}</span>
+                    <span>{{ $t('dataSettings.databaseInfo.lastModified') }}: {{ databaseInfo.lastModified }}</span>
                     <span class="text-primary font-medium">{{ databaseInfo.size }}</span>
                   </div>
                 </div>
@@ -236,7 +236,7 @@
                 <button 
                   class="btn btn-ghost btn-xs tooltip tooltip-left"
                   @click="copyDatabasePath"
-                  data-tip="复制路径"
+                  :data-tip="$t('dataSettings.databaseInfo.copyPath')"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -256,7 +256,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
-            数据备份与恢复
+            {{ $t('dataSettings.backupAndRestore.title') }}
           </h2>
 
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -269,7 +269,7 @@
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </svg>
-              {{ isOperationInProgress ? '备份中...' : '本地备份' }}
+              {{ isOperationInProgress ? $t('dataSettings.backupAndRestore.backingUp') : $t('dataSettings.backupAndRestore.localBackup') }}
             </button>
             
             <button 
@@ -281,7 +281,7 @@
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 17l4 4 4-4m-4-5v9m-8-6h16" />
               </svg>
-              {{ isOperationInProgress ? '恢复中...' : '本地恢复' }}
+              {{ isOperationInProgress ? $t('dataSettings.backupAndRestore.restoring') : $t('dataSettings.backupAndRestore.localRestore') }}
             </button>
             
             <button 
@@ -293,7 +293,7 @@
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
               </svg>
-              {{ isOperationInProgress ? '导出中...' : '导出Markdown' }}
+              {{ isOperationInProgress ? $t('dataSettings.backupAndRestore.exporting') : $t('dataSettings.backupAndRestore.exportMarkdown') }}
             </button>
             
             <button 
@@ -305,7 +305,7 @@
               <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
               </svg>
-              {{ isOperationInProgress ? '迁移中...' : '迁移配置' }}
+              {{ isOperationInProgress ? $t('dataSettings.backupAndRestore.migrating') : $t('dataSettings.backupAndRestore.migrateConfig') }}
             </button>
           </div>
         </div>
@@ -322,6 +322,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { showMessage, showConfirm } from '../../services/dialog'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
@@ -329,6 +330,8 @@ import SyncHistoryDialog from '../dialogs/SyncHistoryDialog.vue'
 import { useDatabaseStore } from '../../stores/databaseStore'
 import { DatabaseService } from '../../services/databaseService'
 import type { LegacySyncConfig } from '../../types/database'
+
+const { t } = useI18n()
 
 // 使用数据库store
 const databaseStore = useDatabaseStore()
@@ -424,7 +427,7 @@ async function loadDatabaseStatus() {
     console.log('Database status loaded:', status)
   } catch (error) {
     console.error('Failed to load database status:', error)
-    showMessage('加载数据库状态失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.switchFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isLoadingStatus.value = false
   }
@@ -438,16 +441,16 @@ async function switchDatabaseMode(mode: string, params?: any) {
   
   const modeOption = availableModes.value.find(m => m.value === mode)
   if (!modeOption) {
-    showMessage('不支持的数据库模式', { title: '错误' })
+    showMessage(t('dataSettings.prompts.unsupportedMode'), { title: t('common.error') })
     return
   }
   
   const confirmed = await showConfirm(
-    `确定要切换到${modeOption.label}吗？\n\n${modeOption.description}`,
+    t('dataSettings.prompts.switchToModeDesc', { description: t(`dataSettings.modes.${mode}.description`) }),
     {
-      title: '切换数据库模式',
-      confirmText: '切换',
-      cancelText: '取消'
+      title: t('dataSettings.prompts.switchToMode', { modeLabel: t(`dataSettings.modes.${mode}.label`) }),
+      confirmText: t('dataSettings.prompts.switchTo'),
+      cancelText: t('dataSettings.prompts.cancel')
     }
   )
   
@@ -456,11 +459,11 @@ async function switchDatabaseMode(mode: string, params?: any) {
   isOperationInProgress.value = true
   try {
     const result = await databaseStore.switchMode(mode, params || syncConfig.value)
-    showMessage(`${result}\n\n笔记本和笔记数据已自动刷新。`, { title: '切换成功' })
+    showMessage(t('dataSettings.prompts.switchSuccess', { result }), { title: t('common.success') })
     await loadDatabaseStatus()
   } catch (error) {
     console.error('Failed to switch database mode:', error)
-    showMessage('切换数据库模式失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.switchFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -473,25 +476,7 @@ async function switchToEmbeddedReplicaMode() {
   
   // 检查是否有远程配置信息
   if (!hasRemoteConfig.value) {
-    const url = syncConfig.value?.remote_url?.trim() || ''
-    
-    let message = '请先配置远程数据库信息：\n\n1. 输入远程数据库URL'
-    
-    if (url === '') {
-      message += ' (例如: libsql://your-db.turso.io 或 http://127.0.0.1:8888)'
-    }
-    
-    if (!isLocalDevUrl.value) {
-      message += '\n2. 输入认证令牌'
-      message += '\n3. 点击"测试并保存配置"'
-      message += '\n4. 再尝试切换到嵌入式副本模式'
-    } else {
-      message += '\n2. 对于本地开发环境，认证令牌可以为空'
-      message += '\n3. 点击"测试并保存配置"（可选）'
-      message += '\n4. 再尝试切换到嵌入式副本模式'
-    }
-    
-    showMessage(message, { title: '需要先配置远程数据库' })
+    showMessage(t('dataSettings.prompts.needRemoteConfigDesc'), { title: t('dataSettings.prompts.needRemoteConfigTitle') })
     return
   }
   
@@ -513,11 +498,11 @@ async function switchToEmbeddedReplicaMode() {
     const errorMessage = String(error)
     if (errorMessage.includes('wal_index') || errorMessage.includes('WAL') || errorMessage.includes('schema verification failure')) {
       const shouldCleanup = await showConfirm(
-        '切换失败，可能由于数据库文件状态不一致导致。\n\n是否要自动清理数据库文件后重试？\n\n清理操作是安全的，通常能解决此类问题。',
+        t('dataSettings.prompts.switchFailedWAL'),
         {
-          title: '数据库切换失败',
-          confirmText: '清理并重试',
-          cancelText: '取消'
+          title: t('dataSettings.prompts.walCleanupFailedTitle'),
+          confirmText: t('dataSettings.prompts.walCleanupRetry'),
+          cancelText: t('dataSettings.prompts.cancel')
         }
       )
       
@@ -535,13 +520,13 @@ async function switchToEmbeddedReplicaMode() {
           await switchDatabaseMode('embedded_replica', embeddedReplicaParams)
         } catch (retryError) {
           console.error('Retry after cleanup failed:', retryError)
-          showMessage('重试失败: ' + retryError, { title: '错误' })
+          showMessage(`${t('dataSettings.prompts.walCleanupFailedMessage')}: ${retryError}`, { title: t('common.error') })
         } finally {
           isOperationInProgress.value = false
         }
       }
     } else {
-      showMessage('切换数据库模式失败: ' + error, { title: '错误' })
+      showMessage(`${t('dataSettings.prompts.switchFailed')}: ${error}`, { title: t('common.error') })
     }
   }
 }
@@ -553,18 +538,18 @@ async function performDatabaseSync() {
   if (isOperationInProgress.value) return
   
   if (!databaseStore.supportsSync) {
-    showMessage('当前数据库模式不支持同步', { title: '提示' })
+    showMessage(t('dataSettings.prompts.syncNotSupported'), { title: t('common.tip') })
     return
   }
   
   isOperationInProgress.value = true
   try {
     const result = await databaseStore.sync()
-    showMessage(`${result}\n\n笔记本和笔记数据已自动刷新。`, { title: '同步成功' })
+    showMessage(t('dataSettings.prompts.syncSuccess', { result }), { title: t('common.success') })
     await loadDatabaseStatus()
   } catch (error) {
     console.error('Database sync failed:', error)
-    showMessage('数据库同步失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.syncFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -580,13 +565,13 @@ async function testCurrentDatabaseConnection() {
   try {
     const connected = await databaseStore.testConnection()
     if (connected) {
-      showMessage('数据库连接正常', { title: '连接测试' })
+      showMessage(t('dataSettings.prompts.connectionTestSuccess'), { title: t('dataSettings.actions.testConnection') })
     } else {
-      showMessage('数据库连接失败', { title: '连接测试' })
+      showMessage(t('dataSettings.prompts.connectionTestFailed'), { title: t('dataSettings.actions.testConnection') })
     }
   } catch (error) {
     console.error('Connection test failed:', error)
-    showMessage('连接测试失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.actions.testConnection')} ${t('common.failed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -599,11 +584,11 @@ async function cleanupLocalDatabaseFiles() {
   if (isOperationInProgress.value) return
   
   const confirmed = await showConfirm(
-    '确定要清理本地数据库文件吗？\n\n这将删除WAL和SHM等临时文件，可以解决数据库切换时的WAL索引错误。\n\n操作是安全的，不会删除主数据库文件中的数据。',
+    t('dataSettings.prompts.cleanupConfirmMessage'),
     {
-      title: '清理数据库文件',
-      confirmText: '清理',
-      cancelText: '取消'
+      title: t('dataSettings.prompts.cleanupConfirmTitle'),
+      confirmText: t('dataSettings.prompts.cleanup'),
+      cancelText: t('dataSettings.prompts.cancel')
     }
   )
   
@@ -612,10 +597,10 @@ async function cleanupLocalDatabaseFiles() {
   isOperationInProgress.value = true
   try {
     const result = await DatabaseService.cleanupLocalDatabaseFiles()
-    showMessage(result, { title: '清理完成' })
+    showMessage(result, { title: t('dataSettings.prompts.cleanupComplete') })
   } catch (error) {
     console.error('Cleanup failed:', error)
-    showMessage('清理失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.cleanupFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -628,11 +613,11 @@ async function optimizeDatabaseWAL() {
   if (isOperationInProgress.value) return
   
   const confirmed = await showConfirm(
-    '确定要优化WAL文件吗？\n\n优化WAL文件可以提高数据库性能，但需要较长时间。\n\n操作是安全的，不会删除主数据库文件中的数据。',
+    t('dataSettings.prompts.optimizeWALConfirmMessage'),
     {
-      title: '优化WAL文件',
-      confirmText: '优化',
-      cancelText: '取消'
+      title: t('dataSettings.prompts.optimizeWALConfirmTitle'),
+      confirmText: t('dataSettings.prompts.optimize'),
+      cancelText: t('dataSettings.prompts.cancel')
     }
   )
   
@@ -641,10 +626,10 @@ async function optimizeDatabaseWAL() {
   isOperationInProgress.value = true
   try {
          const result = await DatabaseService.optimizeDatabaseWAL()
-    showMessage(result, { title: '优化完成' })
+    showMessage(result, { title: t('dataSettings.prompts.optimizeComplete') })
   } catch (error) {
     console.error('WAL optimization failed:', error)
-    showMessage('WAL优化失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.optimizeFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -668,16 +653,16 @@ async function testAndSaveRemoteConfig() {
     if (result) {
       // 保存配置
       await invoke('save_sync_config', { config: syncConfig.value })
-      showMessage('远程数据库连接测试成功，配置已保存！', { title: '测试成功' })
+      showMessage(t('dataSettings.prompts.testSuccess'), { title: t('common.success') })
       
       // 刷新状态
       await loadDatabaseStatus()
     } else {
-      showMessage('远程数据库连接测试失败，请检查URL和令牌！', { title: '测试失败' })
+      showMessage(t('dataSettings.prompts.testFailed'), { title: t('common.failed') })
     }
   } catch (error) {
     console.error('Test connection failed:', error)
-    showMessage('测试连接失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.actions.testConnection')} ${t('common.failed')}: ${error}`, { title: t('common.error') })
   } finally {
     isTestingSync.value = false
   }
@@ -727,15 +712,15 @@ async function loadSyncConfig() {
  */
 async function copyDatabasePath() {
   if (!databaseInfo.value?.database_path) {
-    showMessage('数据库路径为空', { title: '提示' })
+    showMessage(t('common.tip.emptyPath'), { title: t('common.tip.title') })
     return
   }
   try {
     await invoke('copy_to_clipboard', { text: databaseInfo.value.database_path })
-    showMessage('数据库路径已复制到剪贴板！', { title: '复制成功' })
+    showMessage(t('dataSettings.prompts.copySuccess'), { title: t('common.success') })
   } catch (error) {
     console.error('Failed to copy database path:', error)
-    showMessage('复制数据库路径失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.copyFailed')}: ${error}`, { title: t('common.error') })
   }
 }
 
@@ -747,10 +732,10 @@ async function backupDatabase() {
   isOperationInProgress.value = true
   try {
     const result = await invoke('backup_database') as string
-    showMessage(result, { title: '备份成功' })
+    showMessage(result, { title: t('dataSettings.prompts.backupSuccess') })
   } catch (error) {
     console.error('Backup failed:', error)
-    showMessage('备份失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.backupFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -758,8 +743,8 @@ async function backupDatabase() {
 
 async function restoreDatabase() {
   const confirmed = await showConfirm(
-    '恢复数据库将覆盖当前所有数据，此操作不可撤销！确定要继续吗？',
-    { title: '确认恢复', confirmText: '确认恢复', cancelText: '取消' }
+    t('dataSettings.prompts.restoreConfirmMessage'),
+    { title: t('dataSettings.prompts.restoreConfirmTitle'), confirmText: t('dataSettings.prompts.confirmRestore'), cancelText: t('dataSettings.prompts.cancel') }
   )
   
   if (!confirmed) return
@@ -767,11 +752,11 @@ async function restoreDatabase() {
   isOperationInProgress.value = true
   try {
     const result = await invoke('restore_database') as string
-    showMessage(result, { title: '恢复成功' })
+    showMessage(result, { title: t('dataSettings.prompts.restoreSuccess') })
     await loadDatabaseStatus()
   } catch (error) {
     console.error('Restore failed:', error)
-    showMessage('恢复失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.restoreFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -781,10 +766,10 @@ async function exportAsMarkdown() {
   isOperationInProgress.value = true
   try {
     const result = await invoke('export_as_markdown') as string
-    showMessage(result, { title: '导出成功' })
+    showMessage(result, { title: t('dataSettings.prompts.exportSuccess') })
   } catch (error) {
     console.error('Export failed:', error)
-    showMessage('导出失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.exportFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }
@@ -794,10 +779,10 @@ async function migrateConfigToDatabase() {
   isOperationInProgress.value = true
   try {
     const result = await invoke('migrate_config_to_database') as string
-    showMessage(result, { title: '迁移成功' })
+    showMessage(result, { title: t('dataSettings.prompts.migrateSuccess') })
   } catch (error) {
     console.error('Migration failed:', error)
-    showMessage('迁移失败: ' + error, { title: '错误' })
+    showMessage(`${t('dataSettings.prompts.migrateFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isOperationInProgress.value = false
   }

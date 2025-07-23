@@ -12,7 +12,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
           </svg>
-          音频录制
+          {{ t('audioRecorder.title') }}
         </h3>
         <button @click="closePanel" class="btn btn-ghost btn-sm btn-square">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -29,10 +29,10 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
-            <span>麦克风状态:</span>
+            <span>{{ t('audioRecorder.micStatus') }}</span>
             <button @click="initializeAudioEnvironment" 
                     class="btn btn-ghost btn-xs" 
-                    title="刷新状态检查"
+                    :title="t('audioRecorder.refreshStatus')"
                     :disabled="deviceState === 'checking'">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                    :class="{ 'animate-spin': deviceState === 'checking' }">
@@ -50,8 +50,8 @@
                      'bg-warning animate-pulse': deviceState === 'checking'
                    }"></div>
               <span class="text-xs">{{ 
-                deviceState === 'available' ? '设备可用' : 
-                deviceState === 'unavailable' ? '无设备' : '检查中...'
+                deviceState === 'available' ? t('audioRecorder.deviceState.available') : 
+                deviceState === 'unavailable' ? t('audioRecorder.deviceState.unavailable') : t('audioRecorder.deviceState.checking')
               }}</span>
             </div>
             <!-- 权限状态 -->
@@ -64,9 +64,9 @@
                      'bg-gray-400': permissionState === 'unknown'
                    }"></div>
               <span class="text-xs">{{ 
-                permissionState === 'granted' ? '已授权' : 
-                permissionState === 'denied' ? '权限被拒' : 
-                permissionState === 'prompt' ? '待授权' : '未知状态'
+                permissionState === 'granted' ? t('audioRecorder.permissionState.granted') : 
+                permissionState === 'denied' ? t('audioRecorder.permissionState.denied') : 
+                permissionState === 'prompt' ? t('audioRecorder.permissionState.prompt') : t('audioRecorder.permissionState.unknown')
               }}</span>
             </div>
           </div>
@@ -77,10 +77,9 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
-            <span>麦克风权限被拒绝</span>
+            <span>{{ t('audioRecorder.permissionDenied.title') }}</span>
           </div>
-          <div class="pl-4 text-xs text-base-content/60">
-            请点击地址栏左侧的🔒图标，允许此网站访问麦克风，然后刷新状态
+          <div class="pl-4 text-xs text-base-content/60" v-html="t('audioRecorder.permissionDenied.description')">
           </div>
         </div>
         <div v-else-if="deviceState === 'unavailable'" class="mt-2 text-xs text-warning">
@@ -88,13 +87,9 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 15.5c-.77.833.192 2.5 1.732 2.5z" />
             </svg>
-            <span>麦克风设备检测</span>
+            <span>{{ t('audioRecorder.deviceUnavailable.title') }}</span>
           </div>
-          <div class="pl-4 text-xs text-base-content/60 mb-2">
-            无法检测到麦克风设备。请确保：<br/>
-            • 麦克风已连接并正常工作<br/>
-            • 其他应用没有占用麦克风<br/>
-            • 尝试点击下方"测试麦克风"按钮
+          <div class="pl-4 text-xs text-base-content/60 mb-2" v-html="t('audioRecorder.deviceUnavailable.description')">
           </div>
                      <button @click="testMicrophone" 
                    :disabled="isLoading"
@@ -103,7 +98,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                 d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
             </svg>
-            测试麦克风
+            {{ t('audioRecorder.testMicrophone') }}
           </button>
         </div>
         <div v-else-if="permissionState === 'prompt'" class="mt-2 text-xs text-info">
@@ -111,10 +106,9 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>需要授权麦克风权限</span>
+            <span>{{ t('audioRecorder.permissionPrompt.title') }}</span>
           </div>
-          <div class="pl-4 text-xs text-base-content/60">
-            点击录制按钮时会请求麦克风权限，请允许访问
+          <div class="pl-4 text-xs text-base-content/60" v-html="t('audioRecorder.permissionPrompt.description')">
           </div>
         </div>
       </div>
@@ -122,7 +116,7 @@
       <!-- 录制状态显示 -->
       <div class="mb-4">
         <div class="flex items-center justify-between text-sm text-base-content/70 mb-2">
-          <span>状态: {{ recordingStatusText }}</span>
+          <span>{{ t('audioRecorder.recordingStatus', { status: recordingStatusText }) }}</span>
           <span v-if="isRecording || isPaused">{{ formatTime(recordingTime) }}</span>
         </div>
         
@@ -149,13 +143,13 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2M7 4h10M7 4l-2 16h14L17 4M11 9v4m4-4v4" />
           </svg>
-          实时转录
+          {{ t('audioRecorder.realtimeTranscription') }}
           <span v-if="isTranscribing" class="loading loading-spinner loading-xs"></span>
         </div>
         <div class="p-3 bg-base-200 rounded text-sm max-h-24 overflow-y-auto border"
              :class="{ 'opacity-50': !realtimeTranscriptionText.trim() }">
           <span v-if="realtimeTranscriptionText.trim()">{{ realtimeTranscriptionText }}</span>
-          <span v-else class="text-base-content/50 italic">开始说话，转录文本将在这里显示...</span>
+          <span v-else class="text-base-content/50 italic">{{ t('audioRecorder.transcriptionPlaceholder') }}</span>
           <span v-if="isTranscribing" class="inline-block w-2 h-4 bg-primary animate-pulse ml-1"></span>
         </div>
       </div>
@@ -171,7 +165,7 @@
                   'btn-disabled': deviceState !== 'available' || permissionState === 'denied',
                   'tooltip': deviceState !== 'available' || permissionState === 'denied' 
                 }"
-                :data-tip="deviceState !== 'available' ? '麦克风设备不可用' : permissionState === 'denied' ? '麦克风权限被拒绝' : ''">
+                :data-tip="deviceState !== 'available' ? t('audioRecorder.micUnavailable') : permissionState === 'denied' ? t('audioRecorder.micPermissionDenied') : ''">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -210,7 +204,7 @@
         <button v-if="hasRecordedAudio && !isRecording && !isPaused" 
                 @click="resetRecording"
                 class="btn btn-ghost btn-circle"
-                title="重新录制">
+                :title="t('audioRecorder.recordAgain')">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -246,39 +240,39 @@
         <div class="space-y-2">
           <div class="flex items-center gap-2">
             <input type="checkbox" v-model="enableTranscription" class="checkbox checkbox-primary checkbox-sm" />
-            <label class="text-sm">启用语音转文字</label>
+            <label class="text-sm">{{ t('audioRecorder.enableTranscription') }}</label>
           </div>
           
           <div v-if="enableTranscription" class="space-y-2">
             <div>
-              <label class="block text-xs text-base-content/70 mb-1">识别语言</label>
+              <label class="block text-xs text-base-content/70 mb-1">{{ t('audioRecorder.recognitionLanguage') }}</label>
               <select v-model="transcriptionLanguage" class="select select-bordered select-sm w-full">
-                <option value="auto">自动检测</option>
-                <option value="zh">中文 (简体)</option>
-                <option value="zh-TW">中文 (繁体)</option>
-                <option value="en">English</option>
-                <option value="ja">日本語</option>
-                <option value="ko">한국어</option>
-                <option value="es">Español</option>
-                <option value="fr">Français</option>
-                <option value="de">Deutsch</option>
-                <option value="it">Italiano</option>
-                <option value="pt">Português</option>
-                <option value="ru">Русский</option>
-                <option value="ar">العربية</option>
-                <option value="hi">हिन्दी</option>
-                <option value="th">ไทย</option>
-                <option value="vi">Tiếng Việt</option>
+                <option value="auto">{{ t('audioRecorder.languages.auto') }}</option>
+                <option value="zh">{{ t('audioRecorder.languages.zh') }}</option>
+                <option value="zh-TW">{{ t('audioRecorder.languages.zh-TW') }}</option>
+                <option value="en">{{ t('audioRecorder.languages.en') }}</option>
+                <option value="ja">{{ t('audioRecorder.languages.ja') }}</option>
+                <option value="ko">{{ t('audioRecorder.languages.ko') }}</option>
+                <option value="es">{{ t('audioRecorder.languages.es') }}</option>
+                <option value="fr">{{ t('audioRecorder.languages.fr') }}</option>
+                <option value="de">{{ t('audioRecorder.languages.de') }}</option>
+                <option value="it">{{ t('audioRecorder.languages.it') }}</option>
+                <option value="pt">{{ t('audioRecorder.languages.pt') }}</option>
+                <option value="ru">{{ t('audioRecorder.languages.ru') }}</option>
+                <option value="ar">{{ t('audioRecorder.languages.ar') }}</option>
+                <option value="hi">{{ t('audioRecorder.languages.hi') }}</option>
+                <option value="th">{{ t('audioRecorder.languages.th') }}</option>
+                <option value="vi">{{ t('audioRecorder.languages.vi') }}</option>
               </select>
             </div>
             
             <div>
-              <label class="block text-xs text-base-content/70 mb-1">识别服务</label>
+              <label class="block text-xs text-base-content/70 mb-1">{{ t('audioRecorder.recognitionService') }}</label>
               <select v-model="transcriptionService" class="select select-bordered select-sm w-full">
-                <option value="openai">OpenAI Whisper (推荐)</option>
-                <option value="azure">Azure Speech Services</option>
-                <option value="google">Google Speech-to-Text</option>
-                <option value="local">本地 Whisper 模型</option>
+                <option value="openai">{{ t('audioRecorder.services.openai') }}</option>
+                <option value="azure">{{ t('audioRecorder.services.azure') }}</option>
+                <option value="google">{{ t('audioRecorder.services.google') }}</option>
+                <option value="local">{{ t('audioRecorder.services.local') }}</option>
               </select>
             </div>
             
@@ -286,40 +280,40 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-4 w-4" fill="none" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
               </svg>
-              <span class="text-xs">需要安装 whisper CLI 工具</span>
+              <span class="text-xs">{{ t('audioRecorder.localModelWarning') }}</span>
             </div>
             
             <div class="flex items-center gap-2">
               <input type="checkbox" v-model="enableRealTimeTranscription" class="checkbox checkbox-primary checkbox-sm" />
-              <label class="text-sm">实时转录显示</label>
+              <label class="text-sm">{{ t('audioRecorder.showRealtimeTranscription') }}</label>
             </div>
             
             <div class="flex items-center gap-2">
               <input type="checkbox" v-model="enableAIAnalysis" class="checkbox checkbox-primary checkbox-sm" />
-              <label class="text-sm">启用AI智能分析</label>
+              <label class="text-sm">{{ t('audioRecorder.enableAIAnalysis') }}</label>
             </div>
             
             <div v-if="enableAIAnalysis" class="space-y-2 pl-6">
               <div class="flex flex-wrap gap-2">
                 <label class="flex items-center gap-1 text-xs">
                   <input type="checkbox" v-model="aiAnalysisOptions.generateTitle" class="checkbox checkbox-xs" />
-                  智能标题
+                  {{ t('audioRecorder.aiAnalysisOptions.generateTitle') }}
                 </label>
                 <label class="flex items-center gap-1 text-xs">
                   <input type="checkbox" v-model="aiAnalysisOptions.extractTags" class="checkbox checkbox-xs" />
-                  自动标签
+                  {{ t('audioRecorder.aiAnalysisOptions.extractTags') }}
                 </label>
                 <label class="flex items-center gap-1 text-xs">
                   <input type="checkbox" v-model="aiAnalysisOptions.generateSummary" class="checkbox checkbox-xs" />
-                  内容总结
+                  {{ t('audioRecorder.aiAnalysisOptions.generateSummary') }}
                 </label>
                 <label class="flex items-center gap-1 text-xs">
                   <input type="checkbox" v-model="aiAnalysisOptions.extractKeywords" class="checkbox checkbox-xs" />
-                  关键词提取
+                  {{ t('audioRecorder.aiAnalysisOptions.extractKeywords') }}
                 </label>
                 <label class="flex items-center gap-1 text-xs">
                   <input type="checkbox" v-model="aiAnalysisOptions.sentimentAnalysis" class="checkbox checkbox-xs" />
-                  情感分析
+                  {{ t('audioRecorder.aiAnalysisOptions.sentimentAnalysis') }}
                 </label>
               </div>
             </div>
@@ -332,12 +326,12 @@
                   :disabled="isLoading"
                   class="btn btn-primary btn-sm flex-1">
             <span v-if="isLoading" class="loading loading-spinner loading-xs"></span>
-            插入到笔记
+            {{ t('audioRecorder.insertToNote') }}
           </button>
           <button @click="saveAudioFile" 
                   :disabled="isLoading"
                   class="btn btn-ghost btn-sm">
-            保存文件
+            {{ t('audioRecorder.saveFile') }}
           </button>
         </div>
       </div>
@@ -357,6 +351,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // Props
 const props = defineProps<{
@@ -429,11 +426,11 @@ const audioChunks: Blob[] = []
 const showRecordingPanel = computed(() => props.visible)
 
 const recordingStatusText = computed(() => {
-  if (isLoading.value) return '处理中...'
-  if (isRecording.value) return '录制中'
-  if (isPaused.value) return '已暂停'
-  if (hasRecordedAudio.value) return '录制完成'
-  return '准备录制'
+  if (isLoading.value) return t('audioRecorder.status.processing')
+  if (isRecording.value) return t('audioRecorder.status.recording')
+  if (isPaused.value) return t('audioRecorder.status.paused')
+  if (hasRecordedAudio.value) return t('audioRecorder.status.completed')
+  return t('audioRecorder.status.ready')
 })
 
 // 方法
@@ -516,17 +513,17 @@ const checkAudioRecordingSupport = () => {
   
   // 检查 navigator.mediaDevices 是否可用
   if (!navigator.mediaDevices) {
-    errors.push('您的浏览器不支持 MediaDevices API')
+    errors.push(t('audioRecorder.errors.browserNotSupported'))
   }
   
   // 检查 getUserMedia 是否可用
   if (!navigator.mediaDevices?.getUserMedia) {
-    errors.push('您的浏览器不支持麦克风访问功能')
+    errors.push(t('audioRecorder.errors.microphoneAccessNotSupported'))
   }
   
   // 检查 MediaRecorder 是否可用
   if (!window.MediaRecorder) {
-    errors.push('您的浏览器不支持音频录制功能')
+    errors.push(t('audioRecorder.errors.audioRecordingNotSupported'))
   }
   
   // 检查是否在安全上下文中运行（HTTPS 或 localhost）
@@ -534,7 +531,7 @@ const checkAudioRecordingSupport = () => {
       !location.hostname.includes('localhost') && 
       location.hostname !== '127.0.0.1' &&
       location.protocol !== 'tauri:') {
-    errors.push('音频录制需要在安全环境下运行（HTTPS）')
+    errors.push(t('audioRecorder.errors.audioRecordingRequiresSecureContext'))
   }
   
   return {
@@ -591,7 +588,7 @@ const testMicrophone = async () => {
         <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <span>✅ 麦克风测试成功！设备工作正常，权限已授权。</span>
+        <span>${t('audioRecorder.testSuccess')}</span>
       </div>
     `
     
@@ -609,36 +606,36 @@ const testMicrophone = async () => {
     }, 1000)
     
   } catch (error: any) {
-    let errorMessage = '麦克风测试失败：'
+    let errorMessage = t('audioRecorder.testFailed')
     
     switch (error.name) {
       case 'NotAllowedError':
-        errorMessage += '用户拒绝了麦克风权限请求'
+        errorMessage += t('audioRecorder.errors.notAllowed')
         permissionState.value = 'denied'
         deviceState.value = 'unavailable'
         break
       case 'NotFoundError':
-        errorMessage += '未找到可用的麦克风设备'
+        errorMessage += t('audioRecorder.errors.notFound')
         permissionState.value = 'unknown'
         deviceState.value = 'unavailable'
         break
       case 'NotReadableError':
-        errorMessage += '麦克风设备被其他应用占用'
+        errorMessage += t('audioRecorder.errors.notReadable')
         permissionState.value = 'unknown'
         deviceState.value = 'unavailable'
         break
       case 'OverconstrainedError':
-        errorMessage += '麦克风设备不支持指定的配置'
+        errorMessage += t('audioRecorder.errors.overconstrained')
         permissionState.value = 'unknown'
         deviceState.value = 'unavailable'
         break
       case 'SecurityError':
-        errorMessage += '安全限制阻止访问麦克风'
+        errorMessage += t('audioRecorder.errors.security')
         permissionState.value = 'denied'
         deviceState.value = 'unavailable'
         break
       default:
-        errorMessage += error.message || '未知错误'
+        errorMessage += error.message || t('audioRecorder.errors.unknown')
         deviceState.value = 'unavailable'
     }
     
@@ -674,18 +671,18 @@ const showErrorMessage = (message: string) => {
 const startRecording = async () => {
   try {
     isLoading.value = true
-    loadingMessage.value = '检查音频录制支持...'
+    loadingMessage.value = t('audioRecorder.loading.checkingSupport')
 
     // 首先检查浏览器支持情况
     const supportCheck = checkAudioRecordingSupport()
     if (!supportCheck.supported) {
-      const errorMessage = '音频录制不可用：\n' + supportCheck.errors.join('\n')
+      const errorMessage = t('audioRecorder.errors.unsupported') + supportCheck.errors.join('\n')
       showErrorMessage(errorMessage)
       console.error('Audio recording not supported:', supportCheck.errors)
       return
     }
 
-    loadingMessage.value = '请求麦克风权限...'
+    loadingMessage.value = t('audioRecorder.loading.requestingPermission')
 
     // 尝试获取麦克风权限
     let stream: MediaStream
@@ -699,26 +696,26 @@ const startRecording = async () => {
         }
       })
     } catch (mediaError: any) {
-      let errorMessage = '无法访问麦克风：'
+      let errorMessage = t('audioRecorder.errors.unsupported')
       
       switch (mediaError.name) {
         case 'NotAllowedError':
-          errorMessage += '用户拒绝了麦克风权限请求'
+          errorMessage += t('audioRecorder.errors.notAllowed')
           break
         case 'NotFoundError':
-          errorMessage += '未找到可用的麦克风设备'
+          errorMessage += t('audioRecorder.errors.notFound')
           break
         case 'NotReadableError':
-          errorMessage += '麦克风设备被其他应用占用'
+          errorMessage += t('audioRecorder.errors.notReadable')
           break
         case 'OverconstrainedError':
-          errorMessage += '麦克风设备不支持指定的配置'
+          errorMessage += t('audioRecorder.errors.overconstrained')
           break
         case 'SecurityError':
-          errorMessage += '安全限制阻止访问麦克风'
+          errorMessage += t('audioRecorder.errors.security')
           break
         default:
-          errorMessage += mediaError.message || '未知错误'
+          errorMessage += mediaError.message || t('audioRecorder.errors.unknown')
       }
       
       showErrorMessage(errorMessage)
@@ -752,7 +749,7 @@ const startRecording = async () => {
         if (supportedType) {
           options.mimeType = supportedType
         } else {
-          showErrorMessage('您的浏览器不支持任何可用的音频录制格式')
+          showErrorMessage(t('audioRecorder.errors.unsupportedFormat'))
           stream.getTracks().forEach(track => track.stop())
           return
         }
@@ -794,7 +791,7 @@ const startRecording = async () => {
     isLoading.value = false
   } catch (error: any) {
     console.error('Failed to start recording:', error)
-    showErrorMessage(`录制启动失败：${error.message || '未知错误'}`)
+    showErrorMessage(`${t('audioRecorder.errors.recordingFailed')}: ${error.message || t('audioRecorder.errors.unknown')}`)
     isLoading.value = false
   }
 }
@@ -807,7 +804,7 @@ const pauseRecording = () => {
     stopTimer()
     if (enableRealTimeTranscription.value) {
       isTranscribing.value = false
-      realtimeTranscriptionText.value = '录制已暂停...'
+      realtimeTranscriptionText.value = t('audioRecorder.statusPaused')
     }
   }
 }
@@ -969,7 +966,7 @@ const insertAudioToNote = async () => {
 
   try {
     isLoading.value = true
-    loadingMessage.value = '保存音频文件...'
+    loadingMessage.value = t('audioRecorder.loading.saving')
 
     // 转换音频为 base64
     const arrayBuffer = await audioBlob.value.arrayBuffer()
@@ -991,7 +988,7 @@ const insertAudioToNote = async () => {
     
     // 如果启用转录，执行语音转文字
     if (enableTranscription.value) {
-      loadingMessage.value = '转录音频内容...'
+      loadingMessage.value = t('audioRecorder.loading.transcribing')
       
       transcription = await invoke<string>('transcribe_audio', {
         audioId,
@@ -1001,7 +998,7 @@ const insertAudioToNote = async () => {
       
       // 如果启用AI分析，执行内容分析
       if (enableAIAnalysis.value && transcription.trim()) {
-        loadingMessage.value = '分析音频内容...'
+        loadingMessage.value = t('audioRecorder.loading.analyzing')
         
         const analysisTypes = []
         if (aiAnalysisOptions.value.generateTitle) analysisTypes.push('title')
@@ -1072,12 +1069,9 @@ const startRealtimeTranscription = () => {
   
   // 模拟实时转录过程
   const mockTranscriptionSegments = [
-    '正在监听...',
-    '检测到语音输入',
-    '开始识别语音内容',
-    '转录中...',
-    '处理语音信号',
-    '生成文本...'
+    t('audioRecorder.transcribing'),
+    t('audioRecorder.status.processing'),
+    t('audioRecorder.transcriptionPlaceholder')
   ]
   
   let segmentIndex = 0

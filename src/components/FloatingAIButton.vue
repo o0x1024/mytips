@@ -8,6 +8,9 @@ import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
 import 'prismjs/themes/prism-okaidia.css'
 import { getDefaultAIModel } from '../services/aiService'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 检查是否在浏览器环境
 const isBrowser = typeof window !== 'undefined'
@@ -63,9 +66,9 @@ const availableModels = ref([
   { id: 'chatgpt', name: 'ChatGPT', avatar: '/img/chatgpt-avatar.svg' },
   { id: 'gemini', name: 'Google Gemini', avatar: '/img/gemini-avatar.svg' },
   { id: 'claude', name: 'Claude', avatar: '/img/claude-avatar.svg' },
-  { id: 'qwen', name: '通义千问', avatar: '/img/qwen-avatar.svg' },
+  { id: 'qwen', name: 'Qwen', avatar: '/img/qwen-avatar.svg' },
   { id: 'deepseek', name: 'DeepSeek', avatar: '/img/deepseek-avatar.svg' },
-  { id: 'doubao', name: '豆包', avatar: '/img/doubao-avatar.svg' },
+  { id: 'doubao', name: 'doubao', avatar: '/img/doubao-avatar.svg' },
   { id: 'grok', name: 'Grok', avatar: '/img/grok-avatar.svg' },
 ])
 
@@ -138,7 +141,18 @@ const getModelAvatar = (modelId: string) => {
 // 获取模型名称
 const getModelName = (modelId: string) => {
   const model = availableModels.value.find(m => m.id === modelId)
-  return model ? model.name : '自定义模型'
+  if (model) {
+    // 假设模型名称在 i18n 文件中有对应的 key
+    const key = `aiModels.${model.id}`;
+    const translatedName = t(key);
+    // 如果翻译存在且不是 key 本身，则返回翻译
+    if (translatedName !== key) {
+      return translatedName;
+    }
+    // 否则返回模型自带的名称
+    return model.name;
+  }
+  return t('aiModels.custom');
 }
 
 // 加载全局默认AI模型
@@ -166,19 +180,20 @@ const getOrCreateFloatingConversation = async () => {
   try {
     // 检查是否有现有的浮动聊天框对话
     const conversations = await invoke('list_ai_conversations') as Array<{id: string, title: string, model: string}>
-    const floatingConv = conversations.find(c => c.title === '浮动聊天框')
+    const floatingConvTitle = t('floatingAI.floatingChat');
+    const floatingConv = conversations.find(c => c.title === floatingConvTitle)
     
     if (floatingConv) {
       floatingConversationId.value = floatingConv.id
-      console.log('FloatingAI: 找到现有浮动聊天框对话:', floatingConv.id)
+      console.log('FloatingAI: Found existing floating chat conversation:', floatingConv.id)
     } else {
       // 创建新的浮动聊天框对话
-      const newConvId = await invoke('create_ai_conversation', { model: selectedModel.value, title: '浮动聊天框' }) as string
+      const newConvId = await invoke('create_ai_conversation', { model: selectedModel.value, title: floatingConvTitle }) as string
       floatingConversationId.value = newConvId
-      console.log('FloatingAI: 创建新的浮动聊天框对话:', newConvId)
+      console.log('FloatingAI: Created new floating chat conversation:', newConvId)
     }
   } catch (error) {
-    console.error('FloatingAI: 获取或创建浮动聊天框对话失败:', error)
+    console.error('FloatingAI: Failed to get or create floating chat conversation:', error)
     // 即使失败也不阻止聊天功能，只是不会持久化
   }
 }
@@ -202,12 +217,12 @@ const loadChatHistory = async () => {
       timestamp: msg.timestamp
     }))
     
-    console.log(`FloatingAI: 加载了 ${chatMessages.value.length} 条聊天历史`)
+    console.log(`FloatingAI: Loaded ${chatMessages.value.length} chat history messages`)
     
     // 滚动到底部
     scrollToBottom()
   } catch (error) {
-    console.error('FloatingAI: 加载聊天历史失败:', error)
+    console.error('FloatingAI: Failed to load chat history:', error)
   } finally {
     isLoadingHistory.value = false
   }
@@ -227,7 +242,7 @@ const saveMessageToDatabase = async (role: string, content: string) => {
         content 
       })
     } catch (error) {
-      console.error('FloatingAI: 保存消息到数据库失败:', error)
+      console.error('FloatingAI: Failed to save message to database:', error)
     }
   }
 }
@@ -333,11 +348,11 @@ const sendMessage = async () => {
       roleId: null
     })
   } catch (error) {
-    console.error('发送消息失败:', error)
+    console.error('Failed to send message:', error)
     
     const errorMsg = {
       role: 'assistant',
-      content: '抱歉，发生了错误：' + (error as string),
+      content: t('floatingAI.errorMessage', { error: error as string }),
       timestamp: Date.now()
     }
     
@@ -465,7 +480,7 @@ const cancelGeneration = async () => {
       // 调用后端取消API
       await invoke('cancel_ai_stream', { streamId: currentStreamingId.value })
     } catch (error) {
-      console.error('取消生成失败:', error)
+      console.error('Failed to cancel generation:', error)
     }
     
     let cancelMsg: {role: string, content: string, timestamp: number}
@@ -474,14 +489,14 @@ const cancelGeneration = async () => {
     if (streamingContent.value.trim()) {
       cancelMsg = {
         role: 'assistant',
-        content: streamingContent.value + '\n\n*[生成已被用户取消]*',
+        content: streamingContent.value + t('floatingAI.generationCancelled'),
         timestamp: Date.now()
       }
     } else {
       // 添加取消消息到聊天记录
       cancelMsg = {
         role: 'assistant',
-        content: '*生成已被用户取消*',
+        content: t('floatingAI.generationCancelledPlaceholder'),
         timestamp: Date.now()
       }
     }
@@ -519,9 +534,9 @@ const clearAllMessages = async () => {
   if (floatingConversationId.value) {
     try {
       await invoke('clear_ai_conversation', { conversationId: floatingConversationId.value })
-      console.log('已清空浮动聊天框的数据库记录')
+      console.log('Cleared database records for floating chat')
     } catch (error) {
-      console.error('清空数据库消息失败:', error)
+      console.error('Failed to clear database messages:', error)
     }
   }
 }
@@ -536,7 +551,7 @@ const messageRenderCache = ref(new Map<string, string>())
 
 // 渲染单个消息内容的计算属性工厂函数
 const createMessageRenderer = (content: string) => {
-  if (!content) return '<p class="text-base-content/50">暂无内容</p>'
+  if (!content) return `<p class="text-base-content/50">${t('floatingAI.noContent')}</p>`
 
   const cacheKey = content.substring(0, 1000) + content.length
   
@@ -559,7 +574,7 @@ const createMessageRenderer = (content: string) => {
           try {
             return Prism.highlight(code, Prism.languages[actualLang], actualLang)
           } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error)
+            console.warn(`Prism highlighting failed (${actualLang}):`, error)
             return escapeHtml(code)
           }
         }
@@ -597,9 +612,9 @@ const createMessageRenderer = (content: string) => {
 
     return result
   } catch (err) {
-    console.error('Markdown渲染错误:', err)
+    console.error('Markdown rendering error:', err)
     const errorMessage = err instanceof Error ? err.message : String(err)
-    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+    return `<div class="text-error">${t('floatingAI.markdownRenderError', { message: errorMessage })}</div>
             <pre>${DOMPurify.sanitize(content)}</pre>`
   }
 }
@@ -956,7 +971,7 @@ function enhanceCodeBlocks() {
     header.className = 'code-block-header'
     header.innerHTML = `
       <span class="code-language">${lang}</span>
-      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="复制代码">
+      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="${t('floatingAI.copyCode')}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
         </svg>
@@ -1014,7 +1029,7 @@ const setupCodeCopyFeature = () => {
           copyButton.disabled = false
         }, 2000)
       } catch (error) {
-        console.error('复制代码失败:', error)
+        console.error('Failed to copy code:', error)
 
         // 显示复制失败状态
         const originalHTML = copyButton.innerHTML
@@ -1164,7 +1179,7 @@ onMounted(async () => {
     unlistenSettingsChanged = await listen('global-settings-changed', (event) => {
       const payload = event.payload as { key: string };
       if (payload.key === 'defaultAIModel') {
-        console.log('FloatingAI: 检测到全局默认AI模型变更，正在重新加载...');
+        console.log('FloatingAI: Detected global default AI model change, reloading...');
         loadDefaultModel();
       }
     });
@@ -1238,7 +1253,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
     >
       <div class="btn-content">
         <img :src="getModelAvatar(selectedModel)" :alt="getModelName(selectedModel)" class="model-avatar" />
-        <span class="btn-text">AI</span>
+        <span class="btn-text">{{ t('floatingAI.ai') }}</span>
       </div>
     </div>
 
@@ -1259,7 +1274,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
             class="clear-btn" 
             @click="clearAllMessages"
             :disabled="chatMessages.length === 0 && !streamingContent"
-            title="清空所有内容"
+            :title="t('floatingAI.clearAll')"
           >
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1277,10 +1292,10 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
       <div ref="messagesContainer" class="chat-messages">
         <div v-if="isLoadingHistory" class="empty-chat">
           <span class="loading loading-spinner loading-lg mr-2"></span>
-          <p>正在加载聊天历史...</p>
+          <p>{{ t('floatingAI.loadingHistory') }}</p>
         </div>
         <div v-else-if="chatMessages.length === 0" class="empty-chat">
-          <p>开始与AI助手对话</p>
+          <p>{{ t('floatingAI.startConversation') }}</p>
         </div>
         
         <template v-else>
@@ -1290,7 +1305,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
             :class="['message', message.role === 'user' ? 'user-message' : 'ai-message']"
           >
             <div class="message-header">
-              <span>{{ message.role === 'user' ? '您' : getModelName(selectedModel) }}</span>
+              <span>{{ message.role === 'user' ? t('floatingAI.you') : getModelName(selectedModel) }}</span>
               <time>{{ formatTime(message.timestamp) }}</time>
             </div>
             <div class="message-content">
@@ -1340,7 +1355,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
         <input 
           type="text" 
           v-model="userMessage" 
-          placeholder="输入消息..." 
+          :placeholder="t('floatingAI.typeMessage')" 
           @keyup.enter="isLoading ? cancelGeneration() : sendMessage()"
           :disabled="isCancelling"
         />
@@ -1355,7 +1370,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
               class="action-btn send-btn" 
               @click="sendMessage" 
               :disabled="!userMessage.trim()"
-              title="发送消息"
+              :title="t('floatingAI.sendMessage')"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -1369,7 +1384,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
               class="action-btn cancel-btn" 
               @click="cancelGeneration" 
               :disabled="isCancelling"
-              title="取消生成"
+              :title="t('floatingAI.cancelGeneration')"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

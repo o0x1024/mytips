@@ -2,7 +2,7 @@
   <div class="tag-selector w-full">
     <!-- 标签区域 -->
     <div class="flex flex-wrap items-center gap-2">
-      <span class="text-xs text-base-content/80">标签:</span>
+      <span class="text-xs text-base-content/80">{{ $t('tagSelector.tagsLabel') }}</span>
       
       <!-- 已选择的标签 -->
       <div class="flex flex-wrap gap-1 items-center">
@@ -23,7 +23,7 @@
         <div class="tag-input-container relative">
           <input 
             type="text" 
-            placeholder="添加标签..." 
+            :placeholder="$t('tagSelector.addTagPlaceholder')" 
             class="input input-sm input-bordered w-36 pr-7" 
             v-model="newTag"
             @input="filterAvailableTags"
@@ -63,32 +63,32 @@
             <div class="p-2 border-b border-base-300 text-xs text-base-content/80 flex justify-between items-center">
               <div>
                 <span v-if="newTag.trim() && filteredAvailableTags.length > 0">
-                  找到 {{ filteredAvailableTags.length }} 个匹配标签
+                  {{ $t('tagSelector.foundMatches', { count: filteredAvailableTags.length }) }}
                 </span>
                 <span v-else-if="newTag.trim() && filteredAvailableTags.length === 0">
-                  未找到匹配标签
+                  {{ $t('tagSelector.noMatches') }}
                 </span>
                 <span v-else>
-                  共 {{ availableTags.length }} 个标签
+                  {{ $t('tagSelector.totalTags', { count: availableTags.length }) }}
                 </span>
               </div>
               <button 
                 class="text-primary hover:underline"
                 @click="refreshTagsList"
               >
-                刷新
+                {{ $t('common.refresh') }}
               </button>
             </div>
             
             <!-- 标签快速选择区域 -->
             <div class="p-2" v-if="!newTag.trim()">
               <div class="text-xs font-medium mb-1 flex justify-between items-center">
-                <span>常用标签</span>
+                <span>{{ $t('tagSelector.frequentTags') }}</span>
                 <button 
                   class="text-xs text-primary hover:underline"
                   @click="showTagSection = showTagSection === 'frequent' ? 'all' : 'frequent'"
                 >
-                  {{ showTagSection === 'frequent' ? '显示全部' : '显示常用' }}
+                  {{ showTagSection === 'frequent' ? $t('tagSelector.showAll') : $t('tagSelector.showFrequent') }}
                 </button>
               </div>
               
@@ -105,7 +105,7 @@
                   {{ tag.name }}
                 </button>
                 <div v-if="frequentTags.length === 0" class="text-xs text-base-content/80 py-1">
-                  暂无常用标签
+                  {{ $t('tagSelector.noFrequentTags') }}
                 </div>
               </div>
               
@@ -122,7 +122,7 @@
                   {{ tag.name }}
                 </button>
                 <div v-if="filteredAvailableTags.length === 0" class="text-xs text-base-content/80 py-1">
-                  所有标签已添加
+                  {{ $t('tagSelector.allTagsAdded') }}
                 </div>
               </div>
             </div>
@@ -152,7 +152,7 @@
                 class="btn btn-primary btn-sm w-full"
                 @click="addTag"
               >
-                创建标签 "{{ newTag.trim() }}"
+                {{ $t('tagSelector.createTag', { tagName: newTag.trim() }) }}
               </button>
             </div>
           </div>
@@ -166,8 +166,11 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { useTipsStore } from '../stores/tipsStore'
+
+const { t } = useI18n();
 
 // 类型定义
 interface Tag {
@@ -229,7 +232,7 @@ async function fetchAvailableTags() {
     // 生成标签建议
     generateTagSuggestions()
   } catch (error) {
-    console.error('获取可用标签失败:', error)
+    console.error('Failed to fetch available tags:', error)
   }
 }
 
@@ -283,7 +286,7 @@ function loadFrequentTags() {
       .sort((a, b) => (tagUsage[b.id] || 0) - (tagUsage[a.id] || 0))
       .slice(0, 10)
   } catch (error) {
-    console.error('加载常用标签失败:', error)
+    console.error('Failed to load frequent tags:', error)
     frequentTags.value = []
   }
 }
@@ -365,7 +368,7 @@ async function addTag() {
     // 刷新过滤的标签
     filterAvailableTags()
   } catch (e) {
-    console.error('添加标签失败:', e)
+    console.error('Failed to add tag:', e)
   }
 }
 
@@ -420,7 +423,7 @@ function removeTag(tagId: string) {
     // 通知父组件保存笔记
     emit('saveNote')
   } catch (e) {
-    console.error('移除标签失败:', e)
+    console.error('Failed to remove tag:', e)
   }
 }
 
@@ -446,7 +449,7 @@ function updateTagUsage(tagId: string) {
     // 保存回本地存储
     localStorage.setItem('mytips-tag-usage', JSON.stringify(tagUsage))
   } catch (error) {
-    console.error('更新标签使用频率失败:', error)
+    console.error('Failed to update tag usage frequency:', error)
   }
 }
 

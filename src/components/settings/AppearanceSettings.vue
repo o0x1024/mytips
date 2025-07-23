@@ -1,12 +1,23 @@
 <template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-primary mb-4">外观设置</h2>
+      <h2 class="card-title text-primary mb-4">{{ $t('appearanceSettings.title') }}</h2>
+
+      <!-- 语言选择 -->
+      <div class="form-control mb-6">
+        <label class="label">
+          <span class="label-text">{{ $t('appearanceSettings.language') }}</span>
+        </label>
+        <select v-model="selectedLanguage" @change="changeLanguage" class="select select-bordered w-full max-w-xs">
+          <option value="zh">{{ $t('languages.zh') }}</option>
+          <option value="en">{{ $t('languages.en') }}</option>
+        </select>
+      </div>
 
       <!-- 主题选择 -->
       <div class="form-control mb-6">
         <label class="label">
-          <span class="label-text">主题</span>
+          <span class="label-text">{{ $t('appearanceSettings.theme') }}</span>
         </label>
         <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           <template v-for="theme in uiStore.themeOptions" :key="theme.value">
@@ -18,30 +29,30 @@
             ]" @click="changeTheme(theme.value)">
               <input type="radio" :value="theme.value" v-model="selectedTheme"
                 class="radio radio-primary radio-sm" />
-              <span>{{ theme.name }}</span>
+              <span>{{ $t(theme.name) }}</span>
             </label>
           </template>
         </div>
 
         <!-- 主题预览区域 -->
         <div class="mt-6 p-4 rounded-lg border border-base-300">
-          <h3 class="text-lg font-medium mb-4">主题预览</h3>
+          <h3 class="text-lg font-medium mb-4">{{ $t('appearanceSettings.themePreview') }}</h3>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <!-- 按钮预览 -->
             <div class="space-y-2">
-              <button class="btn btn-primary w-full">主要按钮</button>
-              <button class="btn btn-secondary w-full">次要按钮</button>
-              <button class="btn btn-accent w-full">强调按钮</button>
-              <button class="btn btn-neutral w-full">中性按钮</button>
+              <button class="btn btn-primary w-full">{{ $t('appearanceSettings.primaryButton') }}</button>
+              <button class="btn btn-secondary w-full">{{ $t('appearanceSettings.secondaryButton') }}</button>
+              <button class="btn btn-accent w-full">{{ $t('appearanceSettings.accentButton') }}</button>
+              <button class="btn btn-neutral w-full">{{ $t('appearanceSettings.neutralButton') }}</button>
             </div>
             <!-- 颜色预览 -->
             <div class="grid grid-cols-2 gap-2">
-              <div class="p-3 rounded-lg bg-primary text-primary-content text-center">主色</div>
-              <div class="p-3 rounded-lg bg-secondary text-secondary-content text-center">次色</div>
-              <div class="p-3 rounded-lg bg-accent text-accent-content text-center">强调色</div>
-              <div class="p-3 rounded-lg bg-neutral text-neutral-content text-center">中性色</div>
-              <div class="p-3 rounded-lg bg-base-100 text-base-content border border-base-300 text-center">背景色</div>
-              <div class="p-3 rounded-lg bg-base-200 text-base-content border border-base-300 text-center">背景色 2</div>
+              <div class="p-3 rounded-lg bg-primary text-primary-content text-center">{{ $t('appearanceSettings.primaryColor') }}</div>
+              <div class="p-3 rounded-lg bg-secondary text-secondary-content text-center">{{ $t('appearanceSettings.secondaryColor') }}</div>
+              <div class="p-3 rounded-lg bg-accent text-accent-content text-center">{{ $t('appearanceSettings.accentColor') }}</div>
+              <div class="p-3 rounded-lg bg-neutral text-neutral-content text-center">{{ $t('appearanceSettings.neutralColor') }}</div>
+              <div class="p-3 rounded-lg bg-base-100 text-base-content border border-base-300 text-center">{{ $t('appearanceSettings.backgroundColor') }}</div>
+              <div class="p-3 rounded-lg bg-base-200 text-base-content border border-base-300 text-center">{{ $t('appearanceSettings.backgroundColor2') }}</div>
             </div>
           </div>
         </div>
@@ -50,13 +61,13 @@
       <!-- 字体大小设置 -->
       <div class="form-control mb-6">
         <label class="label">
-          <span class="label-text">字体大小</span>
+          <span class="label-text">{{ $t('appearanceSettings.fontSize') }}</span>
         </label>
 
         <!-- 精确字体大小调整 -->
         <div class="mt-2">
           <label class="label">
-            <span class="label-text">字体大小 ({{ exactFontSize }}px)</span>
+            <span class="label-text">{{ $t('appearanceSettings.exactFontSizeLabel', { size: exactFontSize }) }}</span>
           </label>
           <div class="flex items-center gap-2">
             <button class="btn btn-sm btn-circle" @click="decreaseExactFontSize"
@@ -80,20 +91,20 @@
 
         <!-- 字体大小预览 -->
         <div class="mt-4 p-4 rounded-lg border border-base-300">
-          <h3 class="text-lg font-medium mb-2">字体大小预览</h3>
+          <h3 class="text-lg font-medium mb-2">{{ $t('appearanceSettings.fontSizePreview') }}</h3>
           <div class="space-y-3">
             <div :style="`font-size: ${exactFontSize}px;`" class="p-2 border border-base-200 rounded">
-              <span>当前选择的字体大小 ({{ exactFontSize }}px)</span>
+              <span>{{ $t('appearanceSettings.currentFontSize', { size: exactFontSize }) }}</span>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
               <div :style="`font-size: 12px;`" class="p-2 border border-base-200 rounded">
-                <span>12px 大小示例</span>
+                <span>{{ $t('appearanceSettings.fontSizeExample', { size: 12 }) }}</span>
               </div>
               <div :style="`font-size: 16px;`" class="p-2 border border-base-200 rounded">
-                <span>16px 大小示例</span>
+                <span>{{ $t('appearanceSettings.fontSizeExample', { size: 16 }) }}</span>
               </div>
               <div :style="`font-size: 20px;`" class="p-2 border border-base-200 rounded">
-                <span>20px 大小示例</span>
+                <span>{{ $t('appearanceSettings.fontSizeExample', { size: 20 }) }}</span>
               </div>
             </div>
           </div>
@@ -103,7 +114,7 @@
       <!-- 重置按钮 -->
       <div class="form-control mt-6">
         <button class="btn btn-outline" @click="resetUISettings">
-          重置为默认设置
+          {{ $t('appearanceSettings.resetButton') }}
         </button>
       </div>
     </div>
@@ -112,9 +123,19 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useUIStore } from '../../stores/uiStore'
 
+const { t, locale } = useI18n()
 const uiStore = useUIStore()
+
+// 语言设置
+const selectedLanguage = ref(locale.value)
+function changeLanguage() {
+  locale.value = selectedLanguage.value
+  localStorage.setItem('user-language', selectedLanguage.value); // 持久化语言设置
+  uiStore.setLanguage(selectedLanguage.value)
+}
 
 // 主题设置
 const selectedTheme = ref(uiStore.settings.theme)
@@ -153,5 +174,8 @@ function resetUISettings() {
   uiStore.resetToDefaults()
   selectedTheme.value = uiStore.settings.theme
   exactFontSize.value = uiStore.settings.exactFontSize
+  selectedLanguage.value = uiStore.settings.language || 'zh'
+  locale.value = selectedLanguage.value
+  uiStore.setLanguage(locale.value)
 }
 </script> 

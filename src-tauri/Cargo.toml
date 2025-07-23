@@ -1,6 +1,6 @@
 [package]
 name = "mytips"
-version = "1.1.1"
+version = "1.1.0"
 description = "一款本地优先的笔记和代码片段管理工具"
 authors = ["you"]
 edition = "2021"
@@ -34,7 +34,7 @@ base64 = "0.22.1"
 tokio = { version = "1.37.0", features = ["full"] }
 futures-util = "0.3"
 lazy_static = "1.4"
-genai = "0.3.0"
+genai = "0.4.0-alpha.6"
 tokio-stream = "0.1.14"
 futures = "0.3.30"
 tauri-plugin-clipboard-manager = "2"

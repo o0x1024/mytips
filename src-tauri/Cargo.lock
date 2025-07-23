@@ -1849,9 +1849,9 @@ dependencies = [
 
 [[package]]
 name = "genai"
-version = "0.3.5"
+version = "0.4.0-alpha.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8957a26f596fad1248e60f6cd4c08eecaf1933168ce92f70a97c0d0773334620"
+checksum = "ef2dbea63eb0d8d6cf0cb410a7a52aee13e47c14de7e8ec9ea55570e02cad17e"
 dependencies = [
  "bytes",
  "derive_more 2.0.1",
@@ -3431,7 +3431,7 @@ dependencies = [
 
 [[package]]
 name = "mytips"
-version = "1.1.1"
+version = "1.1.0"
 dependencies = [
  "aes-gcm",
  "anyhow",

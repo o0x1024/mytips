@@ -98,7 +98,7 @@
           v-if="!sidebarCollapsed"
           class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
           @mousedown="startResizeSidebar"
-          title="拖拽调整侧边栏宽度"
+          :title="t('mainLayout.resizeSidebar')"
         ></div>
       </div>
 
@@ -117,7 +117,7 @@
               <button 
                 class="btn btn-xs btn-ghost btn-circle opacity-60 hover:opacity-100 shadow-sm"
                 @click="toggleNoteList"
-                title="隐藏笔记列表"
+                :title="t('mainLayout.hideNoteList')"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -148,7 +148,7 @@
             <div 
               class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
               @mousedown="startResizeNoteList"
-              title="拖拽调整笔记列表宽度"
+              :title="t('mainLayout.resizeNoteList')"
             ></div>
           </div>
           
@@ -159,7 +159,7 @@
             <button 
               class="btn btn-xs btn-ghost btn-circle rotate-180 opacity-60 hover:opacity-100 shadow-sm"
               @click="toggleNoteList"
-              title="显示笔记列表"
+              :title="t('mainLayout.showNoteList')"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -188,9 +188,9 @@
               <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
               </svg>
-              <h2 class="text-2xl font-bold mb-2">选择或创建笔记</h2>
+              <h2 class="text-2xl font-bold mb-2">{{ t('mainLayout.selectOrCreateNote') }}</h2>
               <p class="mb-4 text-center max-w-md">
-                在左侧选择一个笔记本，然后从列表中选择一个笔记进行编辑，或者创建一个新笔记开始记录你的想法。
+                {{ t('mainLayout.selectOrCreateNoteHint') }}
               </p>
             </div>
           </div>
@@ -242,26 +242,26 @@
     <!-- 添加笔记本模态框 -->
     <div class="modal" :class="{'modal-open': showAddNotebookModal}">
       <div class="modal-box">
-        <h3 class="font-bold text-lg">创建新笔记本</h3>
+        <h3 class="font-bold text-lg">{{ t('mainLayout.createNotebook') }}</h3>
         <div class="form-control w-full">
           <label class="label">
-            <span class="label-text">笔记本名称</span>
+            <span class="label-text">{{ t('mainLayout.notebookName') }}</span>
           </label>
-          <input type="text" placeholder="输入名称" class="input input-bordered w-full" v-model="newNotebookName" />
+          <input type="text" :placeholder="t('mainLayout.enterName')" class="input input-bordered w-full" v-model="newNotebookName" />
           
           <label class="label mt-2">
-            <span class="label-text">父笔记本 (可选)</span>
+            <span class="label-text">{{ t('mainLayout.parentNotebook') }}</span>
           </label>
           <select class="select select-bordered w-full" v-model="newNotebookParentId">
-            <option value="">无 (顶级笔记本)</option>
+            <option value="">{{ t('mainLayout.noParent') }}</option>
             <option v-for="notebook in flatNotebooks" :key="notebook.id" :value="notebook.id">
               {{ notebook.name }}
             </option>
           </select>
         </div>
         <div class="modal-action">
-          <button class="btn" @click="showAddNotebookModal = false">取消</button>
-          <button class="btn btn-primary" @click="addNotebook" :disabled="!newNotebookName.trim()">创建</button>
+          <button class="btn" @click="showAddNotebookModal = false">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="addNotebook" :disabled="!newNotebookName.trim()">{{ t('common.create') }}</button>
         </div>
       </div>
       <div class="modal-backdrop" @click="showAddNotebookModal = false"></div>
@@ -270,16 +270,16 @@
     <!-- 添加标签模态框 -->
     <div class="modal" :class="{'modal-open': showAddTagModal}">
       <div class="modal-box">
-        <h3 class="font-bold text-lg">创建新标签</h3>
+        <h3 class="font-bold text-lg">{{ t('mainLayout.createTag') }}</h3>
         <div class="form-control w-full">
           <label class="label">
-            <span class="label-text">标签名称</span>
+            <span class="label-text">{{ t('mainLayout.tagName') }}</span>
           </label>
-          <input type="text" placeholder="输入标签" class="input input-bordered w-full" v-model="newTagName" />
+          <input type="text" :placeholder="t('mainLayout.enterTag')" class="input input-bordered w-full" v-model="newTagName" />
         </div>
         <div class="modal-action">
-          <button class="btn" @click="showAddTagModal = false">取消</button>
-          <button class="btn btn-primary" @click="addTag" :disabled="!newTagName.trim()">创建</button>
+          <button class="btn" @click="showAddTagModal = false">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="addTag" :disabled="!newTagName.trim()">{{ t('common.create') }}</button>
         </div>
       </div>
       <div class="modal-backdrop" @click="showAddTagModal = false"></div>
@@ -288,16 +288,15 @@
     <!-- 删除笔记本确认 Modal -->
     <div class="modal" :class="{ 'modal-open': showDeleteModal }">
       <div class="modal-box">
-        <h3 class="font-bold text-lg text-error">确定要删除笔记本？</h3>
+        <h3 class="font-bold text-lg text-error">{{ t('mainLayout.confirmDeleteNotebookTitle') }}</h3>
         <p class="py-4">
           <span v-if="pendingDeleteNotebook">
-            确定要删除笔记本 <b class="text-error">{{ pendingDeleteNotebook.name }}</b> 吗？<br>
-            删除后不可恢复，且会删除其下所有子笔记本和笔记。
+            {{ t('mainLayout.confirmDeleteNotebookMessage', { name: pendingDeleteNotebook.name }) }}
           </span>
         </p>
         <div class="modal-action">
-          <button class="btn" @click="cancelDeleteNotebook">取消</button>
-          <button class="btn btn-error" @click="confirmDeleteNotebook">确定删除</button>
+          <button class="btn" @click="cancelDeleteNotebook">{{ t('common.cancel') }}</button>
+          <button class="btn btn-error" @click="confirmDeleteNotebook">{{ t('mainLayout.confirmDelete') }}</button>
         </div>
       </div>
       <div class="modal-backdrop" @click="cancelDeleteNotebook"></div>
@@ -306,16 +305,16 @@
     <!-- 编辑笔记本 Modal -->
     <div class="modal" :class="{ 'modal-open': showEditNotebookModal }">
       <div class="modal-box">
-        <h3 class="font-bold text-lg">编辑笔记本</h3>
+        <h3 class="font-bold text-lg">{{ t('mainLayout.editNotebook') }}</h3>
         <div class="form-control w-full">
           <label class="label">
-            <span class="label-text">新名称</span>
+            <span class="label-text">{{ t('mainLayout.newName') }}</span>
           </label>
           <input type="text" class="input input-bordered w-full" v-model="editNotebookName" />
         </div>
         <div class="modal-action">
-          <button class="btn" @click="cancelEditNotebook">取消</button>
-          <button class="btn btn-primary" @click="confirmEditNotebook" :disabled="!editNotebookName.trim()">确定</button>
+          <button class="btn" @click="cancelEditNotebook">{{ t('common.cancel') }}</button>
+          <button class="btn btn-primary" @click="confirmEditNotebook" :disabled="!editNotebookName.trim()">{{ t('common.confirm') }}</button>
         </div>
       </div>
       <div class="modal-backdrop" @click="cancelEditNotebook"></div>
@@ -360,6 +359,7 @@ import { storeToRefs } from 'pinia'
 import { showConfirm, showAlert } from '../services/dialog'
 import { useResponsive } from '../composables/useResponsive'
 import { invoke } from '@tauri-apps/api/core'
+import { useI18n } from 'vue-i18n'
 
 
 // Components
@@ -371,6 +371,7 @@ import MarkdownDropPreview from './MarkdownDropPreview.vue'
 import UpdateManager from './UpdateManager.vue'
 import PasswordDialog from './PasswordDialog.vue'
 
+const { t } = useI18n()
 
 // Store
 const tipsStore = useTipsStore()
@@ -460,13 +461,13 @@ const currentEncryptionTarget = ref<{ type: 'note' | 'notebook', id: string } | 
 
 const listTitle = computed(() => {
   if (selectedNotebookId.value) {
-    const notebook = notebooks.value.find(n => n.id === selectedNotebookId.value)
-    return notebook ? notebook.name : '全部笔记'
+    const notebook = flatNotebooks.value.find(n => n.id === selectedNotebookId.value)
+    return notebook ? notebook.name : t('mainLayout.allNotes')
   }
   if (selectedTags.value.length > 0) {
-    return `标签: ${selectedTags.value.map(t => storeTags.value.find(tag => tag.id === t)?.name).join(', ')}`
+    return `${t('mainLayout.tag')}: ${selectedTags.value.map(t => storeTags.value.find(tag => tag.id === t)?.name).join(', ')}`
   }
-  return '全部笔记'
+  return t('mainLayout.allNotes')
 })
 
 // 为NoteList提供统一的数据源
@@ -723,19 +724,20 @@ watch(selectedTags, () => {
 
 // Helper function to get or create the 'Uncategorized' notebook
 async function getUncategorizedNotebookId(): Promise<string> {
-  let uncategorized = storeCategories.value.find(c => c.name === '未分类');
+  const uncategorizedName = t('mainLayout.uncategorized');
+  let uncategorized = storeCategories.value.find(c => c.name === uncategorizedName);
   if (uncategorized) {
     return uncategorized.id;
   } else {
     // If it doesn't exist, create it
-    const newCategory = await tipsStore.createCategory('未分类');
+    const newCategory = await tipsStore.createCategory(uncategorizedName);
     if (newCategory) {
       // Manually add the new category to the store to avoid re-fetching
       storeCategories.value.push(newCategory);
       await fetchInitialData(); // Rebuild tree after adding category
       return newCategory.id;
     } else {
-      showAlert('无法创建“未分类”笔记本，请重试。', { title: '错误' });
+      showAlert(t('mainLayout.errorCreateUncategorized'), { title: t('common.error') });
       throw new Error("Failed to create 'Uncategorized' notebook.");
     }
   }
@@ -757,8 +759,8 @@ async function createNewNote() {
   }
 
   const newNoteData = {
-    title: '无标题笔记',
-    content: '# 新笔记\n\n在这里开始你的创作...',
+    title: t('mainLayout.untitledNote'),
+    content: `# ${t('mainLayout.newNote')}\n\n${t('mainLayout.newNoteHint')}`,
     tip_type: 'markdown',
     category_id: categoryId || undefined,
     tags: selectedTags.value
@@ -807,7 +809,7 @@ async function createNewNote() {
     await handleNoteSelection(savedNote);
   } else {
     console.error("Failed to create new note.");
-    showAlert('创建新笔记失败，请稍后再试。', { title: '错误' });
+    showAlert(t('mainLayout.errorCreateNote'), { title: t('common.error') });
   }
 }
 
@@ -845,7 +847,7 @@ function updateNotebookTreeCount(categoryId: string | undefined, delta: number) 
 }
 
 async function deleteNote(id: string) {
-  const confirmed = await showConfirm('确定要删除这篇笔记吗？', { title: '确认删除' });
+  const confirmed = await showConfirm(t('mainLayout.confirmDeleteNote'), { title: t('mainLayout.confirmDeleteTitle') });
   if (confirmed) {
     try {
       // 保存要删除笔记的分类ID，用于后续更新UI
@@ -1124,7 +1126,7 @@ function toggleTag(id: string) {
 
 async function exportNote(noteId: string, format: string) {
   try {
-    console.log(`开始导出笔记: ${noteId}, 格式: ${format}`)
+    console.log(`Starting export for note: ${noteId}, format: ${format}`)
     
     // 根据格式调用不同的导出函数
     let result: string
@@ -1141,16 +1143,16 @@ async function exportNote(noteId: string, format: string) {
         result = await invoke('export_as_pdf', { noteIds: [noteId] })
         break
       default:
-        throw new Error(`不支持的导出格式: ${format}`)
+        throw new Error(`Unsupported export format: ${format}`)
     }
     
-    console.log('导出成功:', result)
+    console.log('Export successful:', result)
     // 可以显示成功提示
-    await showAlert(result, { title: '导出成功' })
+    await showAlert(result, { title: t('mainLayout.exportSuccess') })
     
   } catch (error) {
-    console.error('导出笔记失败:', error)
-    let errorMessage = '导出笔记失败'
+    console.error('Failed to export note:', error)
+    let errorMessage = t('mainLayout.exportFailed')
     
     if (typeof error === 'string') {
       errorMessage = error
@@ -1158,7 +1160,7 @@ async function exportNote(noteId: string, format: string) {
       errorMessage = (error as any).message
     }
     
-    await showAlert(errorMessage, { title: '导出失败' })
+    await showAlert(errorMessage, { title: t('mainLayout.exportFailedTitle') })
   }
 }
 function moveNoteToCategory(noteId: string, categoryId: string) {

@@ -3,17 +3,17 @@
     <!-- 顶部标题和折叠按钮 -->
     <div class="p-3 flex items-center justify-between">
       <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', (isCollapsed && !isMobile) ? 'opacity-0 w-0 absolute' : 'opacity-100']">
-        MyTips
+        {{ $t('common.appName') }}
         <!-- 更新Badge -->
         <div v-if="updateStore.hasUpdate" class="badge badge-error badge-xs ml-2 animate-pulse">
-          新版本
+          {{ $t('sideNavBar.newVersion') }}
         </div>
       </div>
       <button 
         v-if="!isMobile"
         :class="['btn btn-sm btn-ghost relative z-10', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-xs btn-square w-14 flex justify-center tooltip tooltip-righ' : 'ml-auto']" 
         @click.stop="toggleCollapse" 
-        :title="(isCollapsed && !isMobile) ? '展开侧边栏' : '收起侧边栏'"
+        :title="(isCollapsed && !isMobile) ? $t('sideNavBar.expandSidebar') : $t('sideNavBar.collapseSidebar')"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path v-if="isCollapsed && !isMobile" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -29,7 +29,7 @@
     <!-- 搜索框 -->
     <div :class="[(isCollapsed && !isMobile) ? 'px-2' : 'px-4 mb-2']">
       <div class="relative transition-all duration-300" v-if="!(isCollapsed && !isMobile)">
-        <input type="text" placeholder="搜索..." 
+        <input type="text" :placeholder="$t('sideNavBar.searchPlaceholder')" 
                class="input input-bordered input-sm w-full pl-8" 
                v-model="searchQuery" 
                @input="$emit('search', searchQuery)"
@@ -45,19 +45,19 @@
       <!-- 笔记本区域 -->
       <div class="mb-1">
         <div v-if="!(isCollapsed && !isMobile)" class="flex justify-between items-center mt-2 px-2">
-          <span class="text-base font-bold uppercase text-base-content/80 ">笔记本</span>
+          <span class="text-base font-bold uppercase text-base-content/80 ">{{ $t('sideNavBar.notebooks') }}</span>
           <div class="flex gap-1">
-            <button class="btn btn-xs btn-ghost" @click="refreshAll" title="刷新笔记本">
+            <button class="btn btn-xs btn-ghost" @click="refreshAll" :title="$t('sideNavBar.refreshNotebooks')">
               <svg  xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             </button>
-            <button class="btn btn-xs btn-ghost" @click="$emit('import')" title="导入文档">
+            <button class="btn btn-xs btn-ghost" @click="$emit('import')" :title="$t('sideNavBar.importDocuments')">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
               </svg>  
             </button>
-            <button class="btn btn-xs btn-ghost " @click="$emit('add-notebook')" title="添加笔记本">
+            <button class="btn btn-xs btn-ghost " @click="$emit('add-notebook')" :title="$t('sideNavBar.addNotebook')">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
               </svg>  
@@ -92,8 +92,8 @@
             </template>
           </template>
           <div v-else class="text-center text-base-content/80 py-4">
-            <span v-if="searchQuery">未找到相关笔记本</span>
-            <span v-else>暂无笔记本</span>
+            <span v-if="searchQuery">{{ $t('sideNavBar.noNotebooksFound') }}</span>
+            <span v-else>{{ $t('sideNavBar.noNotebooks') }}</span>
           </div>
         </div>
         
@@ -118,7 +118,7 @@
             class="fixed top-0 left-16 w-64 h-full bg-base-100 shadow-lg z-50 animate-slide-right border-r border-base-300"
             @click.stop>
             <div class="p-3 flex justify-between items-center border-b border-base-300">
-              <span class="font-bold">笔记本</span>
+              <span class="font-bold">{{ $t('sideNavBar.notebooks') }}</span>
               <button class="btn btn-sm btn-ghost" @click.stop="closeNotebooksPopup">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -167,10 +167,10 @@
                 </template>
               </ul>
               <div v-if="notebooks.length === 0" class="px-4 py-2 text-sm text-base-content/80">
-                暂无笔记本
+                {{ $t('sideNavBar.noNotebooks') }}
               </div>
               <div class="p-3 flex justify-end">
-                <button class="btn btn-sm btn-ghost" @click="addNotebookAndClose">添加笔记本</button>
+                <button class="btn btn-sm btn-ghost" @click="addNotebookAndClose">{{ $t('sideNavBar.addNotebook') }}</button>
               </div>
             </div>
           </div>
@@ -180,14 +180,14 @@
       <!-- 标签区域 -->
       <div class="mb-4" v-if="!(isCollapsed && !isMobile)">
         <div class="flex justify-between items-center mb-2 px-2">
-          <span class="text-base font-bold uppercase text-base-content/80">标签</span>
+          <span class="text-base font-bold uppercase text-base-content/80">{{ $t('sideNavBar.tags') }}</span>
           <div class="flex items-center gap-1">
             <!-- 标签搜索按钮和输入框 -->
             <div class="relative">
               <button 
                 class="btn btn-xs btn-ghost" 
                 @click="toggleTagSearchInput"
-                title="搜索标签">
+                :title="$t('sideNavBar.searchTags')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -197,7 +197,7 @@
               <input 
                 v-if="showTagSearchInput"
                 type="text" 
-                placeholder="搜索标签..." 
+                :placeholder="$t('sideNavBar.searchTagsPlaceholder')" 
                 class="absolute right-0 top-0 input input-xs input-bordered w-20 z-10" 
                 v-model="tagSearchQuery"
                 ref="tagSearchInputRef"
@@ -205,12 +205,12 @@
               />
             </div>
             
-            <button class="btn btn-xs btn-ghost" @click="$emit('add-tag')" title="添加标签">
+            <button class="btn btn-xs btn-ghost" @click="$emit('add-tag')" :title="$t('sideNavBar.addTag')">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
               </svg>
             </button>
-            <button class="btn btn-xs btn-ghost" @click="toggleTagsCollapsed" title="展开/折叠标签">
+            <button class="btn btn-xs btn-ghost" @click="toggleTagsCollapsed" :title="$t('sideNavBar.toggleTags')">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path v-if="tagsCollapsed" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
@@ -234,7 +234,7 @@
                 <button 
                   class="hidden group-hover:flex absolute -top-1.5 -right-1.5 bg-error text-white rounded-full w-3.5 h-3.5 items-center justify-center"
                   @click.stop="deleteTag(tag.id)"
-                  title="删除标签">
+                  :title="$t('sideNavBar.deleteTag')">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                   </svg>
@@ -245,7 +245,7 @@
               <div v-if="!tagSearchQuery && tags.length > maxVisibleTags" 
                   class="badge badge-sm badge-neutral cursor-pointer"
                   @click="showAllTags = true">
-                更多 ({{ tags.length - maxVisibleTags }})
+                {{ $t('sideNavBar.moreTags', { count: tags.length - maxVisibleTags }) }}
               </div>
             </template>
             
@@ -261,7 +261,7 @@
                 <button 
                   class="hidden group-hover:flex absolute -top-1.5 -right-1.5 bg-error text-white rounded-full w-3.5 h-3.5 items-center justify-center"
                   @click.stop="deleteTag(tag.id)"
-                  title="删除标签">
+                  :title="$t('sideNavBar.deleteTag')">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
                   </svg>
@@ -272,12 +272,12 @@
               <div v-if="!tagSearchQuery && tags.length > maxVisibleTags" 
                   class="badge badge-sm badge-neutral cursor-pointer"
                   @click="showAllTags = false">
-                收起
+                {{ $t('sideNavBar.collapseTags') }}
               </div>
             </template>
           </div>
           <div v-else class="text-xs text-base-content/80 py-2">
-            暂无标签，请添加
+            {{ $t('sideNavBar.noTags') }}
           </div>
         </div>
       </div>
@@ -289,35 +289,35 @@
       
       <button 
         :class="['btn mb-2', (isCollapsed && !isMobile) ? 'btn-ghost btn-sm btn-square w-14' : 'btn-outline w-full']"
-        :data-tip="(isCollapsed && !isMobile) ? '临时笔记区' : ''"
+        :data-tip="(isCollapsed && !isMobile) ? $t('sideNavBar.clipboardArea') : ''"
         @click="$emit('clipboard')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
-        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">临时笔记区</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">{{ $t('sideNavBar.clipboardArea') }}</span>
       </button>
       
       <button 
         :class="['btn mb-2', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-sm btn-square w-14  flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
-        :data-tip="(isCollapsed && !isMobile) ? 'AI助手' : ''"
+        :data-tip="(isCollapsed && !isMobile) ? $t('sideNavBar.aiAssistant') : ''"
         data-tip-class="tooltip-top-layer"
         @click="$emit('ai-assistant')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
-        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">AI助手</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">{{ $t('sideNavBar.aiAssistant') }}</span>
       </button>
       
       <button 
         :class="['btn', (isCollapsed && !isMobile) ? 'btn btn-ghost btn-sm btn-square w-14 flex justify-center tooltip tooltip-righ' : 'btn-outline w-full']" 
-        :data-tip="(isCollapsed && !isMobile) ? '设置' : ''"
+        :data-tip="(isCollapsed && !isMobile) ? $t('sideNavBar.settings') : ''"
         data-tip-class="tooltip-top-layer"
         @click="$emit('settings')">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
-        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">设置</span>
+        <span v-if="!(isCollapsed && !isMobile)" class="ml-1">{{ $t('sideNavBar.settings') }}</span>
       </button>
     </div>
   </div>
@@ -325,12 +325,15 @@
 
 <script setup lang="ts">
 import { ref, defineEmits, defineProps, watch, onMounted, onBeforeUnmount, computed, nextTick, onActivated } from 'vue'
+import { useI18n } from 'vue-i18n'
 import NotebookItem from './NotebookItem.vue'
 import { showConfirm } from '../services/dialog'
 import { useUIStore } from '../stores/uiStore'
 import { useUpdateStore } from '../stores/updateStore'
 import { useResponsive } from '../composables/useResponsive'
 import { useTipsStore } from '../stores/tipsStore'
+
+const { t } = useI18n()
 
 // 获取UI存储
 const uiStore = useUIStore()
@@ -505,7 +508,7 @@ onActivated(() => {
 // 监听UI存储折叠状态变化
 watch(() => uiStore.settings.isSidebarCollapsed, (newValue) => {
   if (isCollapsed.value !== newValue) {
-    console.log('SideNavBar从UI存储更新折叠状态:', newValue);
+    console.log('SideNavBar updated collapse state from UI store:', newValue);
     isCollapsed.value = newValue;
   }
 });
@@ -525,7 +528,7 @@ function toggleCollapse(event?: Event) {
   
   // 切换状态
   isCollapsed.value = !isCollapsed.value;
-  console.log('侧边栏折叠状态已切换:', isCollapsed.value);
+  console.log('Sidebar collapsed state toggled:', isCollapsed.value);
   
   // 更新UI存储
   uiStore.setSidebarCollapsed(isCollapsed.value);
@@ -542,7 +545,7 @@ function toggleCollapse(event?: Event) {
 }
 
 function selectNotebook(id: string) {
-  console.log('SideNavBar: 选择笔记本:', id)
+  console.log('SideNavBar: selected notebook:', id)
   emit('select-notebook', id)
   closeNotebooksPopup()
 }
@@ -588,7 +591,7 @@ function closeTagsPopup() {
 
 
 function addChildNotebook(parentId: string) {
-  console.log('SideNavBar: 添加子笔记本，父ID:', parentId)
+  console.log('SideNavBar: adding child notebook, parent ID:', parentId)
   emit('add-child-notebook', parentId)
 }
 
@@ -645,10 +648,10 @@ watch(tagSearchQuery, (newValue) => {
 // 添加删除标签的函数
 async function deleteTag(tagId: string) {
   // 确认对话框
-  const confirmed = await showConfirm('确定要删除此标签吗？这将从所有笔记中移除该标签。', {
-    title: '确认删除标签',
-    confirmText: '删除',
-    cancelText: '取消'
+  const confirmed = await showConfirm(t('sideNavBar.deleteTagConfirmation'), {
+    title: t('sideNavBar.deleteTagTitle'),
+    confirmText: t('common.delete'),
+    cancelText: t('common.cancel')
   })
   
   if (confirmed) {

@@ -9,8 +9,8 @@
           </svg>
         </button>
         <div>
-          <h1 class="text-xl font-bold">AI 助手</h1>
-          <p v-if="!isMobile" class="text-base-content/70">在MyTips内与您喜爱的AI模型对话</p>
+          <h1 class="text-xl font-bold">{{ $t('ai.ai_assistant') }}</h1>
+          <p v-if="!isMobile" class="text-base-content/70">{{ $t('ai.ai_assistant_description') }}</p>
         </div>
       </div>
       <div class="flex gap-1 md:gap-2">
@@ -20,7 +20,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
-          <span v-if="!isMobile">角色管理{{ roles.length > 0 ? ` (${roles.length})` : '' }}</span>
+          <span v-if="!isMobile">{{ $t('ai.role_management') }}{{ roles.length > 0 ? ` (${roles.length})` : '' }}</span>
         </button>
         <button class="btn btn-sm" @click="openConversationsList">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 md:mr-1" fill="none" viewBox="0 0 24 24"
@@ -28,14 +28,14 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
-          <span v-if="!isMobile">对话列表 ({{ orderedConversations.length }})</span>
+          <span v-if="!isMobile">{{ $t('ai.conversation_list') }} ({{ orderedConversations.length }})</span>
         </button>
         <button class="btn btn-primary btn-sm" @click="createNewConversation">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 md:mr-1" fill="none" viewBox="0 0 24 24"
             stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
-          <span v-if="!isMobile">新建对话</span>
+          <span v-if="!isMobile">{{ $t('ai.new_conversation') }}</span>
         </button>
       </div>
     </div>
@@ -53,7 +53,7 @@
               <div class="flex-1 overflow-y-auto">
                 <!-- 这里恢复原有对话列表内容 -->
                 <div v-if="isLoadingConversations" class="flex items-center justify-center h-40 text-base-content/70">
-                  <span class="loading loading-spinner loading-lg mr-2"></span> 正在加载对话...
+                  <span class="loading loading-spinner loading-lg mr-2"></span> {{ $t('ai.loading_conversations') }}...
                 </div>
                 <template v-else>
                   <div v-if="orderedConversations.length === 0" class="text-center py-8 text-base-content/70">
@@ -62,20 +62,20 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                     </svg>
-                    <p class="font-medium">暂无对话记录</p>
-                    <p class="text-sm mb-3">您可以创建新的对话开始与AI交流</p>
+                    <p class="font-medium">{{ $t('ai.no_conversation_record') }}</p>
+                    <p class="text-sm mb-3">{{ $t('ai.create_new_conversation') }}</p>
                     <button class="btn btn-sm btn-primary" @click="createNewConversation">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                       </svg>
-                      创建新对话
+                      {{ $t('ai.create_new_conversation') }}
                     </button>
                   </div>
                   <div v-else class="space-y-3">
                     <div class="flex justify-between items-center text-sm text-base-content/70 mb-2 px-1">
-                      <span>{{ orderedConversations.length }}个对话</span>
-                      <span>按更新时间排序</span>
+                      <span>{{ orderedConversations.length }} {{ $t('ai.conversations') }}</span>
+                      <span>{{ $t('ai.sort_by_update_time') }}</span>
                     </div>
                     <div v-for="conversation in orderedConversations" :key="conversation.id"
                       class="p-3 rounded-lg cursor-pointer hover:bg-base-200 transition-colors border border-base-300 flex flex-col"
@@ -83,7 +83,8 @@
                       @click="switchConversation(conversation.id)">
                       <div class="flex justify-between items-start">
                         <div class="flex-1 min-w-0">
-                          <div class="font-medium truncate">{{ conversation.title || '无标题对话' }}</div>
+                          <div class="font-medium truncate">{{ conversation.title || $t('ai.no_title_conversation') }}
+                          </div>
                           <div class="text-xs text-base-content/70 flex items-center flex-wrap">
                             <span class="truncate">{{ getModelNameById(conversation.model) }}</span>
                             <span class="mx-1">•</span>
@@ -129,9 +130,9 @@
         <!-- 聊天界面 -->
         <div class="chat-container bg-base-200 rounded-lg p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
           <!-- 消息显示区域 -->
-          <div class="flex-grow overflow-y-auto mb-4 flex flex-col-reverse" ref="messagesContainer" @mouseup="handleTextSelection"
-            @contextmenu.prevent="handleContextMenu" @scroll="handleScroll">
-            
+          <div class="flex-grow overflow-y-auto mb-4 flex flex-col-reverse" ref="messagesContainer"
+            @mouseup="handleTextSelection" @contextmenu.prevent="handleContextMenu" @scroll="handleScroll">
+
             <!-- 加载中指示器和流式输出 - 在反向布局中显示在顶部 -->
             <div class="space-y-4">
               <!-- 加载中指示器 - 优化显示条件 -->
@@ -179,7 +180,7 @@
                     </div>
                   </div>
                   <div class="chat-header">
-                    {{ message.role === 'user' ? '您' : (message.role_name || getSelectedModelName()) }}
+                    {{ message.role === 'user' ? $t('ai.you') : (message.role_name || getSelectedModelName()) }}
                     <time class="text-xs opacity-50 ml-1">{{ formatTime(message.timestamp) }}</time>
                   </div>
                   <div :class="['chat-bubble', message.failed ? 'border border-red-500' : '']">
@@ -220,17 +221,18 @@
                         <div
                           class="flex p-2 bg-info/10 rounded-lg border border-info/20 cursor-pointer hover:bg-info/20 transition-colors"
                           @click="showNoteDetail(note)">
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-info flex-shrink-0" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2 text-info flex-shrink-0"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                               d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                           </svg>
                           <div class="flex-1 min-w-0">
                             <p class="text-sm font-medium text-info ">{{ note.title }}</p>
-                            <p class="text-xs text-base-content/70">{{ note.tip_type }} • 点击查看详情</p>
+                            <p class="text-xs text-base-content/70">{{ note.tip_type }} • {{
+                              $t('ai.click_to_view_details') }}</p>
                           </div>
-                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info flex-shrink-0 ml-1" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info flex-shrink-0 ml-1"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                           </svg>
                         </div>
@@ -241,52 +243,57 @@
                     <div v-html="formatMessage(message.content)"></div>
                   </div>
                   <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'assistant'">
-                    <button 
-                      class="btn btn-xs btn-ghost" 
+                    <button class="btn btn-xs btn-ghost"
                       :class="{ 'copy-success': copyingStates[`${_messageIndex}_assistant`] === 'success' }"
                       @click="copyToClipboardWithFeedback(message.content, $event)"
-                      :disabled="!!copyingStates[`${_messageIndex}_assistant`]"
-                    >
+                      :disabled="!!copyingStates[`${_messageIndex}_assistant`]">
                       <span v-if="copyingStates[`${_messageIndex}_assistant`] === 'copying'">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none"
+                          viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                       </span>
-                      <span v-else-if="copyingStates[`${_messageIndex}_assistant`] === 'success'" class="flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <span v-else-if="copyingStates[`${_messageIndex}_assistant`] === 'success'"
+                        class="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        已复制
+                        {{ $t('ai.copied') }}
                       </span>
-                      <span v-else>复制</span>
+                      <span v-else>{{ $t('ai.copy') }}</span>
                     </button>
-                    <button class="btn btn-xs btn-ghost" @click="addToNote(message.content)">添加到笔记</button>
+                    <button class="btn btn-xs btn-ghost" @click="addToNote(message.content)">{{ $t('ai.add_to_note')
+                      }}</button>
                   </div>
                   <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'user'">
-                    <button class="btn btn-xs btn-ghost" @click="resendMessage(message)">重发</button>
-                    <button 
-                      class="btn btn-xs btn-ghost" 
+                    <button class="btn btn-xs btn-ghost" @click="resendMessage(message)">{{ $t('ai.resend') }}</button>
+                    <button class="btn btn-xs btn-ghost"
                       :class="{ 'copy-success': copyingStates[`${_messageIndex}_user`] === 'success' }"
                       @click="copyToClipboardWithFeedback(message.content, $event)"
-                      :disabled="!!copyingStates[`${_messageIndex}_user`]"
-                    >
+                      :disabled="!!copyingStates[`${_messageIndex}_user`]">
                       <span v-if="copyingStates[`${_messageIndex}_user`] === 'copying'">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" fill="none"
+                          viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                       </span>
-                      <span v-else-if="copyingStates[`${_messageIndex}_user`] === 'success'" class="flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <span v-else-if="copyingStates[`${_messageIndex}_user`] === 'success'"
+                        class="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        已复制
+                        {{ $t('ai.copied') }}
                       </span>
-                      <span v-else>复制</span>
+                      <span v-else>{{ $t('ai.copy') }}</span>
                     </button>
                   </div>
                   <div class="chat-footer opacity-80 flex gap-1" v-if="message.failed && message.role === 'user'">
-                    <span class="text-red-500">发送失败</span>
-                    <button class="btn btn-xs btn-error" @click="sendMessage(message)">重新发送</button>
+                    <span class="text-red-500">{{ $t('ai.send_failed') }}</span>
+                    <button class="btn btn-xs btn-error" @click="sendMessage(message)">{{ $t('ai.resend') }}</button>
                   </div>
                 </div>
               </template>
@@ -302,11 +309,12 @@
                     d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span class="text-sm font-medium">
-                  为了提升性能，仅显示最新的 {{ MAX_VISIBLE_MESSAGES }} 条消息 (共 {{ messages.length }} 条)
+                  {{ $t('ai.only_show_latest_messages') }} {{ MAX_VISIBLE_MESSAGES }} {{ $t('ai.messages') }} ({{
+                  messages.length }} {{ $t('ai.messages') }})
                 </span>
               </div>
               <p class="text-xs text-warning-content/70 mt-1">
-                较早的消息已隐藏，但仍保存在对话历史中
+                {{ $t('ai.earlier_messages_hidden') }}
               </p>
             </div>
 
@@ -318,8 +326,8 @@
                 <path stroke-linecap="round" stroke-linejoin="round"
                   d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
               </svg>
-              <p class="text-lg">选择AI模型开始对话</p>
-              <p class="text-sm">您的对话仅保存在本地，不会上传到服务器</p>
+              <p class="text-lg">{{ $t('ai.select_ai_model_to_start_conversation') }}</p>
+              <p class="text-sm">{{ $t('ai.your_conversation_is_only_saved_locally') }}</p>
             </div>
           </div>
 
@@ -328,14 +336,14 @@
             <!-- 已上传文件预览区域 -->
             <div v-if="uploadedFiles.length > 0" class="uploaded-files-preview bg-base-100 rounded-lg p-3">
               <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-medium">已选择文件 ({{ uploadedFiles.length }})</span>
+                <span class="text-sm font-medium">{{ $t('ai.selected_files') }} ({{ uploadedFiles.length }})</span>
                 <button class="btn btn-xs btn-ghost" @click="clearAllFiles">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  清空
+                  {{ $t('ai.clear') }}
                 </button>
               </div>
               <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
@@ -382,11 +390,11 @@
                 <div class="flex items-center gap-2">
                   <!-- AI模型选择 -->
                   <select v-model="selectedModel" class="select select-sm select-bordered" @change="handleModelChange">
-                    <option disabled value="">选择AI模型</option>
+                    <option disabled value="">{{ $t('ai.select_ai_model') }}</option>
                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
                       {{ model.name }}
                     </option>
-                    <option value="__configure__"> - 配置模型</option>
+                    <option value="__configure__"> - {{ $t('ai.configure_model') }}</option>
                   </select>
 
                   <!-- 设置按钮 - 跳转到设置页面 -->
@@ -409,14 +417,14 @@
                         </svg>
                       </button>
                     </div>
-                    <button class="btn btn-xs btn-outline tooltip tooltip-bottom flex items-center" data-tip="选择角色"
-                      @click="openRoleManager">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{'mr-1': !isMobile}" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
+                    <button class="btn btn-xs btn-outline tooltip tooltip-bottom flex items-center"
+                      :data-tip="$t('ai.select_role')" @click="openRoleManager">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{ 'mr-1': !isMobile }" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      <span v-if="!isMobile">{{ selectedRole ? '更换角色' : '选择角色' }}</span>
+                      <span v-if="!isMobile">{{ selectedRole ? $t('ai.change_role') : $t('ai.select_role') }}</span>
                     </button>
                   </div>
 
@@ -425,8 +433,8 @@
                     <input ref="fileInput" type="file" multiple
                       accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/bmp,image/tiff,image/x-icon,.jpg,.jpeg,.png,.apng,.gif,.webp,.bmp,.dib,.tiff,.tif,.ico,.icns,.sgi,.j2c,.j2k,.jp2,.jpc,.jpf,.jpx,.pdf,.doc,.docx,.txt,.md,.json,.csv,.xlsx,.xls"
                       @change="handleFileUpload" class="hidden" />
-                    <button class="btn btn-sm btn-ghost tooltip tooltip-top" data-tip="上传文件" @click="triggerFileUpload"
-                      :disabled="isLoading || isStreaming">
+                    <button class="btn btn-sm btn-ghost tooltip tooltip-top" :data-tip="$t('ai.upload_file')"
+                      @click="triggerFileUpload" :disabled="isLoading || isStreaming">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -439,28 +447,31 @@
                 <!-- 右侧工具 -->
                 <div v-if="!isMobile" class="flex items-center gap-1">
                   <!-- 工具按钮 -->
-                  <button class="btn btn-sm btn-outline" @click="createNewConversation" title="新建对话">
+                  <button class="btn btn-sm btn-outline" @click="createNewConversation"
+                    :title="$t('ai.new_conversation')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    新建对话
+                    {{ $t('ai.new_conversation') }}
                   </button>
-                  <button class="btn btn-sm btn-outline" @click="clearMessages" title="清空对话历史">
+                  <button class="btn btn-sm btn-outline" @click="clearMessages"
+                    :title="$t('ai.clear_conversation_history')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    清空对话
+                    {{ $t('ai.clear_conversation') }}
                   </button>
-                  <button class="btn btn-sm btn-outline" @click="exportMessages" title="导出对话内容">
+                  <button class="btn btn-sm btn-outline" @click="exportMessages"
+                    :title="$t('ai.export_conversation_content')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    导出对话
+                    {{ $t('ai.export_conversation') }}
                   </button>
                 </div>
               </div>
@@ -472,8 +483,8 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <span>您尚未配置{{ getSelectedModelName() }}的API密钥。<button @click="goToAISettings"
-                    class="link link-primary">前往设置</button></span>
+                <span>{{ $t('ai.you_have_not_configured_the_api_key_for') }} {{ getSelectedModelName() }}。<button
+                    @click="goToAISettings" class="link link-primary">{{ $t('ai.go_to_settings') }}</button></span>
               </div>
 
               <!-- 文本输入区域 -->
@@ -487,7 +498,8 @@
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
-                    <span class="text-sm font-medium text-primary">当前角色：{{ selectedRole.name }}</span>
+                    <span class="text-sm font-medium text-primary">{{ $t('ai.current_role') }}：{{ selectedRole.name
+                      }}</span>
                   </div>
                   <p class="text-xs text-base-content/70 line-clamp-2">{{ selectedRole.description }}</p>
                 </div>
@@ -504,13 +516,16 @@
                   style="bottom: 100%; margin-bottom: 8px;" @click.stop>
                   <!-- 搜索框 -->
                   <div class="p-2 border-b border-base-300">
-                    <input v-model="noteSearchQuery" type="text" placeholder="搜索笔记...（回车选择第一个，ESC关闭）"
+                    <input v-model="noteSearchQuery" type="text"
+                      :placeholder="`${$t('ai.search_notes')}...（${$t('ai.enter_to_select_first')}，ESC${$t('ai.close')}）`"
                       class="input input-xs input-bordered w-full" @keydown.enter.prevent="selectFirstNote"
                       @keydown.escape.prevent="hideNoteSelector" @keydown.tab.prevent="hideNoteSelector"
                       ref="noteSearchInput" />
                     <div class="text-xs text-base-content/50 mt-1 flex justify-between">
-                      <span>显示 {{ filteredNotes.length }} 篇笔记{{ noteSearchQuery.trim() ? ' (搜索结果)' : ' (最新)' }}</span>
-                      <span>Enter选择 • ESC关闭</span>
+                      <span>{{ $t('ai.display') }} {{ filteredNotes.length }} {{ $t('ai.notes') }}{{
+                        noteSearchQuery.trim() ?
+                          ' (' + $t('ai.search_results') + ')' : ' (' + $t('ai.latest') + ')' }}</span>
+                      <span>{{ $t('ai.enter_to_select') }} • ESC{{ $t('ai.close') }}</span>
                     </div>
                   </div>
 
@@ -530,7 +545,8 @@
                         <div class="flex-1 min-w-0">
                           <div class="font-medium text-sm truncate">{{ note.title }}</div>
                           <div class="text-xs text-base-content/70 line-clamp-2 mt-1">
-                            {{ (note.content || '').substring(0, 100) }}{{ (note.content || '').length > 100 ? '...' : '' }}
+                            {{ (note.content || '').substring(0, 100) }}{{ (note.content || '').length > 100 ? '...' :
+                            '' }}
                           </div>
                           <div class="flex items-center gap-2 mt-1">
                             <span class="text-xs text-base-content/50">{{ note.tip_type }}</span>
@@ -547,7 +563,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <p class="text-sm">{{ tipsStore.tips.length === 0 ? '暂无笔记，请先创建一些笔记' : '没有找到匹配的笔记' }}</p>
+                      <p class="text-sm">{{ tipsStore.tips.length === 0 ? $t('ai.no_notes_please_create_some_notes') :
+                        $t('ai.no_matching_notes') }}</p>
                     </div>
                   </div>
                 </div>
@@ -556,7 +573,7 @@
                 <button @click="isStreaming ? cancelGeneration() : sendMessage()" class="btn absolute right-5 bottom-5"
                   :class="isStreaming ? 'btn-error' : 'btn-primary'"
                   :disabled="(!userInput.trim() && uploadedFiles.length === 0 && !isStreaming) || !selectedModel || (!selectedModel.startsWith('custom_') && !hasApiKey)"
-                  :title="isStreaming ? '取消生成' : '发送消息'">
+                  :title="isStreaming ? $t('ai.cancel_generation') : $t('ai.send_message')">
                   <!-- 发送图标（右箭头） -->
                   <svg v-if="!isStreaming" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                     viewBox="0 0 24 24" stroke="currentColor">
@@ -573,364 +590,385 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- 右侧笔记区域 (仅桌面) -->
-      <transition name="fade-slide">
-        <div class="w-1/3 min-w-[350px] flex-col p-4 overflow-hidden hidden md:flex" v-show="showNotePanel && !isMobile">
-          <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold">笔记</h2>
-            <div class="flex gap-2">
-              <button class="btn btn-sm" @click="showNotePanel = false">关闭</button>
-              <button class="btn btn-sm btn-primary" @click="saveNoteAsTip"
-                :disabled="!noteTitle.trim() || isNoteSaving">
-                <span v-if="isNoteSaving" class="loading loading-spinner loading-xs"></span>
-                保存笔记
-              </button>
-            </div>
-          </div>
-
-          <div class="form-control w-full mb-4">
-            <label class="label">
-              <span class="label-text">笔记标题</span>
-            </label>
-            <input type="text" placeholder="输入笔记标题..." class="input input-bordered w-full" v-model="noteTitle" />
-          </div>
-
-          <div class="flex-1 overflow-hidden flex flex-col">
-            <div class="flex justify-between items-center mb-2">
-              <label class="label">
-                <span class="label-text">笔记内容 (支持Markdown格式)</span>
-              </label>
-              <div class="btn-group btn-group-sm">
-                <button class="btn btn-sm " :class="{ 'btn-active': !isNotePreviewMode }"
-                  @click="() => { console.log('切换到编辑模式'); isNotePreviewMode = false }" title="编辑模式">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-                <button class="btn btn-sm " :class="{ 'btn-active': isNotePreviewMode }"
-                  @click="() => { console.log('切换到预览模式', 'noteContent:', noteContent); isNotePreviewMode = true }"
-                  title="预览模式">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
+        <!-- 右侧笔记区域 (仅桌面) -->
+        <transition name="fade-slide">
+          <div class="w-1/3 min-w-[350px] flex-col p-4 overflow-hidden hidden md:flex"
+            v-show="showNotePanel && !isMobile">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-xl font-bold">{{ $t('ai.notes') }}</h2>
+              <div class="flex gap-2">
+                <button class="btn btn-sm" @click="showNotePanel = false">{{ $t('ai.close') }}</button>
+                <button class="btn btn-sm btn-primary" @click="saveNoteAsTip"
+                  :disabled="!noteTitle.trim() || isNoteSaving">
+                  <span v-if="isNoteSaving" class="loading loading-spinner loading-xs"></span>
+                  {{ $t('ai.save_note') }}
                 </button>
               </div>
             </div>
 
-            <!-- 编辑模式 -->
-            <textarea v-if="!isNotePreviewMode" v-model="noteContent" placeholder="可以从左侧AI对话添加内容到这里..."
-              class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+            <div class="form-control w-full mb-4">
+              <label class="label">
+                <span class="label-text">{{ $t('ai.note_title') }}</span>
+              </label>
+              <input type="text" :placeholder="$t('ai.enter_note_title') + '...'" class="input input-bordered w-full"
+                v-model="noteTitle" />
+            </div>
 
-            <!-- 预览模式 -->
-            <div v-else
-              class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
-              v-html="renderedNoteContent"></div>
-          </div>
-        </div>
-      </transition>
-    </div>
-
-    <!-- 笔记保存成功提示 -->
-    <div class="toast" v-if="showSaveSuccess">
-      <div class="alert alert-success">
-        <span>笔记保存成功!</span>
-      </div>
-    </div>
-
-
-
-
-    <!-- 编辑对话标题对话框 -->
-    <dialog ref="editTitleModal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">编辑对话标题</h3>
-
-        <div class="form-control w-full">
-          <input type="text" v-model="editingTitle" placeholder="输入对话标题" class="input input-bordered w-full" />
-        </div>
-
-        <div class="modal-action">
-          <button class="btn" @click="closeEditTitleModal">取消</button>
-          <button class="btn btn-primary" @click="saveEditedTitle">保存</button>
-        </div>
-      </div>
-    </dialog>
-
-    <!-- 删除确认对话框 -->
-    <dialog ref="deleteConfirmModal" class="modal">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">确认删除</h3>
-        <p>确定要删除这个对话吗？此操作无法撤销。</p>
-        <div class="modal-action">
-          <button class="btn" @click="closeDeleteConfirmModal">取消</button>
-          <button class="btn btn-error" @click="confirmDelete">删除</button>
-        </div>
-      </div>
-    </dialog>
-
-
-
-    <!-- 自定义右键菜单 -->
-    <div v-if="showContextMenu"
-      class="custom-context-menu absolute bg-base-100 shadow-lg rounded-lg overflow-hidden z-50"
-      :style="{ top: contextMenuPos.y + 'px', left: contextMenuPos.x + 'px' }">
-      <ul class="menu menu-sm p-1">
-        <li v-if="selectedText">
-          <button @click="addSelectedTextToNote" class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            添加到笔记
-          </button>
-        </li>
-        <li>
-          <button @click="copySelectedText" class="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-            </svg>
-            复制选中内容
-          </button>
-        </li>
-      </ul>
-    </div>
-
-    <!-- 角色管理对话框 -->
-    <dialog ref="roleManagerModal" class="modal">
-      <div class="modal-box w-11/12 max-w-4xl">
-        <h3 class="font-bold text-lg mb-4">角色管理</h3>
-
-        <!-- 角色列表 -->
-        <div v-if="!showRoleForm" class="space-y-4">
-          <div class="flex justify-between items-center">
-            <span class="text-sm text-base-content/70">
-              {{ roles.length }} 个角色
-            </span>
-            <button class="btn btn-sm btn-primary" @click="openRoleForm()">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              新建角色
-            </button>
-          </div>
-
-          <!-- 加载状态 -->
-          <div v-if="isLoadingRoles" class="flex items-center justify-center py-8">
-            <span class="loading loading-spinner loading-lg mr-2"></span>
-            正在加载角色...
-          </div>
-
-          <!-- 角色列表 -->
-          <div v-else-if="roles.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
-            <div v-for="role in roles" :key="role.id"
-              class="role-card card bg-base-200 shadow-sm border border-base-300">
-              <div class="card-body p-4">
-                <div class="flex justify-between items-start mb-2">
-                  <h4 class="card-title text-base">{{ role.name }}</h4>
-                  <div class="flex gap-1">
-                    <button class="btn btn-xs btn-ghost" @click="openRoleForm(role)">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button class="btn btn-xs btn-error" @click="confirmDeleteRole(role.id)">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <p class="text-sm text-base-content/70 line-clamp-3">{{ role.description }}</p>
-                <div class="card-actions justify-end mt-3">
-                  <button class="btn btn-xs btn-outline" @click="selectRole(role); closeRoleManager()">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
+            <div class="flex-1 overflow-hidden flex flex-col">
+              <div class="flex justify-between items-center mb-2">
+                <label class="label">
+                  <span class="label-text">{{ $t('ai.note_content') }} ({{ $t('ai.support_markdown_format') }})</span>
+                </label>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-sm " :class="{ 'btn-active': !isNotePreviewMode }"
+                    @click="() => { console.log('切换 到编辑模式'); isNotePreviewMode = false }" :title="$t('ai.edit_mode')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
-                    选择此角色
+                  </button>
+                  <button class="btn btn-sm " :class="{ 'btn-active': isNotePreviewMode }"
+                    @click="() => { console.log('切换到预览模式', 'noteContent:', noteContent); isNotePreviewMode = true }"
+                    :title="$t('ai.preview_mode')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
                   </button>
                 </div>
               </div>
+
+              <!-- 编辑模式 -->
+              <textarea v-if="!isNotePreviewMode" v-model="noteContent"
+                :placeholder="$t('ai.add_content_from_left_ai_conversation') + '...'"
+                class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+
+              <!-- 预览模式 -->
+              <div v-else
+                class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
+                v-html="renderedNoteContent"></div>
             </div>
           </div>
+        </transition>
+      </div>
 
-          <!-- 空状态 -->
-          <div v-else class="text-center py-12">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-base-content/30" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            <h3 class="text-lg font-medium mb-2">暂无角色</h3>
-            <p class="text-base-content/70 mb-4">创建您的第一个AI角色来开始角色扮演对话</p>
-            <button class="btn btn-primary" @click="openRoleForm()">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              创建角色
-            </button>
-          </div>
-        </div>
-
-        <!-- 角色表单 -->
-        <div v-if="showRoleForm" class="space-y-4">
-          <div class="flex items-center gap-2 mb-4">
-            <button class="btn btn-sm btn-ghost" @click="closeRoleForm">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-            </button>
-            <h4 class="text-lg font-medium">
-              {{ editingRole ? '编辑角色' : '创建新角色' }}
-            </h4>
-          </div>
-
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">角色名称</span>
-            </label>
-            <input type="text" v-model="newRoleName" placeholder="例如：编程导师、创意写手、数据分析师..."
-              class="input input-bordered w-full" maxlength="50" />
-            <label class="label">
-              <span class="label-text-alt">{{ newRoleName.length }}/50</span>
-            </label>
-          </div>
-
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">角色描述</span>
-            </label>
-            <textarea v-model="newRoleDescription"
-              placeholder="详细描述这个角色的特点、专长、说话风格等。例如：你是一位经验丰富的编程导师，擅长用简单易懂的方式解释复杂的编程概念..."
-              class="textarea textarea-bordered w-full h-32 resize-none" maxlength="100000"></textarea>
-            <label class="label">
-              <span class="label-text-alt">{{ newRoleDescription.length }}/100000</span>
-            </label>
-          </div>
-
-          <div class="flex gap-2 pt-4">
-            <button class="btn btn-ghost" @click="closeRoleForm">取消</button>
-            <button class="btn btn-primary" @click="saveRole"
-              :disabled="!newRoleName.trim() || !newRoleDescription.trim()">
-              {{ editingRole ? '保存更改' : '创建角色' }}
-            </button>
-          </div>
-        </div>
-
-        <div class="modal-action" v-if="!showRoleForm">
-          <button class="btn" @click="closeRoleManager">关闭</button>
+      <!-- 笔记保存成功提示 -->
+      <div class="toast" v-if="showSaveSuccess">
+        <div class="alert alert-success">
+          <span>{{ $t('ai.note_saved_successfully') }}</span>
         </div>
       </div>
-    </dialog>
 
-    <!-- 笔记详情显示对话框 -->
-    <dialog ref="noteDetailModal" class="modal">
-      <div class="modal-box max-w-4xl">
-        <h3 class="font-bold text-lg mb-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24"
-            stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {{ currentNoteDetail?.title }}
-        </h3>
 
-        <div v-if="currentNoteDetail" class="space-y-4">
-          <div class="flex items-center gap-4 text-sm text-base-content/70">
-            <span class="badge badge-outline">{{ currentNoteDetail.tip_type }}</span>
-            <span>{{ formatDate(currentNoteDetail.updated_at || Date.now()) }}</span>
+
+
+      <!-- 编辑对话标题对话框 -->
+      <dialog ref="editTitleModal" class="modal">
+        <div class="modal-box">
+          <h3 class="font-bold text-lg mb-4">{{ $t('ai.edit_conversation_title') }}</h3>
+
+          <div class="form-control w-full">
+            <input type="text" v-model="editingTitle" :placeholder="$t('ai.enter_conversation_title')"
+              class="input input-bordered w-full" />
           </div>
 
-          <div class="divider"></div>
-
-          <div class="prose max-w-none">
-            <div v-html="formatMessage(currentNoteDetail.content)"></div>
+          <div class="modal-action">
+            <button class="btn" @click="closeEditTitleModal">{{ $t('ai.cancel') }}</button>
+            <button class="btn btn-primary" @click="saveEditedTitle">{{ $t('ai.save') }}</button>
           </div>
         </div>
+      </dialog>
 
-        <div class="modal-action">
-          <button class="btn" @click="closeNoteDetail">关闭</button>
-          <button class="btn btn-outline" @click="copyNoteContent">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-            </svg>
-            复制内容
-          </button>
+      <!-- 删除确认对话框 -->
+      <dialog ref="deleteConfirmModal" class="modal">
+        <div class="modal-box">
+          <h3 class="font-bold text-lg mb-4">{{ $t('ai.confirm_delete') }}</h3>
+          <p>{{ $t('ai.confirm_delete_conversation') }}</p>
+          <div class="modal-action">
+            <button class="btn" @click="closeDeleteConfirmModal">{{ $t('ai.cancel') }}</button>
+            <button class="btn btn-error" @click="confirmDelete">{{ $t('ai.delete') }}</button>
+          </div>
         </div>
+      </dialog>
+
+
+
+      <!-- 自定义右键菜单 -->
+      <div v-if="showContextMenu"
+        class="custom-context-menu absolute bg-base-100 shadow-lg rounded-lg overflow-hidden z-50"
+        :style="{ top: contextMenuPos.y + 'px', left: contextMenuPos.x + 'px' }">
+        <ul class="menu menu-sm p-1">
+          <li v-if="selectedText">
+            <button @click="addSelectedTextToNote" class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              {{ $t('ai.add_to_note') }}
+            </button>
+          </li>
+          <li>
+            <button @click="copySelectedText" class="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              {{ $t('ai.copy_selected_content') }}
+            </button>
+          </li>
+        </ul>
       </div>
-    </dialog>
 
-    <!-- 笔记面板 (移动端模态框) -->
-    <dialog ref="notePanelModal" class="modal">
-      <div class="modal-box w-11/12 max-w-5xl">
-        <div class="flex flex-col h-[80vh]">
-          <div class="flex justify-between items-center mb-4 flex-shrink-0">
-            <h2 class="text-xl font-bold">笔记</h2>
-            <div class="flex gap-2">
-              <button class="btn btn-sm" @click="closeNotePanelModal">关闭</button>
-              <button class="btn btn-sm btn-primary" @click="saveNoteAsTip" :disabled="!noteTitle.trim() || isNoteSaving">
-                <span v-if="isNoteSaving" class="loading loading-spinner loading-xs"></span>
-                保存笔记
+      <!-- 角色管理对话框 -->
+      <dialog ref="roleManagerModal" class="modal">
+        <div class="modal-box w-11/12 max-w-4xl">
+          <h3 class="font-bold text-lg mb-4">{{ $t('ai.role_management') }}</h3>
+
+          <!-- 角色列表 -->
+          <div v-if="!showRoleForm" class="space-y-4">
+            <div class="flex justify-between items-center">
+              <span class="text-sm text-base-content/70">
+                {{ roles.length }} {{ $t('ai.roles') }}
+              </span>
+              <button class="btn btn-sm btn-primary" @click="openRoleForm()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                {{ $t('ai.new_role') }}
+              </button>
+            </div>
+
+            <!-- 加载状态 -->
+            <div v-if="isLoadingRoles" class="flex items-center justify-center py-8">
+              <span class="loading loading-spinner loading-lg mr-2"></span>
+              {{ $t('ai.loading_roles') }}...
+            </div>
+
+            <!-- 角色列表 -->
+            <div v-else-if="roles.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+              <div v-for="role in roles" :key="role.id"
+                class="role-card card bg-base-200 shadow-sm border border-base-300">
+                <div class="card-body p-4">
+                  <div class="flex justify-between items-start mb-2">
+                    <h4 class="card-title text-base">{{ role.name }}</h4>
+                    <div class="flex gap-1">
+                      <button class="btn btn-xs btn-ghost" @click="openRoleForm(role)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button class="btn btn-xs btn-error" @click="confirmDeleteRole(role.id)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+                          stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <p class="text-sm text-base-content/70 line-clamp-3">{{ role.description }}</p>
+                  <div class="card-actions justify-end mt-3">
+                    <button class="btn btn-xs btn-outline" @click="selectRole(role); closeRoleManager()">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {{ $t('ai.select_this_role') }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 空状态 -->
+            <div v-else class="text-center py-12">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-base-content/30" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              <h3 class="text-lg font-medium mb-2">{{ $t('ai.no_roles') }}</h3>
+              <p class="text-base-content/70 mb-4">{{
+                $t('ai.create_your_first_ai_role_to_start_role_playing_conversation') }}
+              </p>
+              <button class="btn btn-primary" @click="openRoleForm()">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                {{ $t('ai.create_role') }}
               </button>
             </div>
           </div>
 
-          <div class="form-control w-full mb-4 flex-shrink-0">
-            <label class="label">
-              <span class="label-text">笔记标题</span>
-            </label>
-            <input type="text" placeholder="输入笔记标题..." class="input input-bordered w-full" v-model="noteTitle" />
+          <!-- 角色表单 -->
+          <div v-if="showRoleForm" class="space-y-4">
+            <div class="flex items-center gap-2 mb-4">
+              <button class="btn btn-sm btn-ghost" @click="closeRoleForm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
+              <h4 class="text-lg font-medium">
+                {{ editingRole ? $t('ai.edit_role') : $t('ai.create_new_role') }}
+              </h4>
+            </div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">{{ $t('ai.role_name') }}</span>
+              </label>
+              <input type="text" v-model="newRoleName"
+                :placeholder="`${$t('ai.for_example')}：${$t('ai.programming_mentor')}, ${$t('ai.creative_writer')}, ${$t('ai.data_analyst')}...`"
+                class="input input-bordered w-full" maxlength="50" />
+              <label class="label">
+                <span class="label-text-alt">{{ newRoleName.length }}/50</span>
+              </label>
+            </div>
+
+            <div class="form-control">
+              <label class="label">
+                <span class="label-text">{{ $t('ai.role_description') }}</span>
+              </label>
+              <textarea v-model="newRoleDescription"
+                :placeholder="`${$t('ai.describe_the_characteristics_of_the_role')}。${$t('ai.for_example')}：${$t('ai.you_are_an_experienced_programming_mentor')}, ${$t('ai.creative_writer')}, ${$t('ai.data_analyst')}...`"
+                class="textarea textarea-bordered w-full h-32 resize-none" maxlength="100000"></textarea>
+              <label class="label">
+                <span class="label-text-alt">{{ newRoleDescription.length }}/100000</span>
+              </label>
+            </div>
+
+            <div class="flex gap-2 pt-4">
+              <button class="btn btn-ghost" @click="closeRoleForm">{{ $t('ai.cancel') }}</button>
+              <button class="btn btn-primary" @click="saveRole"
+                :disabled="!newRoleName.trim() || !newRoleDescription.trim()">
+                {{ editingRole ? $t('ai.save_changes') : $t('ai.create_role') }}
+              </button>
+            </div>
           </div>
 
-          <div class="flex-1 overflow-hidden flex flex-col">
-            <div class="flex justify-between items-center mb-2 flex-shrink-0">
-              <label class="label">
-                <span class="label-text">笔记内容 (支持Markdown)</span>
-              </label>
-              <div class="btn-group btn-group-sm">
-                <button class="btn btn-sm" :class="{ 'btn-active': !isNotePreviewMode }" @click="isNotePreviewMode = false" title="编辑模式">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                </button>
-                <button class="btn btn-sm" :class="{ 'btn-active': isNotePreviewMode }" @click="isNotePreviewMode = true" title="预览模式">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
+          <div class="modal-action" v-if="!showRoleForm">
+            <button class="btn" @click="closeRoleManager">{{ $t('ai.close') }}</button>
+          </div>
+        </div>
+      </dialog>
+
+      <!-- 笔记详情显示对话框 -->
+      <dialog ref="noteDetailModal" class="modal">
+        <div class="modal-box max-w-4xl">
+          <h3 class="font-bold text-lg mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-2" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            {{ currentNoteDetail?.title }}
+          </h3>
+
+          <div v-if="currentNoteDetail" class="space-y-4">
+            <div class="flex items-center gap-4 text-sm text-base-content/70">
+              <span class="badge badge-outline">{{ currentNoteDetail.tip_type }}</span>
+              <span>{{ formatDate(currentNoteDetail.updated_at || Date.now()) }}</span>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="prose max-w-none">
+              <div v-html="formatMessage(currentNoteDetail.content)"></div>
+            </div>
+          </div>
+
+          <div class="modal-action">
+            <button class="btn" @click="closeNoteDetail">{{ $t('ai.close') }}</button>
+            <button class="btn btn-outline" @click="copyNoteContent">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+              {{ $t('ai.copy_content') }}
+            </button>
+          </div>
+        </div>
+      </dialog>
+
+      <!-- 笔记面板 (移动端模态框) -->
+      <dialog ref="notePanelModal" class="modal">
+        <div class="modal-box w-11/12 max-w-5xl">
+          <div class="flex flex-col h-[80vh]">
+            <div class="flex justify-between items-center mb-4 flex-shrink-0">
+              <h2 class="text-xl font-bold">{{ $t('ai.notes') }}</h2>
+              <div class="flex gap-2">
+                <button class="btn btn-sm" @click="closeNotePanelModal">{{ $t('ai.close') }}</button>
+                <button class="btn btn-sm btn-primary" @click="saveNoteAsTip"
+                  :disabled="!noteTitle.trim() || isNoteSaving">
+                  <span v-if="isNoteSaving" class="loading loading-spinner loading-xs"></span>
+                  {{ $t('ai.save_note') }}
                 </button>
               </div>
             </div>
 
-            <!-- 编辑模式 -->
-            <textarea v-if="!isNotePreviewMode" v-model="noteContent" placeholder="可以从左侧AI对话添加内容到这里..." class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+            <div class="form-control w-full mb-4 flex-shrink-0">
+              <label class="label">
+                <span class="label-text">{{ $t('ai.note_title') }}</span>
+              </label>
+              <input type="text" :placeholder="$t('ai.enter_note_title') + '...'" class="input input-bordered w-full"
+                v-model="noteTitle" />
+            </div>
 
-            <!-- 预览模式 -->
-            <div v-else class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300" v-html="renderedNoteContent"></div>
+            <div class="flex-1 overflow-hidden flex flex-col">
+              <div class="flex justify-between items-center mb-2 flex-shrink-0">
+                <label class="label">
+                  <span class="label-text">{{ $t('ai.note_content') }} ({{ $t('ai.support_markdown_format') }})</span>
+                </label>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-sm" :class="{ 'btn-active': !isNotePreviewMode }"
+                    @click="isNotePreviewMode = false" :title="$t('ai.edit_mode')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button class="btn btn-sm" :class="{ 'btn-active': isNotePreviewMode }"
+                    @click="isNotePreviewMode = true" :title="$t('ai.preview_mode')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                      stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 编辑模式 -->
+              <textarea v-if="!isNotePreviewMode" v-model="noteContent"
+                :placeholder="$t('ai.add_content_from_left_ai_conversation') + '...'"
+                class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
+
+              <!-- 预览模式 -->
+              <div v-else
+                class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
+                v-html="renderedNoteContent"></div>
+            </div>
           </div>
         </div>
-      </div>
-    </dialog>
+      </dialog>
+    </div>
   </div>
 </template>
 
@@ -948,15 +986,43 @@ import Prism from 'prismjs'
 import { Marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
 import { listen } from '@tauri-apps/api/event'
+import { useI18n } from 'vue-i18n'
+import { useAIStore } from '../stores/aiStore'
+import { storeToRefs } from 'pinia'
+import { open } from '@tauri-apps/plugin-shell'
 
+
+const { t } = useI18n()
+const aiStore = useAIStore()
 
 const router = useRouter()
 const tipsStore = useTipsStore()
+
 
 // --- Responsive state ---
 const windowWidth = ref(window.innerWidth)
 const isMobile = computed(() => windowWidth.value < 768)
 const onResize = () => { windowWidth.value = window.innerWidth }
+
+// 全局配置变更监听器
+let unlistenSettings: any = null
+let themeObserver: MutationObserver | null = null
+
+// 重新加载AI配置的函数
+const reloadAIConfig = async () => {
+  console.log('Reloading AI config...')
+  try {
+    const config = await getAIConfig()
+    if (config && config.providers) {
+      aiConfigs.value = config.providers
+      console.log('AI configs reloaded:', aiConfigs.value)
+    }
+    await checkApiKey()
+    await loadCustomModels() // 重新加载自定义模型列表
+  } catch (error) {
+    console.error('Failed to reload AI config:', error)
+  }
+}
 
 // 返回主页
 const goBack = () => {
@@ -1011,7 +1077,7 @@ const isLoadingConversations = ref(false)
 const isLoadingMessages = ref(false)
 
 // 持久化状态
-const selectedModel = ref(localStorage.getItem('ai-selected-model') || 'gemini')
+const { selectedModel } = storeToRefs(aiStore)
 const hasApiKey = ref(true)
 const aiConfigs = ref<Record<string, any>>({})
 const userInput = ref('')
@@ -1086,10 +1152,10 @@ const availableModels = ref([
   { id: 'chatgpt', name: 'OpenAI ChatGPT' },
   { id: 'gemini', name: 'Google Gemini' },
   { id: 'deepseek', name: 'DeepSeek' },
-  { id: 'qwen', name: '阿里通义千问' },
+  { id: 'qwen', name: 'Qwen' },
   { id: 'claude', name: 'Anthropic Claude' },
-  { id: 'doubao', name: '字节豆包' },
-  { id: 'grok', name: 'xAI Grok' },
+  { id: 'doubao', name: 'Doubao' },
+  { id: 'grok', name: 'Grok' },
 ])
 
 // 加载自定义模型列表
@@ -1111,7 +1177,7 @@ async function loadCustomModels(): Promise<void> {
     customModelList.forEach(model => {
       availableModels.value.push({
         id: `custom_${model.id}`,
-        name: `${model.name} (自定义)`
+        name: `${model.name} (${t('ai.custom')})`
       })
     })
 
@@ -1215,16 +1281,16 @@ async function loadMessages(conversationId: string) {
     })
 
     console.log(`加载到 ${messages.value.length} 条消息`)
-    
-      // 加载消息后滚动到底部 - 适配反向布局
-  await nextTick()
-  if (messagesContainer.value && messages.value.length > 0) {
-    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-    messagesContainer.value.scrollTop = 0
-    // 确保滚动状态正确
-    shouldAutoScroll.value = true
-    isAtBottom.value = true
-  }
+
+    // 加载消息后滚动到底部 - 适配反向布局
+    await nextTick()
+    if (messagesContainer.value && messages.value.length > 0) {
+      // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
+      messagesContainer.value.scrollTop = 0
+      // 确保滚动状态正确
+      shouldAutoScroll.value = true
+      isAtBottom.value = true
+    }
   } catch (error) {
     console.error(`加载消息失败:`, error)
     messages.value = []
@@ -1237,13 +1303,13 @@ async function loadMessages(conversationId: string) {
 async function createNewConversation() {
   const model = selectedModel.value
   // 后端返回的是包含 id 等信息的 Conversation 对象，这里需要提取 id 字段
-  const newConversation = await invoke('create_ai_conversation', { model, title: '无标题对话' }) as { id: string }
+  const newConversation = await invoke('create_ai_conversation', { model, title: t('ai.no_title_conversation') }) as { id: string }
 
   await loadConversations()
   activeConversationId.value = newConversation.id
   await loadMessages(newConversation.id)
   showConversationsDrawer.value = false
-  
+
   // 新建对话后确保滚动状态正确 - 适配反向布局
   await nextTick()
   shouldAutoScroll.value = true
@@ -1255,7 +1321,7 @@ async function switchConversation(conversationId: string) {
   activeConversationId.value = conversationId
   await loadMessages(conversationId)
   showConversationsDrawer.value = false
-  
+
   // 切换对话后强制滚动到底部 - 适配反向布局
   await nextTick()
   setTimeout(() => {
@@ -1364,7 +1430,7 @@ async function sendMessage(resendMessage?: any) {
           )
         } catch (error) {
           console.error('重新处理图片文件失败:', error)
-          await showAlert('重新处理图片文件失败，请重试', { title: '错误' })
+          await showAlert(t('ai.reprocess_image_file_failed'), { title: t('ai.error') })
           return
         }
       }
@@ -1519,7 +1585,7 @@ async function sendMessage(resendMessage?: any) {
       // 没有图片文件，使用普通API
       let finalMessage = messageToSend
       if (attachments.length > 0) {
-        finalMessage += `\n\n[用户上传了${attachments.length}个文件: ${attachments.map(a => a.name).join(', ')}，但当前模型不支持文件处理]`
+        finalMessage += `\n\n[${t('ai.user_uploaded')} ${attachments.length} {{ $t('ai.files') }}: ${attachments.map(a => a.name).join(', ')}，{{ $t('ai.but_the_current_model_does_not_support_file_processing') }}]`
       }
 
       await invoke('send_ai_message_stream', {
@@ -1580,7 +1646,7 @@ watch(messages, async (newMessages, oldMessages) => {
     await nextTick()
     scrollToBottom()
   }
-  
+
   // 如果是第一次加载消息或消息数量从0变为有消息，强制滚动到底部 - 适配反向布局
   if ((oldMessages?.length || 0) === 0 && newMessages.length > 0) {
     await nextTick()
@@ -1597,7 +1663,7 @@ watch(messages, async (newMessages, oldMessages) => {
 
 // 监听流式内容变化，确保在底部时自动滚动
 watch(streamingContent, async () => {
-  console.log('shouldAutoScroll:', shouldAutoScroll.value, "  isUserScrolling:",isUserScrolling.value)
+  console.log('shouldAutoScroll:', shouldAutoScroll.value, "  isUserScrolling:", isUserScrolling.value)
   if (shouldAutoScroll.value && !isUserScrolling.value) {
     await nextTick()
     scrollToBottom()
@@ -1607,7 +1673,7 @@ watch(streamingContent, async () => {
 // 监听模型选择变化
 watch(selectedModel, async (newModel) => {
   await checkApiKey()
-  localStorage.setItem('ai-selected-model', newModel)
+  aiStore.setSelectedModel(newModel)
 })
 
 // 格式化消息内容（支持Markdown）
@@ -1644,9 +1710,9 @@ const formatMessage = (content: string): string => {
 
           return `<div class="large-code-block">
             <div class="code-warning bg-warning/20 text-warning-content p-2 text-sm rounded-t border border-warning/40">
-              ⚠️ 大代码块 (${codeLines.length} 行, ${(code.length / 1024).toFixed(1)}KB) - 已禁用语法高亮以提升性能
+              ⚠️ {{ $t('ai.large_code_block') }} (${codeLines.length} {{ t('ai.lines') }}, ${(code.length / 1024).toFixed(1)}KB) - {{ $t('ai.syntax_highlighting_disabled_to_improve_performance') }}
               <button class="btn btn-xs btn-outline ml-2" onclick="this.parentElement.nextElementSibling.style.display = this.parentElement.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent.includes('显示') ? '隐藏代码' : '显示代码'">
-                ${codeLines.length > MAX_LINES ? '显示完整代码' : '隐藏代码'}
+                ${codeLines.length > MAX_LINES ? t('ai.show_full_code') : t('ai.hide_code')}
               </button>
             </div>
             <pre class="code-content"><code class="language-${actualLang}">${DOMPurify.sanitize(truncatedCode)}</code></pre>
@@ -1704,7 +1770,7 @@ const formatMessage = (content: string): string => {
   } catch (err) {
     console.error('Markdown渲染错误:', err);
     const errorMessage = err instanceof Error ? err.message : String(err);
-    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+    return `<div class="text-error">${t('ai.markdown_rendering_error')}: ${errorMessage}</div>
             <pre>${DOMPurify.sanitize(content)}</pre>`;
   }
 }
@@ -1745,7 +1811,7 @@ function enhanceCodeBlocks() {
     header.className = 'code-block-header'
     header.innerHTML = `
       <span class="code-language">${lang}</span>
-      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="复制代码">
+      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="${t('ai.copy_code')}">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
         </svg>
@@ -2125,40 +2191,40 @@ let isUserScrolling = ref(false)
 // 处理滚动事件 - 适配反向布局
 const handleScroll = () => {
   if (!messagesContainer.value) return
-  
+
   const container = messagesContainer.value
   const currentScrollTop = container.scrollTop
-  
+
   // 在反向布局中，scrollTop = 0 表示在最底部（最新消息）
   // scrollTop > 0 表示向上滚动查看历史消息
   const distanceFromBottom = currentScrollTop
-  
+
   // 检测滚动方向
   isScrollingUp.value = currentScrollTop > lastScrollTop.value
   lastScrollTop.value = currentScrollTop
-  
+
   // 判断是否在底部附近（显示最新消息的位置）
   const nearBottom = distanceFromBottom <= scrollThreshold.value
   isAtBottom.value = nearBottom
-  
+
   // 标记用户正在滚动
   isUserScrolling.value = true
-  
+
   // 如果用户向上滚动查看历史消息，禁用自动滚动
   if (isScrollingUp.value && distanceFromBottom > scrollThreshold.value) {
     shouldAutoScroll.value = false
   }
-  
+
   // 如果用户滚动回底部附近，恢复自动滚动
   if (nearBottom) {
     shouldAutoScroll.value = true
   }
-  
+
   // 清除之前的定时器
   if (scrollTimeout) {
     clearTimeout(scrollTimeout)
   }
-  
+
 
 }
 
@@ -2177,12 +2243,12 @@ const scrollToBottom = () => {
   if (!messagesContainer.value || !shouldAutoScroll.value || isUserScrolling.value) return
 
   const container = messagesContainer.value
-  
+
   // 使用 requestAnimationFrame 优化性能
   requestAnimationFrame(() => {
     // 再次检查用户是否在滚动，避免干扰用户操作
     if (isUserScrolling.value) return
-    
+
     // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
     container.scrollTo({
       top: 0,
@@ -2194,22 +2260,22 @@ const scrollToBottom = () => {
 // 强制滚动到底部（用于新消息） - 适配反向布局
 const forceScrollToBottom = () => {
   if (!messagesContainer.value) return
-  
+
   const container = messagesContainer.value
-  
+
   // 重置所有滚动状态
   shouldAutoScroll.value = true
   isUserScrolling.value = false
   isScrollingUp.value = false
   isAtBottom.value = true
-  
+
   requestAnimationFrame(() => {
     // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
     container.scrollTo({
       top: 0,
       behavior: 'smooth'
     })
-    
+
     // 更新最后滚动位置
     setTimeout(() => {
       lastScrollTop.value = container.scrollTop
@@ -2242,7 +2308,7 @@ const clearMessages = async () => {
     // 重新加载消息以更新UI
     await loadMessages(activeConversationId.value);
     console.log('消息重新加载完成');
-    
+
     // 清空后确保滚动状态正确 - 适配反向布局
     await nextTick()
     shouldAutoScroll.value = true
@@ -2325,83 +2391,98 @@ async function openConversationsList() {
 
 // 组件挂载时加载
 onMounted(async () => {
-  console.log('组件挂载，开始加载数据...');
+  console.log('AI Assistant component mounted.')
+  window.addEventListener('resize', onResize)
 
-  try {
-    const configData = await getAIConfig();
-    if (configData) {
-      aiConfigs.value = configData.providers;
-    }
-    console.log('AI配置加载成功:', aiConfigs.value);
-  } catch (error) {
-    console.error('加载AI配置失败:', error);
-  }
+  await reloadAIConfig() // 初始加载配置
+  await loadConversations()
 
-  // 加载自定义模型
-  await loadCustomModels();
-
-
-  // 设置流式输出监听
-  await setupStreamListeners();
-
-  // 加载API密钥配置
-  await checkApiKey();
-
-  // 加载角色数据
-  await loadRoles();
-
-  // 加载所有对话
-  await loadConversations();
-
-  // 设置代码复制功能
+  setupStreamListeners()
   setupCodeCopyFeature()
+  enhanceCodeBlocks() // 初始代码块增强
 
-  // 应用代码块主题样式
-  applyCodeBlockTheme()
+  // 监听全局设置变化
+  unlistenSettings = await listen('global-settings-changed', (event: any) => {
+    if (event.payload.key === 'aiConfig') {
+      reloadAIConfig()
+    }
+  })
 
-  // 加载分类、标签和笔记数据（用于保存笔记和引用笔记）
-  await Promise.all([
-    tipsStore.fetchAllCategories(),
-    tipsStore.fetchAllTags(),
-    tipsStore.fetchAllTipSummaries() // 加载所有笔记数据
-  ]);
-
-  console.log('加载的笔记数量:', tipsStore.tips.length);
-
-  // 检查是否需要自动创建新对话
-  const isFirstVisit = localStorage.getItem('ai-assistant-visited') !== 'true';
-  if (isFirstVisit && conversations.value.length === 0) {
-    console.log('首次访问且无对话，自动创建新对话');
-    await createNewConversation();
-    localStorage.setItem('ai-assistant-visited', 'true');
+  // 立即加载一次笔记
+  if (tipsStore.tips.length === 0) {
+    tipsStore.fetchTips(true)
   }
 
-  
-  // 确保初始状态滚动到底部 - 适配反向布局
-  await nextTick();
+  // 观察文档元素的 data-theme 属性变化
+  themeObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+        console.log('Theme changed, reapplying code block styles.')
+        setTimeout(() => {
+          applyCodeBlockTheme()
+        }, 100)
+      }
+    })
+  })
+
+  if (document.documentElement) {
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    })
+  }
+
+  console.log('Component mount logic finished.')
+
   if (messagesContainer.value) {
-    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-    messagesContainer.value.scrollTop = 0;
+    messagesContainer.value.addEventListener('click', handleLinkClick)
   }
-  
-  // 延迟执行强制滚动，确保DOM完全渲染
-  setTimeout(() => {
-    forceScrollToBottom();
-  }, 100);
+})
 
-  console.log('组件挂载完成，数据加载完毕');
-});
+onActivated(async () => {
+  console.log('AI Assistant component activated.')
+  window.addEventListener('resize', onResize)
+  await reloadAIConfig() // 激活时重新加载配置
 
-// 在组件卸载前保存笔记状态
+  // 重新设置监听器
+  if (!unlistenSettings) {
+    unlistenSettings = await listen('global-settings-changed', (event: any) => {
+      if (event.payload.key === 'aiConfig') {
+        reloadAIConfig()
+      }
+    })
+  }
+
+  // 强制滚动到底部
+  await nextTick()
+  forceScrollToBottom()
+})
+
+onDeactivated(() => {
+  console.log('AI Assistant component deactivated.')
+  window.removeEventListener('resize', onResize)
+  // 移除监听器
+  if (unlistenSettings) {
+    unlistenSettings()
+    unlistenSettings = null
+  }
+
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('click', handleLinkClick)
+  }
+})
+
 onBeforeUnmount(() => {
+  console.log('AI Assistant component unmounting.')
+  window.removeEventListener('resize', onResize)
+
+  // 保存笔记状态
   localStorage.setItem('ai-show-note-panel', showNotePanel.value.toString())
   localStorage.setItem('ai-note-title', noteTitle.value)
   localStorage.setItem('ai-note-content', noteContent.value)
 
-  // 清理滚动观察器
+  // 清理滚动观察器和定时器
   cleanupIntersectionObserver()
-
-  // 清理滚动定时器
   if (scrollTimeout) {
     window.clearTimeout(scrollTimeout)
     scrollTimeout = null
@@ -2412,46 +2493,24 @@ onBeforeUnmount(() => {
   formatMessageDebounced.value.forEach(timeout => window.clearTimeout(timeout))
   formatMessageDebounced.value.clear()
 
-  // 清理主题样式
+  // 清理主题样式和观察器
   const styleElement = document.getElementById('ai-prism-theme-styles')
   if (styleElement) {
     styleElement.remove()
   }
-
-  window.removeEventListener('resize', onResize)
-})
-
-// 监听主题变化，重新应用代码块样式
-let themeObserver: MutationObserver | null = null
-onMounted(() => {
-  window.addEventListener('resize', onResize)
-  // 观察文档元素的 data-theme 属性变化
-  themeObserver = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
-        console.log('检测到主题变化，重新应用代码块样式')
-        // 延迟应用样式，确保主题已完全切换
-        setTimeout(() => {
-          applyCodeBlockTheme()
-        }, 100)
-      }
-    })
-  })
-
-  // 开始观察文档元素
-  if (document.documentElement) {
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme']
-    })
-  }
-})
-
-// 清理主题观察器
-onBeforeUnmount(() => {
   if (themeObserver) {
     themeObserver.disconnect()
     themeObserver = null
+  }
+
+  // 移除监听器
+  if (unlistenSettings) {
+    unlistenSettings()
+    unlistenSettings = null
+  }
+
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('click', handleLinkClick)
   }
 })
 
@@ -2935,12 +2994,12 @@ const saveRole = async () => {
 }
 
 const confirmDeleteRole = async (roleId: string) => {
-  const confirmed = await showConfirm('确定要删除这个角色吗？', {
-    title: '确认删除角色',
-    confirmText: '删除',
-    cancelText: '取消'
+  const confirmed = await showConfirm(t('ai.confirm_delete_role'), {
+    title: t('ai.confirm_delete_role'),
+    confirmText: t('ai.delete'),
+    cancelText: t('ai.cancel')
   })
-  
+
   if (confirmed) {
     try {
       await invoke('delete_ai_role', { roleId })
@@ -3115,9 +3174,9 @@ const clearAllSelectedNotes = () => {
 // 获取输入框占位符
 const getInputPlaceholder = () => {
   if (selectedRole.value) {
-    return `以 ${selectedRole.value.name} 的身份与您对话...输入#可引用笔记`
+    return `${t('ai.as')} ${selectedRole.value.name} ${t('ai.with_you')}...${t('ai.input_hash_to_reference_notes')}`
   } else {
-    return '输入您的问题或指令，支持上传图片和文档...输入#可引用笔记'
+    return `${t('ai.enter_your_question_or_instruction')}...${t('ai.input_hash_to_reference_notes')}`
   }
 }
 
@@ -3254,18 +3313,18 @@ const copyToClipboardWithFeedback = async (content: string, event: Event) => {
   const target = event.target as HTMLElement
   const button = target.closest('button')
   if (!button) return
-  
+
   // 通过消息索引和角色生成唯一键
   const messageElement = button.closest('.chat')
   const messageIndex = Array.from(messageElement?.parentElement?.children || []).indexOf(messageElement!)
   const role = messageElement?.classList.contains('chat-end') ? 'user' : 'assistant'
   const key = `${messageIndex}_${role}`
-  
+
   try {
     copyingStates.value[key] = 'copying'
     await navigator.clipboard.writeText(content)
     copyingStates.value[key] = 'success'
-    
+
     // 2秒后重置状态
     setTimeout(() => {
       copyingStates.value[key] = null
@@ -3279,7 +3338,7 @@ const copyToClipboardWithFeedback = async (content: string, event: Event) => {
 // 重发消息
 const resendMessage = async (originalMessage: any) => {
   if (!originalMessage || !originalMessage.content) return
-  
+
   // 创建新的用户消息
   const newMessage = {
     role: 'user',
@@ -3288,10 +3347,10 @@ const resendMessage = async (originalMessage: any) => {
     attachments: originalMessage.attachments || [],
     referencedNotes: originalMessage.referencedNotes || []
   }
-  
+
   // 添加到消息列表
   messages.value.push(newMessage)
-  
+
   // 保存到数据库
   let messageContent = originalMessage.content
   if (newMessage.attachments.length > 0) {
@@ -3302,13 +3361,13 @@ const resendMessage = async (originalMessage: any) => {
     const notesJson = JSON.stringify(newMessage.referencedNotes)
     messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
   }
-  
+
   await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
-  
+
   // 滚动到底部
   await nextTick()
   forceScrollToBottom()
-  
+
   // 发送AI请求
   await sendAIRequest(originalMessage.content, newMessage.attachments || [])
 }
@@ -3376,7 +3435,7 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
       // 如果有非图片附件，添加提示信息
       let finalMessage = messageContent
       if (attachments.length > 0) {
-        finalMessage += `\n\n[用户上传了${attachments.length}个文件: ${attachments.map(a => a.name).join(', ')}，但当前模型不支持文件处理]`
+        finalMessage += `\n\n[${t('ai.user_uploaded')} ${attachments.length} {{ $t('ai.files') }}: ${attachments.map(a => a.name).join(', ')}，{{ $t('ai.but_the_current_model_does_not_support_file_processing') }}]`
       }
 
       await invoke('send_ai_message_stream', {
@@ -3398,7 +3457,7 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
 
 // 笔记内容的markdown渲染
 const renderedNoteContent = computed(() => {
-  if (!noteContent.value) return '<p class="text-base-content/50">暂无内容</p>'
+  if (!noteContent.value) return `<p class="text-base-content/50">${t('ai.no_content')}</p>`
 
   try {
     // 创建 marked 实例并配置高亮
@@ -3442,7 +3501,7 @@ const renderedNoteContent = computed(() => {
   } catch (err) {
     console.error('笔记Markdown渲染错误:', err)
     const errorMessage = err instanceof Error ? err.message : String(err)
-    return `<div class="text-error">Markdown渲染错误: ${errorMessage}</div>
+    return `<div class="text-error">${t('ai.markdown_rendering_error')}: ${errorMessage}</div>
             <pre>${DOMPurify.sanitize(noteContent.value)}</pre>`
   }
 })
@@ -3479,6 +3538,19 @@ const handleModelChange = () => {
 // 前往设置页面
 const goToAISettings = () => {
   router.push({ path: '/settings', query: { page: 'ai' } })
+}
+
+// 处理链接点击事件
+const handleLinkClick = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  const anchor = target.closest('a')
+  if (anchor && anchor.href) {
+    const href = anchor.href
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      event.preventDefault()
+      open(href).catch((err: any) => console.error('Failed to open link:', err))
+    }
+  }
 }
 </script>
 
@@ -3586,7 +3658,7 @@ const goToAISettings = () => {
 }
 
 /* 消息间距保持正常 */
-.chat-container .space-y-4 > * + * {
+.chat-container .space-y-4>*+* {
   margin-top: 1rem;
   margin-bottom: 0;
 }
@@ -3634,9 +3706,11 @@ const goToAISettings = () => {
   0% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.05);
   }
+
   100% {
     transform: scale(1);
   }
@@ -3654,6 +3728,7 @@ const goToAISettings = () => {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -4073,11 +4148,6 @@ const goToAISettings = () => {
 
 .referenced-note-item:hover {
   transform: translateX(2px);
-}
-
-.referenced-note-item .flex {
-  border: 1px solid hsl(var(--info) / 0.3);
-  background: linear-gradient(135deg, hsl(var(--info) / 0.05), hsl(var(--info) / 0.1));
 }
 
 .referenced-note-item .flex:hover {

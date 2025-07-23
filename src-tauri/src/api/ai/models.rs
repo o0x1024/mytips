@@ -7,6 +7,7 @@ use genai::{
     resolver::{AuthData, Endpoint, ServiceTargetResolver},
     Client, ModelIden, ServiceTarget,
 };
+use reqwest::Proxy;
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
@@ -31,26 +32,17 @@ pub async fn create_genai_client(
 ) -> Result<Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
-
+    
     // 如果代理启用，设置环境变量（这会影响reqwest，而GenAI库内部使用reqwest）
-    if proxy_settings.enabled {
+    let proxy_url = if proxy_settings.enabled {
         // 构建代理URL
-        let proxy_url = format!(
+        format!(
             "{}://{}:{}",
             proxy_settings.protocol, proxy_settings.host, proxy_settings.port
-        );
-
-        println!("为GenAI客户端配置代理: {}", proxy_url);
-
-        // 设置HTTP_PROXY和HTTPS_PROXY环境变量
-        std::env::set_var("HTTP_PROXY", &proxy_url);
-        std::env::set_var("HTTPS_PROXY", &proxy_url);
-
-    } else {
-        // 确保代理环境变量被清除
-        std::env::remove_var("HTTP_PROXY");
-        std::env::remove_var("HTTPS_PROXY");
-    }
+        )
+    }else{
+        "".to_string()
+    };
 
     // 为不同的闭包准备单独的 api_key 克隆，避免多次移动
     let api_key_for_resolver = api_key.clone();
@@ -70,8 +62,16 @@ pub async fn create_genai_client(
                     // 强制使用 OpenAI 适配器，避免被误判为 Ollama
                     service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 } else if model_name.starts_with("grok") {
-                    service_target.endpoint = Endpoint::from_static("https://api.x.ai/v1");
+                    service_target.endpoint = Endpoint::from_static("https://api.x.ai/v1/");
                     service_target.auth = AuthData::from_single(key);
+                } else if model_name.starts_with("qwen") {
+                    // 阿里云百炼，兼容 OpenAI 协议
+                    service_target.endpoint = Endpoint::from_static(
+                        "https://dashscope.aliyuncs.com/compatible-mode/v1/",
+                    );
+                    service_target.auth = AuthData::from_single(key);
+                    // 强制使用 OpenAI 适配器
+                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 }
                 Ok::<_, genai::resolver::Error>(service_target)
             }
@@ -79,8 +79,25 @@ pub async fn create_genai_client(
         },
     );
 
+    println!("proxy_url: {}", proxy_url);
+    let reqwest_client = match Proxy::all(&proxy_url) {
+        Ok(proxy) => reqwest::Client::builder()
+            .proxy(proxy)
+            .build()
+            .unwrap_or_else(|e| {
+                println!("Failed to build client with proxy: {}", e);
+                reqwest::Client::new()
+            }),
+        Err(e) => {
+            println!("Failed to create proxy: {}", e);
+            reqwest::Client::new()
+        }
+    };
+
+
     // 创建带有认证和自定义解析器的客户端构建器
     let client = Client::builder()
+        .with_reqwest(reqwest_client)
         .with_service_target_resolver(service_target_resolver)
         .with_auth_resolver_fn(move |_| Ok(Some(AuthData::from_single(api_key.clone()))))
         .build();
@@ -101,7 +118,7 @@ pub fn get_model_name(model_id: &str, custom_model_name: Option<&str>) -> String
         "gemini" => "gemini-2.0-flash".to_string(),
         "deepseek" => "deepseek-chat".to_string(),
         "claude" => "claude-3.5-sonnet".to_string(),
-        "qwen" => "qwen-max".to_string(), // 千问暂时不支持，可能需要自定义实现
+        "qwen" => "qwen3-coder-plus".to_string(), // 千问暂时不支持，可能需要自定义实现
         "doubao" => "doubao-1.5-pro-32k".to_string(), // 豆包默认模型
         "grok" => "grok-lpu".to_string(),      // Grok默认模型
         "custom" => "gpt-3.5-turbo".to_string(), // 自定义默认使用OpenAI格式
@@ -114,103 +131,10 @@ pub fn format_ai_error(error: &str) -> String {
     format!("抱歉，发生了错误：{}", error)
 }
 
-// 发送消息到AI模型并获取响应
-pub async fn send_message_to_ai(
-    api_key: String,
-    model_id: &str,
-    message: String,
-    db_manager: &UnifiedDbManager,
-) -> Result<String, String> {
-    // 创建genai客户端
-    let client = create_genai_client(api_key, model_id, db_manager).await?;
 
-    // 获取适合当前模型的模型名称
-    let model_name = get_model_name(model_id, None);
-
-    // 创建聊天请求
-    let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
-
-    // 发送请求并获取响应
-    let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
-        Ok(res) => res,
-        Err(e) => return Ok(format_ai_error(&format!("AI请求失败: {}", e))), // 直接返回格式化的错误作为回答
-    };
-
-    // 提取响应文本
-    match chat_res.content_text_as_str() {
-        Some(content) => Ok(content.to_string()),
-        None => Ok(format_ai_error("无法获取AI响应内容")), // 直接返回格式化的错误作为回答
-    }
-}
 
 // 流式API响应类型
 pub type TextStream = Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>;
-
-// 流式传输AI响应
-pub async fn stream_message_from_ai(
-    api_key: String,
-    model_id: &str,
-    message: String,
-    custom_model_name: Option<&str>,
-    db_manager: &UnifiedDbManager,
-) -> Result<TextStream, String> {
-    println!("启动单消息流式请求: model={}", model_id);
-
-    // 创建genai客户端
-    let client = match create_genai_client(api_key, model_id, db_manager).await {
-        Ok(client) => client,
-        Err(e) => {
-            // 如果客户端创建失败，直接返回一个只包含错误消息的流
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let error_msg = format_ai_error(&format!("创建AI客户端失败: {}", e));
-            let _ = tx.send(Ok(error_msg)).await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            return Ok(Box::pin(stream) as TextStream);
-        }
-    };
-
-    // 获取适合当前模型的模型名称
-    let model_name = get_model_name(model_id, custom_model_name);
-    println!("使用模型名称: {}", model_name);
-
-    // 创建聊天请求
-    let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
-
-    // 创建mpsc通道，用于将非流式结果转换为我们自己的流
-    let (tx, rx) = mpsc::channel::<Result<String, String>>(100);
-
-    // 在后台任务中处理，先获取完整响应，然后模拟流式输出
-    tokio::spawn(async move {
-        // 使用常规非流式API获取全部响应
-        match client.exec_chat(&model_name, chat_req, None).await {
-            Ok(response) => {
-                // 获取完整的响应文本
-                if let Some(content) = response.content_text_as_str() {
-                    // 模拟流式输出，每次发送一小段内容
-                    for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(5).enumerate() {
-                        let chunk_str: String = chunk.iter().collect();
-                        let _ = tx.send(Ok(chunk_str)).await;
-                        // 模拟网络延迟，使其看起来像真实的流式传输
-                        sleep(Duration::from_millis(30)).await;
-                    }
-                } else {
-                    // 将错误作为正常消息返回，这样前端可以直接显示
-                    let error_msg = format_ai_error("无法获取AI响应内容");
-                    let _ = tx.send(Ok(error_msg)).await;
-                }
-            }
-            Err(e) => {
-                // 将错误作为正常消息返回，这样前端可以直接显示
-                let error_msg = format_ai_error(&format!("AI请求失败: {}", e));
-                let _ = tx.send(Ok(error_msg)).await;
-            }
-        }
-    });
-
-    // 将接收器转换为流
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-    Ok(Box::pin(stream) as TextStream)
-}
 
 // 通用函数，用于处理自定义API端点
 // 注意：对于自定义API，需要实现特殊处理，这里暂时保留旧的实现
@@ -294,7 +218,7 @@ pub async fn chat_with_history(
     };
 
     // 提取响应文本
-    match chat_res.content_text_as_str() {
+    match chat_res.first_text() {
         Some(content) => Ok(content.to_string()),
         None => Ok(format_ai_error("无法获取AI响应内容")), // 直接返回格式化的错误作为回答
     }
@@ -347,7 +271,7 @@ pub async fn stream_chat_with_history(
                 println!("获取AI响应成功");
 
                 // 获取完整的响应文本
-                if let Some(content) = response.content_text_as_str() {
+                if let Some(content) = response.first_text() {
                     println!("响应内容长度: {} 字符", content.len());
 
                     // 模拟流式输出，每次发送一小段内容
@@ -381,56 +305,6 @@ pub async fn stream_chat_with_history(
     // 将接收器转换为流
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
     Ok(Box::pin(stream) as TextStream)
-}
-
-// 阿里通义千问模型实现 (genai库暂不支持，保留原实现)
-pub async fn send_to_qwen(
-    api_key: String,
-    message: String,
-    db_manager: &UnifiedDbManager,
-) -> Result<String, String> {
-    use serde_json::{json, Value};
-
-    let client = get_client_with_proxy(db_manager).await?;
-
-    let payload = json!({
-        "model": "qwen-max",
-        "messages": [
-            {
-                "role": "user",
-                "content": message
-            }
-        ]
-    });
-
-    let response = client
-        .post("https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation")
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {}", api_key))
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    if !response.status().is_success() {
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "无法获取错误信息".to_string());
-        return Err(format!("API返回错误: {}", error_text));
-    }
-
-    let response_json: Value = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-
-    // 提取回复内容
-    if let Some(content) = response_json["output"]["text"].as_str() {
-        Ok(content.to_string())
-    } else {
-        Err("无法解析AI响应".to_string())
-    }
 }
 
 // 豆包模型专门实现
@@ -542,7 +416,7 @@ pub async fn send_message_with_images_to_ai(
         Err(e) => return Err(format!("AI请求失败: {}", e)),
     };
 
-    match chat_res.content_text_as_str() {
+    match chat_res.first_text() {
         Some(content) => Ok(content.to_string()),
         None => Err("无法获取AI响应内容".to_string()),
     }
@@ -619,20 +493,6 @@ pub async fn stream_message_with_images_from_ai(
     Ok(Box::pin(stream) as TextStream)
 }
 
-// 获取模型显示名称的辅助函数
-fn get_model_display_name(model_id: &str) -> &str {
-    match model_id {
-        "chatgpt" => "ChatGPT",
-        "gemini" => "Gemini",
-        "deepseek" => "DeepSeek",
-        "claude" => "Claude",
-        "qwen" => "通义千问",
-        "doubao" => "豆包",
-        "grok" => "Grok",
-        "custom" => "自定义模型",
-        _ => "未知模型",
-    }
-}
 
 // 创建自定义GenAI客户端，使用ServiceTargetResolver
 pub async fn create_custom_genai_client(
@@ -737,165 +597,8 @@ pub async fn send_message_to_custom_ai(
     };
 
     // 提取响应文本
-    match chat_res.content_text_as_str() {
+    match chat_res.first_text() {
         Some(content) => Ok(content.to_string()),
         None => Ok(format_ai_error("无法获取自定义AI响应内容")),
     }
-}
-
-// 使用自定义配置进行流式聊天
-pub async fn stream_message_from_custom_ai(
-    endpoint_url: String,
-    api_key: String,
-    model_name: String,
-    adapter_type: String,
-    custom_headers: Option<std::collections::HashMap<String, String>>,
-    message: String,
-    db_manager: &UnifiedDbManager,
-) -> Result<TextStream, String> {
-    println!("启动自定义AI流式请求: endpoint={}, model={}", endpoint_url, model_name);
-
-    // 创建自定义genai客户端
-    let client = match create_custom_genai_client(
-        endpoint_url,
-        api_key,
-        model_name.clone(),
-        adapter_type,
-        custom_headers,
-        db_manager,
-    ).await {
-        Ok(client) => client,
-        Err(e) => {
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let error_msg = format_ai_error(&format!("创建自定义AI客户端失败: {}", e));
-            let _ = tx.send(Ok(error_msg)).await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            return Ok(Box::pin(stream) as TextStream);
-        }
-    };
-
-    // 创建聊天请求
-    let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
-
-    // 创建mpsc通道
-    let (tx, rx) = mpsc::channel::<Result<String, String>>(100);
-
-    // 在后台任务中处理
-    tokio::spawn(async move {
-        println!("开始获取自定义AI响应...");
-
-        match client.exec_chat(&model_name, chat_req, None).await {
-            Ok(response) => {
-                println!("获取自定义AI响应成功");
-
-                if let Some(content) = response.content_text_as_str() {
-                    println!("响应内容长度: {} 字符", content.len());
-
-                    // 模拟流式输出
-                    for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(5).enumerate() {
-                        if i % 20 == 0 {
-                            println!("发送第 {} 块...", i);
-                        }
-
-                        let chunk_str: String = chunk.iter().collect();
-                        let _ = tx.send(Ok(chunk_str)).await;
-                        sleep(Duration::from_millis(30)).await;
-                    }
-                    println!("自定义AI响应内容已发送完毕");
-                } else {
-                    println!("无法从自定义AI响应中提取内容");
-                    let error_msg = format_ai_error("无法从自定义AI响应中提取内容");
-                    let _ = tx.send(Ok(error_msg)).await;
-                }
-            }
-            Err(e) => {
-                println!("自定义AI请求失败: {}", e);
-                let error_msg = format_ai_error(&format!("自定义AI请求失败: {}", e));
-                let _ = tx.send(Ok(error_msg)).await;
-            }
-        }
-    });
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-    Ok(Box::pin(stream) as TextStream)
-}
-
-// 使用自定义配置进行历史对话
-pub async fn stream_chat_with_history_custom_ai(
-    endpoint_url: String,
-    api_key: String,
-    model_name: String,
-    adapter_type: String,
-    custom_headers: Option<std::collections::HashMap<String, String>>,
-    messages: Vec<ChatMessage>,
-    db_manager: &UnifiedDbManager,
-) -> Result<TextStream, String> {
-    println!(
-        "启动自定义AI历史对话流式请求: endpoint={}, model={}, messages={}",
-        endpoint_url, model_name, messages.len()
-    );
-
-    // 创建自定义genai客户端
-    let client = match create_custom_genai_client(
-        endpoint_url,
-        api_key,
-        model_name.clone(),
-        adapter_type,
-        custom_headers,
-        db_manager,
-    ).await {
-        Ok(client) => client,
-        Err(e) => {
-            let (tx, rx) = mpsc::channel::<Result<String, String>>(1);
-            let error_msg = format_ai_error(&format!("创建自定义AI客户端失败: {}", e));
-            let _ = tx.send(Ok(error_msg)).await;
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-            return Ok(Box::pin(stream) as TextStream);
-        }
-    };
-
-    // 创建聊天请求，使用完整的消息历史
-    let chat_req = ChatRequest::new(messages);
-
-    // 创建mpsc通道
-    let (tx, rx) = mpsc::channel::<Result<String, String>>(100);
-
-    // 在后台任务中处理
-    tokio::spawn(async move {
-        println!("开始获取自定义AI历史对话响应...");
-
-        match client.exec_chat(&model_name, chat_req, None).await {
-            Ok(response) => {
-                println!("获取自定义AI历史对话响应成功");
-
-                if let Some(content) = response.content_text_as_str() {
-                    println!("响应内容长度: {} 字符", content.len());
-
-                    // 模拟流式输出
-                    for (i, chunk) in content.chars().collect::<Vec<_>>().chunks(5).enumerate() {
-                        if i % 20 == 0 {
-                            println!("发送第 {} 块...", i);
-                        }
-
-                        let chunk_str: String = chunk.iter().collect();
-                        let _ = tx.send(Ok(chunk_str)).await;
-                        sleep(Duration::from_millis(30)).await;
-                    }
-                    println!("自定义AI历史对话响应内容已发送完毕");
-                } else {
-                    println!("无法从自定义AI历史对话响应中提取内容");
-                    let error_msg = format_ai_error("无法从自定义AI历史对话响应中提取内容");
-                    let _ = tx.send(Ok(error_msg)).await;
-                }
-            }
-            Err(e) => {
-                println!("自定义AI历史对话请求失败: {}", e);
-                let error_msg = format_ai_error(&format!("自定义AI历史对话请求失败: {}", e));
-                let _ = tx.send(Ok(error_msg)).await;
-            }
-        }
-    });
-
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-    Ok(Box::pin(stream) as TextStream)
 }

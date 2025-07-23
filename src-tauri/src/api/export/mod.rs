@@ -84,7 +84,7 @@ pub async fn export_as_markdown(
     };
 
     if tips.is_empty() {
-        return Err("没有找到要导出的笔记".to_string());
+        return Err("No notes found to export".to_string());
     }
 
     // 成功导出的笔记数量
@@ -111,7 +111,7 @@ pub async fn export_as_markdown(
         let file_path = match app
             .dialog()
             .file()
-            .add_filter("Markdown文件", &["md"])
+            .add_filter("Markdown file", &["md"])
             .set_file_name(&format!("{}.md", file_name))
             .blocking_save_file()
         {
@@ -128,14 +128,14 @@ pub async fn export_as_markdown(
         // 添加分类信息（如果有）
         if let Some(category_id) = &tip.category_id {
             if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
-                content.push_str(&format!("**分类**: {}\n\n", category.name));
+                content.push_str(&format!("**Category**: {}\n\n", category.name));
             }
         }
 
         // 添加标签信息（暂时跳过，因为没有tag关联功能）
         let tags: Vec<String> = Vec::new(); // TODO: 实现tag功能后替换
         if !tags.is_empty() {
-            content.push_str("**标签**: ");
+            content.push_str("**Tags**: ");
             for (i, tag) in tags.iter().enumerate() {
                 if i > 0 {
                     content.push_str(", ");
@@ -150,20 +150,20 @@ pub async fn export_as_markdown(
         content.push_str(&adjusted_content);
 
         // 写入文件
-        fs::write(&file_path, content).map_err(|e| format!("写入文件失败: {}", e))?;
+        fs::write(&file_path, content).map_err(|e| format!("Failed to write file: {}", e))?;
 
         exported_count += 1;
     }
 
     if exported_count == 0 {
-        return Err("没有导出任何笔记".to_string());
+        return Err("No notes were exported".to_string());
     } else if exported_count < total_count {
         Ok(format!(
-            "成功导出 {} 个笔记（共 {} 个）",
+            "Successfully exported {} out of {} notes",
             exported_count, total_count
         ))
     } else {
-        Ok(format!("成功导出 {} 个笔记", exported_count))
+        Ok(format!("Successfully exported {} notes", exported_count))
     }
 }
 
@@ -175,11 +175,11 @@ pub async fn backup_database(app: tauri::AppHandle) -> Result<String, String> {
 
     // 获取数据库路径
     let db_path = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
+        .ok_or_else(|| "Could not get app data directory".to_string())?
         .join("mytips/mytips.db");
 
     if !db_path.exists() {
-        return Err("数据库文件不存在".to_string());
+        return Err("Database file does not exist".to_string());
     }
 
     // 生成默认备份文件名（带时间戳）
@@ -190,21 +190,21 @@ pub async fn backup_database(app: tauri::AppHandle) -> Result<String, String> {
     let file_path = match app
         .dialog()
         .file()
-        .add_filter("数据库文件", &["db"])
+        .add_filter("Database file", &["db"])
         .set_file_name(&default_filename)
         .blocking_save_file()
     {
         Some(path) => match path.as_path() {
             Some(p) => p.to_path_buf(),
-            None => return Err("无法获取保存文件路径".to_string()),
+            None => return Err("Could not get file path to save".to_string()),
         },
-        None => return Err("用户取消了备份操作".to_string()),
+        None => return Err("User cancelled the backup operation".to_string()),
     };
 
     // 复制数据库文件到选择的位置
-    fs::copy(&db_path, &file_path).map_err(|e| format!("备份数据库失败: {}", e))?;
+    fs::copy(&db_path, &file_path).map_err(|e| format!("Failed to backup database: {}", e))?;
 
-    Ok(format!("成功备份数据库到 {}", file_path.display()))
+    Ok(format!("Successfully backed up database to {}", file_path.display()))
 }
 
 // 恢复数据库
@@ -214,39 +214,39 @@ pub async fn restore_database(app: tauri::AppHandle) -> Result<String, String> {
     let file_path = match app
         .dialog()
         .file()
-        .add_filter("数据库文件", &["db"])
+        .add_filter("Database file", &["db"])
         .blocking_pick_file()
     {
         Some(path) => match path.as_path() {
             Some(p) => p.to_path_buf(),
-            None => return Err("无法获取选择文件路径".to_string()),
+            None => return Err("Could not get selected file path".to_string()),
         },
-        None => return Err("恢复已取消".to_string()),
+        None => return Err("Restore cancelled".to_string()),
     };
 
     // 确保是数据库文件
     if let Some(ext) = file_path.extension() {
         if ext != "db" {
-            return Err("请选择有效的数据库备份文件(.db)".to_string());
+            return Err("Please select a valid database backup file (.db)".to_string());
         }
     } else {
-        return Err("请选择有效的数据库备份文件(.db)".to_string());
+        return Err("Please select a valid database backup file (.db)".to_string());
     }
 
     // 获取目标数据库路径
     let db_dir = dirs::data_dir()
-        .ok_or_else(|| "无法获取应用数据目录".to_string())?
+        .ok_or_else(|| "Could not get app data directory".to_string())?
         .join("mytips");
 
     let db_path = db_dir.join("mytips.db");
 
     // 确保目录存在
-    std::fs::create_dir_all(&db_dir).map_err(|e| format!("创建数据目录失败: {}", e))?;
+    std::fs::create_dir_all(&db_dir).map_err(|e| format!("Failed to create data directory: {}", e))?;
 
     // 复制备份文件到数据库位置
-    std::fs::copy(&file_path, &db_path).map_err(|e| format!("恢复失败: {}", e))?;
+    std::fs::copy(&file_path, &db_path).map_err(|e| format!("Restore failed: {}", e))?;
 
-    Ok("数据库已恢复，重启应用以加载最新数据".to_string())
+    Ok("Database has been restored. Please restart the application to load the latest data.".to_string())
 }
 
 // 导出为HTML
@@ -275,7 +275,7 @@ pub async fn export_as_html(
     };
 
     if tips.is_empty() {
-        return Err("没有找到要导出的笔记".to_string());
+        return Err("No notes found to export".to_string());
     }
 
     // 成功导出的笔记数量
@@ -302,7 +302,7 @@ pub async fn export_as_html(
         let file_path = match app
             .dialog()
             .file()
-            .add_filter("HTML文件", &["html"])
+            .add_filter("HTML file", &["html"])
             .set_file_name(&format!("{}.html", file_name))
             .blocking_save_file()
         {
@@ -322,10 +322,10 @@ pub async fn export_as_html(
             if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
                 category.name
             } else {
-                "未分类".to_string()
+                "Uncategorized".to_string()
             }
         } else {
-            "未分类".to_string()
+            "Uncategorized".to_string()
         };
 
         // 将Markdown转换为HTML，并将原有标题级别下移一级
@@ -337,7 +337,7 @@ pub async fn export_as_html(
         // 构建HTML文档
         let html = format!(
             r#"<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -403,8 +403,8 @@ pub async fn export_as_html(
 <body>
     <h1>{title}</h1>
     <div class="meta">
-        <p><strong>分类</strong>: {category}<br>
-        <strong>标签</strong>: {tags}</p>
+        <p><strong>Category</strong>: {category}<br>
+        <strong>Tags</strong>: {tags}</p>
     </div>
     <div class="content">
         {content}
@@ -418,20 +418,20 @@ pub async fn export_as_html(
         );
 
         // 写入文件
-        fs::write(&file_path, html).map_err(|e| format!("写入文件失败: {}", e))?;
+        fs::write(&file_path, html).map_err(|e| format!("Failed to write file: {}", e))?;
 
         exported_count += 1;
     }
 
     if exported_count == 0 {
-        return Err("没有导出任何笔记".to_string());
+        return Err("No notes were exported".to_string());
     } else if exported_count < total_count {
         Ok(format!(
-            "成功导出 {} 个笔记（共 {} 个）",
+            "Successfully exported {} out of {} notes",
             exported_count, total_count
         ))
     } else {
-        Ok(format!("成功导出 {} 个笔记", exported_count))
+        Ok(format!("Successfully exported {} notes", exported_count))
     }
 }
 
@@ -462,7 +462,7 @@ pub async fn export_as_pdf(
     };
 
     if tips.is_empty() {
-        return Err("没有找到要导出的笔记".to_string());
+        return Err("No notes found to export".to_string());
     }
 
     // 成功导出的笔记数量
@@ -488,7 +488,7 @@ pub async fn export_as_pdf(
         let file_path = match app
             .dialog()
             .file()
-            .add_filter("PDF文件", &["pdf"])
+            .add_filter("PDF file", &["pdf"])
             .set_file_name(&format!("{}.pdf", file_name))
             .blocking_save_file()
         {
@@ -508,10 +508,10 @@ pub async fn export_as_pdf(
             if let Ok(Some(category)) = operations::get_category_by_id(&conn, category_id).await {
                 category.name
             } else {
-                "未分类".to_string()
+                "Uncategorized".to_string()
             }
         } else {
-            "未分类".to_string()
+            "Uncategorized".to_string()
         };
 
         // 将Markdown转换为HTML，并将原有标题级别下移一级
@@ -523,7 +523,7 @@ pub async fn export_as_pdf(
         // 构建完整的HTML文档，支持中文字体
         let html_document = format!(
             r#"<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -634,9 +634,9 @@ pub async fn export_as_pdf(
 <body>
     <h1>{title}</h1>
     <div class="meta">
-        <p><strong>分类：</strong>{category}</p>
-        <p><strong>标签：</strong>{tags}</p>
-        <p><strong>导出时间：</strong>{export_time}</p>
+        <p><strong>Category:</strong>{category}</p>
+        <p><strong>Tags:</strong>{tags}</p>
+        <p><strong>Export Time:</strong>{export_time}</p>
     </div>
     <div class="content">
         {content}
@@ -646,7 +646,7 @@ pub async fn export_as_pdf(
             title = tip.title,
             category = category_name,
             tags = tags_str,
-            export_time = chrono::Local::now().format("%Y年%m月%d日 %H:%M:%S").to_string(),
+            export_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             content = html_content
         );
 
@@ -656,9 +656,9 @@ pub async fn export_as_pdf(
         
         // 写入HTML内容
         let mut html_file = fs::File::create(&temp_html)
-            .map_err(|e| format!("创建临时HTML文件失败: {}", e))?;
+            .map_err(|e| format!("Failed to create temporary HTML file: {}", e))?;
         html_file.write_all(html_document.as_bytes())
-            .map_err(|e| format!("写入HTML内容失败: {}", e))?;
+            .map_err(|e| format!("Failed to write HTML content: {}", e))?;
 
         // 尝试使用不同的PDF生成方法
         let pdf_generation_success = 
@@ -675,19 +675,19 @@ pub async fn export_as_pdf(
         if pdf_generation_success {
             exported_count += 1;
         } else {
-            return Err(format!("PDF生成失败，请确保系统已安装Chrome浏览器或wkhtmltopdf工具。\n\n备选方案：\n1. 安装Chrome浏览器\n2. 安装wkhtmltopdf: brew install wkhtmltopdf (macOS)\n3. 或者选择导出为HTML格式，然后使用浏览器打印为PDF"));
+            return Err(format!("PDF generation failed. Please make sure that either Chrome browser or wkhtmltopdf tool is installed.\n\nAlternatives:\n1. Install Chrome browser\n2. Install wkhtmltopdf: brew install wkhtmltopdf (macOS)\n3. Or choose to export as HTML format and then print as PDF using a browser."));
         }
     }
 
     if exported_count == 0 {
-        return Err("没有导出任何笔记".to_string());
+        return Err("No notes were exported".to_string());
     } else if exported_count < total_count {
         Ok(format!(
-            "成功导出 {} 个笔记（共 {} 个）",
+            "Successfully exported {} out of {} notes",
             exported_count, total_count
         ))
     } else {
-        Ok(format!("成功导出 {} 个笔记", exported_count))
+        Ok(format!("Successfully exported {} notes", exported_count))
     }
 }
 
@@ -774,7 +774,7 @@ fn try_simple_pdf_fallback(
     current_layer.begin_text_section();
     current_layer.set_font(&font, 12.0);
     current_layer.set_text_cursor(Mm(10.0), Mm(280.0));
-    current_layer.write_text("Note: PDF fallback mode - Chinese characters converted to pinyin", &font);
+    current_layer.write_text("Note: PDF fallback mode - Chinese characters may not be displayed correctly.", &font);
     current_layer.end_text_section();
 
     // 转换中文到拼音或保留原文（简化处理）
@@ -960,11 +960,13 @@ fn collect_tip_titles_recursive(node: &ExportCategoryNode, titles: &mut Vec<Stri
 pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Result<(), String> {
     // 1. 弹出对话框让用户选择保存位置
     let dialog = app.dialog();
-    let destination = match dialog.file().add_filter("PDF", &["pdf"]).blocking_save_file() {
-        Some(path) => path.as_path().map(|p| p.to_path_buf()),
+    let destination_path = match dialog.file().add_filter("PDF", &["pdf"]).blocking_save_file() {
+        Some(path) => match path.as_path() {
+            Some(p) => p.to_path_buf(),
+            None => return Ok(()),
+        },
         None => return Ok(()),
     };
-    let destination = destination.ok_or_else(|| "Invalid path".to_string())?;
 
     // 2. 数据库和笔记本信息
     let manager = app.state::<UnifiedDbManager>();
@@ -989,7 +991,7 @@ pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Resu
     // 6. 构建完整的HTML文档
     let html_document = format!(
         r#"<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>{title}</title>
@@ -1066,7 +1068,7 @@ pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Resu
 <body>
     <h1>{title}</h1>
     <div class="meta">
-        <p><strong>导出时间：</strong>{export_time}</p>
+        <p><strong>Export Time:</strong>{export_time}</p>
     </div>
     <div class="content">
         {content}
@@ -1075,7 +1077,7 @@ pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Resu
 </html>"#,
         title = notebook.name,
         keywords = keywords,
-        export_time = chrono::Local::now().format("%Y年%m月%d日 %H:%M:%S").to_string(),
+        export_time = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         content = notebook_html_content
     );
 
@@ -1092,8 +1094,8 @@ pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Resu
         .map_err(|e| format!("Failed to write HTML content: {}", e))?;
 
     let pdf_generation_success = 
-        try_wkhtmltopdf(&temp_html, &destination) ||
-        try_chrome_pdf(&temp_html, &destination);
+        try_wkhtmltopdf(&temp_html, &destination_path) ||
+        try_chrome_pdf(&temp_html, &destination_path);
 
     let _ = fs::remove_file(&temp_html);
 
@@ -1105,15 +1107,17 @@ pub async fn export_notebook_to_pdf(app: AppHandle, notebook_id: String) -> Resu
 }
 
 
-#[command]
+#[tauri::command]
 pub async fn export_notebook_to_word(app: AppHandle, notebook_id: String) -> Result<(), String> {
     // 1. 弹出对话框
     let dialog = app.dialog();
-    let destination = match dialog.file().add_filter("Word Document", &["docx"]).blocking_save_file() {
-        Some(path) => path.as_path().map(|p| p.to_path_buf()),
+    let destination_path = match dialog.file().add_filter("Word Document", &["docx"]).blocking_save_file() {
+        Some(path) => match path.as_path() {
+            Some(p) => p.to_path_buf(),
+            None => return Ok(()),
+        },
         None => return Ok(()),
     };
-    let destination = destination.ok_or_else(|| "Invalid path".to_string())?;
 
     // 2. 数据库和笔记本信息
     let manager = app.state::<UnifiedDbManager>();
@@ -1130,7 +1134,7 @@ pub async fn export_notebook_to_word(app: AppHandle, notebook_id: String) -> Res
     write_category_to_word_recursive(&conn, &notebook, &mut docx, 1).await.map_err(|e| e.to_string())?;
 
     // 5. 保存
-    let file = fs::File::create(destination).map_err(|e| e.to_string())?;
+    let file = fs::File::create(destination_path).map_err(|e| e.to_string())?;
     docx.build().pack(&file).map_err(|e| e.to_string())?;
 
     Ok(())

@@ -13,7 +13,7 @@
         
         <div class="form-control">
           <label class="label">
-            <span class="label-text">密码</span>
+            <span class="label-text">{{ t('passwordDialog.password') }}</span>
           </label>
           <div class="relative">
             <input 
@@ -22,7 +22,7 @@
               class="input input-bordered w-full pr-10"
               :class="{ 'input-error': error }"
               v-model="password"
-              :placeholder="mode === 'unlock' ? '请输入密码' : '请设置密码'"
+              :placeholder="mode === 'unlock' ? t('passwordDialog.enterPassword') : t('passwordDialog.setPassword')"
               @keyup.enter="handleConfirm"
               @input="clearError"
             />
@@ -47,7 +47,7 @@
         <!-- 确认密码输入框（仅在设置密码时显示） -->
         <div v-if="mode === 'encrypt'" class="form-control mt-4">
           <label class="label">
-            <span class="label-text">确认密码</span>
+            <span class="label-text">{{ t('passwordDialog.confirmPassword') }}</span>
           </label>
           <div class="relative">
             <input 
@@ -55,7 +55,7 @@
               class="input input-bordered w-full pr-10"
               :class="{ 'input-error': confirmError }"
               v-model="confirmPassword"
-              placeholder="请再次输入密码"
+              :placeholder="t('passwordDialog.enterPasswordAgain')"
               @keyup.enter="handleConfirm"
               @input="clearConfirmError"
             />
@@ -79,7 +79,7 @@
 
         <!-- 密码强度提示（仅在设置密码时显示） -->
         <div v-if="mode === 'encrypt' && password" class="mt-3">
-          <div class="text-sm text-base-content/80 mb-1">密码强度:</div>
+          <div class="text-sm text-base-content/80 mb-1">{{ t('passwordDialog.passwordStrength') }}:</div>
           <div class="flex gap-1">
             <div 
               v-for="i in 4" 
@@ -92,21 +92,21 @@
             {{ getStrengthText() }}
           </div>
           <div class="text-xs text-base-content/60 mt-1">
-            提示：可以使用任何长度的密码，但建议使用强密码以提高安全性
+            {{ t('passwordDialog.strengthHint') }}
           </div>
         </div>
       </div>
 
       <div class="modal-action">
         <button class="btn" @click="handleCancel" :disabled="loading">
-          取消
+          {{ t('common.cancel') }}
         </button>
         <button 
           class="btn btn-primary" 
           @click="handleConfirm" 
           :disabled="!canConfirm || loading"
           :class="{ 'loading': loading }">
-          {{ mode === 'unlock' ? '解锁' : mode === 'encrypt' ? '加密' : '解密' }}
+          {{ mode === 'unlock' ? t('passwordDialog.unlock') : mode === 'encrypt' ? t('passwordDialog.encrypt') : t('passwordDialog.decrypt') }}
         </button>
       </div>
     </div>
@@ -116,6 +116,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 组件属性
 const props = defineProps({
@@ -219,16 +222,16 @@ function getStrengthTextClass() {
 }
 
 function getStrengthText() {
-  if (passwordStrength.value <= 1) return '弱'
-  if (passwordStrength.value <= 2) return '中等'
-  if (passwordStrength.value <= 3) return '强'
-  return '很强'
+  if (passwordStrength.value <= 1) return t('passwordDialog.strength.weak')
+  if (passwordStrength.value <= 2) return t('passwordDialog.strength.medium')
+  if (passwordStrength.value <= 3) return t('passwordDialog.strength.strong')
+  return t('passwordDialog.strength.veryStrong')
 }
 
 function validatePassword() {
   if (props.mode === 'encrypt') {
     if (password.value !== confirmPassword.value) {
-      confirmError.value = '两次输入的密码不一致'
+      confirmError.value = t('passwordDialog.passwordsDoNotMatch')
       return false
     }
   }
@@ -268,7 +271,7 @@ watch(() => props.show, (newShow) => {
 // 监听确认密码变化
 watch(confirmPassword, () => {
   if (confirmPassword.value && password.value !== confirmPassword.value) {
-    confirmError.value = '两次输入的密码不一致'
+    confirmError.value = t('passwordDialog.passwordsDoNotMatch')
   } else {
     confirmError.value = ''
   }

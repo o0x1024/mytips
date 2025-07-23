@@ -59,7 +59,7 @@
         />
         
         <!-- 加密状态指示器 -->
-        <span v-if="!isCollapsed && isNotebookEncrypted(notebook.id) && !isEditing" title="已加密" class="text-warning ml-1">
+        <span v-if="!isCollapsed && isNotebookEncrypted(notebook.id) && !isEditing" :title="$t('notebookItem.encrypted')" class="text-warning ml-1">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
@@ -82,29 +82,29 @@
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
-            加密笔记本
+            {{ $t('notebookItem.encryptNotebook') }}
           </a></li>
           <li><a @click="decryptNotebook" class="text-info">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             </svg>
-            解密笔记本
+            {{ $t('notebookItem.decryptNotebook') }}
           </a></li>
           <div class="divider my-0"></div>
-          <li><a @click="editNotebook">重命名</a></li>
-          <li><a @click="addChildNotebook">添加子笔记本</a></li>
+          <li><a @click="editNotebook">{{ $t('notebookItem.rename') }}</a></li>
+          <li><a @click="addChildNotebook">{{ $t('notebookItem.addChildNotebook') }}</a></li>
           <li>
             <details>
-              <summary>导出</summary>
+              <summary>{{ $t('notebookItem.export') }}</summary>
               <ul>
-                <li><a @click="exportToFolder">到文件夹</a></li>
-                <li><a @click="exportToPdf">为 PDF</a></li>
-                <li><a @click="exportToWord">为 Word</a></li>
+                <li><a @click="exportToFolder">{{ $t('notebookItem.exportToFolder') }}</a></li>
+                <li><a @click="exportToPdf">{{ $t('notebookItem.exportToPdf') }}</a></li>
+                <li><a @click="exportToWord">{{ $t('notebookItem.exportToWord') }}</a></li>
               </ul>
             </details>
           </li>
           <div class="divider my-0"></div>
-          <li><a @click="deleteNotebook" class="text-error">删除</a></li>
+          <li><a @click="deleteNotebook" class="text-error">{{ $t('notebookItem.delete') }}</a></li>
         </ul>
       </div>
     </div>
@@ -132,9 +132,12 @@
 
 <script setup lang="ts">
 import { ref, defineProps, defineEmits, watch, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { invoke } from '@tauri-apps/api/core'
 import { useNotificationStore } from '../stores/notificationStore'
+
+const { t } = useI18n()
 
 // 定义类型
 interface NotebookType {
@@ -194,7 +197,7 @@ function isNotebookEncrypted(notebookId: string): boolean {
   const result = encryptionStore.isItemEncrypted(notebookId)
   // 添加调试信息，帮助排查问题
   if (result) {
-    console.log(`笔记本 ${notebookId} 被检测为加密状态`)
+    console.log(`Notebook ${notebookId} is detected as encrypted.`)
   }
   return result
 }
@@ -254,9 +257,9 @@ async function exportToFolder(event: Event) {
   event.stopPropagation()
   try {
     await invoke('export_notebook_to_folder', { notebookId: props.notebook.id })
-    notificationStore.addToast('笔记本已成功导出为文件夹。', 'success')
+    notificationStore.addToast(t('notebookItem.exportSuccess'), 'success')
   } catch (error) {
-    notificationStore.addToast(`导出失败: ${error}`, 'error')
+    notificationStore.addToast(t('notebookItem.exportFailure', { error: error as string }), 'error')
   }
 }
 
@@ -264,9 +267,9 @@ async function exportToPdf(event: Event) {
   event.stopPropagation()
   try {
     await invoke('export_notebook_to_pdf', { notebookId: props.notebook.id })
-    notificationStore.addToast('笔记本已成功导出为 PDF。', 'success')
+    notificationStore.addToast(t('notebookItem.exportSuccess'), 'success')
   } catch (error) {
-    notificationStore.addToast(`导出失败: ${error}`, 'error')
+    notificationStore.addToast(t('notebookItem.exportFailure', { error: error as string }), 'error')
   }
 }
 
@@ -274,9 +277,9 @@ async function exportToWord(event: Event) {
   event.stopPropagation()
   try {
     await invoke('export_notebook_to_word', { notebookId: props.notebook.id })
-    notificationStore.addToast('笔记本已成功导出为 Word 文档。', 'success')
+    notificationStore.addToast(t('notebookItem.exportSuccess'), 'success')
   } catch (error) {
-    notificationStore.addToast(`导出失败: ${error}`, 'error')
+    notificationStore.addToast(t('notebookItem.exportFailure', { error: error as string }), 'error')
   }
 }
 

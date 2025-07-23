@@ -7,7 +7,9 @@ import { onMounted, onUnmounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { useUpdateStore } from '../stores/updateStore'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const updateStore = useUpdateStore()
 
 let checkTimer: number | null = null
@@ -62,11 +64,11 @@ async function setupEventListeners() {
     
     // 监听需要手动更新的事件
     unlistenManualUpdate = await listen('manual_update_required', async () => {
-      console.log('收到手动更新请求')
+      console.log('Received manual update request')
       try {
         const confirmed = await invoke('show_confirm_dialog', {
-          message: '由于签名验证失败，无法自动更新。这可能是由于网络问题或配置错误导致的。您想前往发布页面手动下载最新版本吗？',
-          title: '需要手动更新'
+          message: t('updateManager.manualUpdateRequiredMessage'),
+          title: t('updateManager.manualUpdateRequiredTitle')
         }) as boolean
         
         if (confirmed) {
@@ -75,11 +77,11 @@ async function setupEventListeners() {
           })
         }
       } catch (error) {
-        console.error('处理手动更新请求失败:', error)
+        console.error('Failed to handle manual update request:', error)
       }
     })
   } catch (error) {
-    console.error('设置事件监听器失败:', error)
+    console.error('Failed to set up event listeners:', error)
   }
 }
 
@@ -102,7 +104,7 @@ async function getCurrentVersion() {
     const version = await invoke('get_current_version') as string
     updateStore.setCurrentVersion(version)
   } catch (error) {
-    console.error('获取当前版本失败:', error)
+    console.error('Failed to get current version:', error)
   }
 }
 
@@ -125,12 +127,12 @@ async function checkForUpdatesQuiet() {
         body: updateResult.body || '',
         available: true
       })
-      console.log(`发现新版本: ${updateResult.version}`)
+      console.log(`New version found: ${updateResult.version}`)
     } else {
       updateStore.setUpdateInfo(null)
     }
   } catch (error) {
-    console.error('检查更新失败:', error)
+    console.error('Failed to check for updates:', error)
     updateStore.setUpdateInfo(null)
   } finally {
     updateStore.setChecking(false)

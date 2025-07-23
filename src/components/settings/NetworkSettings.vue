@@ -1,13 +1,13 @@
 <template>
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
-      <h2 class="card-title text-primary mb-4">网络设置</h2>
+      <h2 class="card-title text-primary mb-4">{{ $t('networkSettings.title') }}</h2>
 
       <!-- 代理设置 -->
       <div class="form-control">
         <div class="flex items-center mb-4">
           <label class="label cursor-pointer">
-            <span class="label-text text-base mr-4">启用代理</span>
+            <span class="label-text text-base mr-4">{{ $t('networkSettings.proxy.enable') }}</span>
             <input type="checkbox" v-model="proxySettings.enabled" class="toggle toggle-primary" />
           </label>
         </div>
@@ -16,11 +16,11 @@
           <!-- 代理协议 -->
           <div class="form-control">
             <label class="label">
-              <span class="label-text">代理协议</span>
+              <span class="label-text">{{ $t('networkSettings.proxy.protocol') }}</span>
             </label>
             <select v-model="proxySettings.protocol" class="select select-bordered w-full">
-              <option value="http">HTTP</option>
-              <option value="socks5">SOCKS5</option>
+              <option value="http">{{ $t('networkSettings.proxy.http') }}</option>
+              <option value="socks5">{{ $t('networkSettings.proxy.socks5') }}</option>
             </select>
           </div>
 
@@ -28,16 +28,16 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div class="form-control">
               <label class="label">
-                <span class="label-text">主机</span>
+                <span class="label-text">{{ $t('networkSettings.proxy.host') }}</span>
               </label>
-              <input type="text" v-model="proxySettings.host" placeholder="例如：127.0.0.1"
+              <input type="text" v-model="proxySettings.host" :placeholder="$t('networkSettings.proxy.hostPlaceholder')"
                 class="input input-bordered" />
             </div>
             <div class="form-control">
               <label class="label">
-                <span class="label-text">端口</span>
+                <span class="label-text">{{ $t('networkSettings.proxy.port') }}</span>
               </label>
-              <input type="number" v-model="proxySettings.port" placeholder="例如：7890"
+              <input type="number" v-model="proxySettings.port" :placeholder="$t('networkSettings.proxy.portPlaceholder')"
                 class="input input-bordered" />
             </div>
           </div>
@@ -47,9 +47,9 @@
             <button class="btn btn-outline btn-primary" @click="testProxyConnection" :disabled="isTestingProxy">
               <span v-if="isTestingProxy">
                 <span class="loading loading-spinner loading-xs mr-2"></span>
-                测试中...
+                {{ $t('networkSettings.proxy.testing') }}
               </span>
-              <span v-else>测试连接</span>
+              <span v-else>{{ $t('networkSettings.proxy.testConnection') }}</span>
             </button>
           </div>
         </div>
@@ -62,6 +62,9 @@
 import { ref, watch, onMounted } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { showMessage } from '../../services/dialog'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 // 代理设置接口
 interface ProxySettings {
@@ -86,7 +89,7 @@ async function saveProxySettings() {
     await invoke('save_proxy_settings', { proxySettings: proxySettings.value })
   } catch (error) {
     console.error('保存代理设置失败:', error)
-    showMessage('保存代理设置失败: ' + error, { title: '错误' })
+    showMessage(t('networkSettings.notifications.saveFailed', { error }), { title: t('networkSettings.notifications.error') })
   }
 }
 
@@ -103,10 +106,10 @@ async function testProxyConnection() {
       proxySettings: proxySettings.value
     })
 
-    showMessage(result, { title: '连接测试' })
+    showMessage(result, { title: t('networkSettings.notifications.connectionTest') })
   } catch (error) {
     console.error('代理测试失败:', error)
-    showMessage('代理测试失败: ' + error, { title: '错误' })
+    showMessage(t('networkSettings.notifications.testFailed', { error }), { title: t('networkSettings.notifications.error') })
   } finally {
     isTestingProxy.value = false
   }

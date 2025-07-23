@@ -12,7 +12,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
           </svg>
-          音频播放器
+          {{ t('audioPlayer.title') }}
         </h3>
         <button @click="closePanel" class="btn btn-ghost btn-sm btn-square">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -25,7 +25,7 @@
       <div v-if="currentAudio" class="mb-4 p-3 bg-base-200 rounded-lg">
         <div class="text-sm font-medium truncate">{{ currentAudio.file_name }}</div>
         <div class="text-xs text-base-content/60 mt-1">
-          {{ formatDuration(currentAudio.duration) }} • {{ currentAudio.file_format.toUpperCase() }}
+          {{ t('audioPlayer.info', { duration: formatDuration(currentAudio.duration), format: currentAudio.file_format.toUpperCase() }) }}
         </div>
       </div>
 
@@ -123,7 +123,7 @@
       <!-- 播放速度控制 -->
       <div class="mb-4">
         <div class="flex items-center justify-between">
-          <label class="text-sm text-base-content/70">播放速度</label>
+          <label class="text-sm text-base-content/70">{{ t('audioPlayer.playbackSpeed') }}</label>
           <select v-model="playbackRate" @change="updatePlaybackRate" class="select select-sm select-bordered">
             <option value="0.5">0.5x</option>
             <option value="0.75">0.75x</option>
@@ -137,7 +137,7 @@
 
       <!-- 音频文件列表 -->
       <div v-if="audioFiles.length > 0" class="mb-4">
-        <div class="text-sm font-medium mb-2">音频文件列表</div>
+        <div class="text-sm font-medium mb-2">{{ t('audioPlayer.fileList') }}</div>
         <div class="max-h-32 overflow-y-auto space-y-1">
           <div v-for="audio in audioFiles" 
                :key="audio.id"
@@ -152,7 +152,7 @@
 
       <!-- 转录文本显示 -->
       <div v-if="currentAudio?.transcription" class="mb-4">
-        <div class="text-sm font-medium mb-2">转录文本</div>
+        <div class="text-sm font-medium mb-2">{{ t('audioPlayer.transcription') }}</div>
         <div class="p-3 bg-base-200 rounded text-sm max-h-24 overflow-y-auto">
           {{ currentAudio.transcription }}
         </div>
@@ -163,17 +163,17 @@
         <button @click="insertAudioLink" 
                 :disabled="!currentAudio"
                 class="btn btn-secondary btn-sm flex-1">
-          插入链接
+          {{ t('audioPlayer.insertLink') }}
         </button>
         <button @click="insertTranscription" 
                 :disabled="!currentAudio?.transcription"
                 class="btn btn-accent btn-sm flex-1">
-          插入转录
+          {{ t('audioPlayer.insertTranscription') }}
         </button>
         <button @click="deleteAudio" 
                 :disabled="!currentAudio"
                 class="btn btn-error btn-sm">
-          删除
+          {{ t('audioPlayer.delete') }}
         </button>
       </div>
     </div>
@@ -192,8 +192,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import { getCachedAudioUrl, setCachedAudioUrl, revokeAudioUrl } from '../../utils/audioCache'
+import { getCachedAudioUrl } from '../../utils/audioCache'
+import { useI18n } from 'vue-i18n'
+import { showConfirm } from '../../services/dialog'
 
+const { t } = useI18n()
 // Props
 interface Props {
   show?: boolean
@@ -241,10 +244,10 @@ const progress = computed(() => {
 })
 
 const playbackStatusText = computed(() => {
-  if (isLoading.value) return '加载中...'
-  if (isPlaying.value) return '播放中'
-  if (currentTime.value > 0) return '已暂停'
-  return '准备就绪'
+  if (isLoading.value) return t('audioPlayer.status.loading')
+  if (isPlaying.value) return t('audioPlayer.status.playing')
+  if (currentTime.value > 0) return t('audioPlayer.status.paused')
+  return t('audioPlayer.status.ready')
 })
 
 // 方法
@@ -498,7 +501,10 @@ const insertTranscription = () => {
 const deleteAudio = async () => {
   if (!currentAudio.value) return
   
-  if (!confirm('确定要删除这个音频文件吗？')) return
+  const confirmed = await showConfirm(t('audioPlayer.deleteConfirmationMessage'), {
+    title: t('audioPlayer.deleteConfirmationTitle')
+  })
+  if (!confirmed) return
   
   try {
     await invoke('delete_audio_file', { audioId: currentAudio.value.audio_id })
@@ -583,10 +589,7 @@ watch(() => props.tipId, (newTipId: string) => {
   }
 })
 
-const checkAudioSupport = (format: string) => {
-  const test = document.createElement('audio')
-  return !!test.canPlayType && test.canPlayType(`audio/${format}`) !== ''
-}
+
 </script>
 
 <style scoped>

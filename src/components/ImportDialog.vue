@@ -4,13 +4,13 @@
     <template v-if="!isMinimized">
       <div class="modal modal-open">
         <div class="modal-box max-w-4xl">
-          <h3 class="font-bold text-lg mb-4">导入Markdown文档</h3>
+          <h3 class="font-bold text-lg mb-4">{{ $t('importDialog.title') }}</h3>
           
           <!-- 步骤指示器 -->
           <div class="steps w-full mb-6">
-            <div class="step" :class="{ 'step-primary': currentStep >= 1 }">选择来源</div>
-            <div class="step" :class="{ 'step-primary': currentStep >= 2 }">预览</div>
-            <div class="step" :class="{ 'step-primary': currentStep >= 3 }">导入</div>
+            <div class="step" :class="{ 'step-primary': currentStep >= 1 }">{{ $t('importDialog.steps.selectSource') }}</div>
+            <div class="step" :class="{ 'step-primary': currentStep >= 2 }">{{ $t('importDialog.steps.preview') }}</div>
+            <div class="step" :class="{ 'step-primary': currentStep >= 3 }">{{ $t('importDialog.steps.import') }}</div>
           </div>
 
           <!-- Step 1, 2, 3 content... -->
@@ -18,20 +18,20 @@
           <div v-if="currentStep === 1" class="space-y-4">
             <div class="form-control">
               <label class="label">
-                <span class="label-text">导入类型</span>
+                <span class="label-text">{{ $t('importDialog.sourceType.label') }}</span>
               </label>
               <div class="flex gap-4">
                 <label class="label cursor-pointer">
                   <input type="radio" name="import-type" class="radio radio-primary" v-model="importType" value="directory" />
-                  <span class="label-text ml-2">从文件夹导入</span>
+                  <span class="label-text ml-2">{{ $t('importDialog.sourceType.directory') }}</span>
                 </label>
                 <label class="label cursor-pointer">
                   <input type="radio" name="import-type" class="radio radio-primary" v-model="importType" value="file" />
-                  <span class="label-text ml-2">从单个文件导入</span>
+                  <span class="label-text ml-2">{{ $t('importDialog.sourceType.file') }}</span>
                 </label>
                 <label class="label cursor-pointer">
                   <input type="radio" name="import-type" class="radio radio-primary" v-model="importType" value="github" />
-                  <span class="label-text ml-2">从 GitHub 导入</span>
+                  <span class="label-text ml-2">{{ $t('importDialog.sourceType.github') }}</span>
                 </label>
               </div>
             </div>
@@ -39,12 +39,12 @@
             <div v-if="importType === 'directory' || importType === 'file'">
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">{{ importType === 'directory' ? '选择文件夹' : '选择文件' }}</span>
+                  <span class="label-text">{{ importType === 'directory' ? $t('importDialog.pathSelection.selectFolder') : $t('importDialog.pathSelection.selectFile') }}</span>
                 </label>
                 <div class="input-group">
                   <input 
                     type="text" 
-                    placeholder="点击选择..." 
+                    :placeholder="$t('importDialog.pathSelection.placeholder')" 
                     class="input input-bordered flex-1" 
                     :value="selectedPath"
                     readonly
@@ -53,7 +53,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                     </svg>
-                    选择
+                    {{ $t('importDialog.buttons.select') }}
                   </button>
                 </div>
               </div>
@@ -63,32 +63,32 @@
             <div v-if="importType === 'github'" class="space-y-4">
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">GitHub 仓库 URL</span>
+                  <span class="label-text">{{ $t('importDialog.githubOptions.repoUrl') }}</span>
                 </label>
-                <input type="text" placeholder="例如: https://github.com/user/repo" class="input input-bordered w-full" v-model="githubOptions.repo_url" />
+                <input type="text" :placeholder="$t('importDialog.githubOptions.repoUrlPlaceholder')" class="input input-bordered w-full" v-model="githubOptions.repo_url" />
               </div>
               <div class="grid grid-cols-2 gap-4">
                 <div class="form-control">
                   <label class="label">
-                    <span class="label-text">分支或 Tag (可选)</span>
+                    <span class="label-text">{{ $t('importDialog.githubOptions.branch') }}</span>
                   </label>
-                  <input type="text" placeholder="默认主分支" class="input input-bordered w-full" v-model="githubOptions.branch" />
+                  <input type="text" :placeholder="$t('importDialog.githubOptions.branchPlaceholder')" class="input input-bordered w-full" v-model="githubOptions.branch" />
                 </div>
                 <div class="form-control">
                   <label class="label">
-                    <span class="label-text">子目录 (可选)</span>
+                    <span class="label-text">{{ $t('importDialog.githubOptions.subdirectory') }}</span>
                   </label>
-                  <input type="text" placeholder="例如: docs" class="input input-bordered w-full" v-model="githubOptions.subdirectory" />
+                  <input type="text" :placeholder="$t('importDialog.githubOptions.subdirectoryPlaceholder')" class="input input-bordered w-full" v-model="githubOptions.subdirectory" />
                 </div>
               </div>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">Personal Access Token (可选)</span>
+                  <span class="label-text">{{ $t('importDialog.githubOptions.token') }}</span>
                   <span class="label-text-alt">
-                    <a href="https://github.com/settings/tokens" target="_blank" class="link link-primary text-xs">用于私有仓库</a>
+                    <a href="https://github.com/settings/tokens" target="_blank" class="link link-primary text-xs">{{ $t('importDialog.githubOptions.tokenHelp') }}</a>
                   </span>
                 </label>
-                <input type="password" placeholder="粘贴你的 Token" class="input input-bordered w-full" v-model="githubOptions.token" />
+                <input type="password" :placeholder="$t('importDialog.githubOptions.tokenPlaceholder')" class="input input-bordered w-full" v-model="githubOptions.token" />
               </div>
             </div>
 
@@ -96,29 +96,29 @@
             <div v-if="importType === 'directory' || importType === 'github'" class="space-y-2">
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">导入选项</span>
+                  <span class="label-text">{{ $t('importDialog.importOptions.label') }}</span>
                 </label>
                 <div class="space-y-2">
                   <label class="label cursor-pointer justify-start">
                     <input type="checkbox" class="checkbox checkbox-primary" v-model="options.include_subdirs" />
-                    <span class="label-text ml-2">包含子文件夹</span>
+                    <span class="label-text ml-2">{{ $t('importDialog.importOptions.includeSubdirs') }}</span>
                   </label>
                   <label class="label cursor-pointer justify-start">
                     <input type="checkbox" class="checkbox checkbox-primary" v-model="options.process_images" />
-                    <span class="label-text ml-2">处理图片引用</span>
+                    <span class="label-text ml-2">{{ $t('importDialog.importOptions.processImages') }}</span>
                   </label>
 
                   <!-- 图片压缩选项 -->
                   <div v-if="options.process_images" class="pl-8 space-y-2 mt-2 border-l-2 border-base-300">
                     <label class="label cursor-pointer justify-start">
                       <input type="checkbox" class="checkbox checkbox-sm" v-model="options.image_compression.enabled" />
-                      <span class="label-text ml-2">压缩图片</span>
+                      <span class="label-text ml-2">{{ $t('importDialog.importOptions.compressImages') }}</span>
                     </label>
 
                     <div v-if="options.image_compression.enabled" class="space-y-3 p-3 bg-base-200/50 rounded-lg">
                       <div class="form-control">
                         <label class="label pb-0">
-                          <span class="label-text text-sm">图片质量 (1-100)</span>
+                          <span class="label-text text-sm">{{ $t('importDialog.importOptions.imageQuality') }}</span>
                           <span class="label-text-alt">{{ options.image_compression.quality }}%</span>
                         </label>
                         <input type="range" min="1" max="100" v-model.number="options.image_compression.quality" class="range range-primary range-xs" />
@@ -126,15 +126,15 @@
                       <div class="grid grid-cols-2 gap-4">
                         <div class="form-control">
                           <label class="label py-0">
-                            <span class="label-text text-sm">最大宽度 (px)</span>
+                            <span class="label-text text-sm">{{ $t('importDialog.importOptions.maxWidth') }}</span>
                           </label>
-                          <input type="number" v-model.number="options.image_compression.max_width" class="input input-bordered input-sm" placeholder="例如: 1920" />
+                          <input type="number" v-model.number="options.image_compression.max_width" class="input input-bordered input-sm" :placeholder="$t('importDialog.importOptions.maxWidthPlaceholder')" />
                         </div>
                         <div class="form-control">
                           <label class="label py-0">
-                            <span class="label-text text-sm">最大高度 (px)</span>
+                            <span class="label-text text-sm">{{ $t('importDialog.importOptions.maxHeight') }}</span>
                           </label>
-                          <input type="number" v-model.number="options.image_compression.max_height" class="input input-bordered input-sm" placeholder="例如: 1080" />
+                          <input type="number" v-model.number="options.image_compression.max_height" class="input input-bordered input-sm" :placeholder="$t('importDialog.importOptions.maxHeightPlaceholder')" />
                         </div>
                       </div>
                     </div>
@@ -144,21 +144,21 @@
 
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">重名处理</span>
+                  <span class="label-text">{{ $t('importDialog.conflictResolution.label') }}</span>
                 </label>
                 <select class="select select-bordered" v-model="options.conflict_resolution">
-                  <option value="Rename">重命名</option>
-                  <option value="Skip">跳过</option>
-                  <option value="Merge">合并（仅笔记本）</option>
+                  <option value="Rename">{{ $t('importDialog.conflictResolution.rename') }}</option>
+                  <option value="Skip">{{ $t('importDialog.conflictResolution.skip') }}</option>
+                  <option value="Merge">{{ $t('importDialog.conflictResolution.merge') }}</option>
                 </select>
               </div>
 
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text">目标笔记本</span>
+                  <span class="label-text">{{ $t('importDialog.targetNotebook.label') }}</span>
                 </label>
                 <select class="select select-bordered" v-model="targetNotebookId">
-                  <option value="">创建新笔记本</option>
+                  <option value="">{{ $t('importDialog.targetNotebook.new') }}</option>
                   <option v-for="notebook in notebooks" :key="notebook.id" :value="notebook.id">
                     {{ notebook.name }}
                   </option>
@@ -168,10 +168,10 @@
 
             <div v-if="importType === 'file'" class="form-control">
               <label class="label">
-                <span class="label-text">目标笔记本</span>
+                <span class="label-text">{{ $t('importDialog.targetNotebook.label') }}</span>
               </label>
               <select class="select select-bordered" v-model="targetNotebookId" required>
-                <option value="" disabled>选择笔记本</option>
+                <option value="" disabled>{{ $t('importDialog.targetNotebook.select') }}</option>
                 <option v-for="notebook in notebooks" :key="notebook.id" :value="notebook.id">
                   {{ notebook.name }}
                 </option>
@@ -183,21 +183,21 @@
           <div v-if="currentStep === 2" class="space-y-4">
             <div v-if="isLoadingPreview" class="flex items-center justify-center py-8">
               <span class="loading loading-spinner loading-lg"></span>
-              <span class="ml-2">正在扫描文件...</span>
+              <span class="ml-2">{{ $t('importDialog.preview.loading') }}</span>
             </div>
 
             <div v-else-if="preview" class="space-y-4">
               <div class="stats shadow">
                 <div class="stat">
-                  <div class="stat-title">笔记本</div>
+                  <div class="stat-title">{{ $t('importDialog.preview.notebooks') }}</div>
                   <div class="stat-value">{{ preview.notebooks.length }}</div>
                 </div>
                 <div class="stat">
-                  <div class="stat-title">笔记</div>
+                  <div class="stat-title">{{ $t('importDialog.preview.notes') }}</div>
                   <div class="stat-value">{{ preview.total_notes }}</div>
                 </div>
                 <div class="stat">
-                  <div class="stat-title">图片</div>
+                  <div class="stat-title">{{ $t('importDialog.preview.images') }}</div>
                   <div class="stat-value">{{ preview.total_images }}</div>
                 </div>
               </div>
@@ -217,13 +217,13 @@
                           <span class="text-base-content/70">📄</span>
                           {{ note.title }}
                           <span v-if="note.images.length > 0" class="badge badge-sm badge-outline">
-                            {{ note.images.length }} 图片
+                            {{ $t('importDialog.preview.imageCount', { count: note.images.length }) }}
                           </span>
                         </div>
                       </div>
                       <div v-if="notebook.children.length > 0" class="ml-4">
                         <!-- 这里可以递归显示子笔记本，为简化先显示数量 -->
-                        <span class="text-sm text-base-content/70">+ {{ notebook.children.length }} 个子文件夹</span>
+                        <span class="text-sm text-base-content/70">{{ $t('importDialog.preview.subfolderCount', { count: notebook.children.length }) }}</span>
                       </div>
                     </div>
                   </div>
@@ -237,11 +237,11 @@
             <div v-if="isImporting" class="space-y-4">
               <div class="flex items-center justify-center">
                 <span class="loading loading-spinner loading-lg"></span>
-                <span class="ml-2">{{ importStatusMessage }}</span>
+                <span class="ml-2">{{ $t('importDialog.importing.status') }}</span>
               </div>
               <progress class="progress progress-primary w-full" :value="importProgress" :max="importTotalFiles"></progress>
               <div class="text-center text-sm text-base-content/70">
-                {{ importProgress }} / {{ importTotalFiles }}
+                {{ $t('importDialog.importing.progress', { current: importProgress, total: importTotalFiles }) }}
                 <p v-if="currentImportFile" class="truncate ...">{{ currentImportFile }}</p>
               </div>
             </div>
@@ -253,27 +253,27 @@
                   <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span>
-                  {{ importResult.success ? '导入完成！' : '导入失败' }}
+                  {{ importResult.success ? $t('importDialog.results.success') : $t('importDialog.results.failure') }}
                 </span>
               </div>
 
               <div class="stats shadow">
                 <div class="stat">
-                  <div class="stat-title">创建笔记本</div>
+                  <div class="stat-title">{{ $t('importDialog.results.notebooksCreated') }}</div>
                   <div class="stat-value">{{ importResult.notebooks_created }}</div>
                 </div>
                 <div class="stat">
-                  <div class="stat-title">导入笔记</div>
+                  <div class="stat-title">{{ $t('importDialog.results.notesImported') }}</div>
                   <div class="stat-value">{{ importResult.notes_imported }}</div>
                 </div>
                 <div class="stat">
-                  <div class="stat-title">处理图片</div>
+                  <div class="stat-title">{{ $t('importDialog.results.imagesProcessed') }}</div>
                   <div class="stat-value">{{ importResult.images_processed }}</div>
                 </div>
               </div>
 
               <div v-if="importResult.warnings.length > 0" class="space-y-2">
-                <h4 class="font-semibold">警告信息：</h4>
+                <h4 class="font-semibold">{{ $t('importDialog.results.warnings') }}</h4>
                 <div class="bg-yellow-50 border border-yellow-200 rounded p-3 max-h-32 overflow-y-auto">
                   <ul class="text-sm space-y-1">
                     <li v-for="warning in importResult.warnings" :key="warning" class="text-yellow-800">
@@ -284,7 +284,7 @@
               </div>
 
               <div v-if="importResult.errors.length > 0" class="space-y-2">
-                <h4 class="font-semibold">错误信息：</h4>
+                <h4 class="font-semibold">{{ $t('importDialog.results.errors') }}</h4>
                 <div class="bg-red-50 border border-red-200 rounded p-3 max-h-32 overflow-y-auto">
                   <ul class="text-sm space-y-1">
                     <li v-for="error in importResult.errors" :key="error" class="text-red-800">
@@ -298,21 +298,21 @@
 
           <!-- 操作按钮 -->
           <div class="modal-action">
-            <button class="btn" @click="cancel">取消</button>
+            <button class="btn" @click="cancel">{{ $t('importDialog.buttons.cancel') }}</button>
             <button 
               v-if="currentStep === 1" 
               class="btn btn-primary" 
               @click="nextStep" 
               :disabled="!canProceedFromStep1"
             >
-              下一步
+              {{ $t('importDialog.buttons.next') }}
             </button>
             <button 
               v-if="currentStep === 2" 
               class="btn" 
               @click="prevStep"
             >
-              上一步
+              {{ $t('importDialog.buttons.previous') }}
             </button>
             <button 
               v-if="currentStep === 2" 
@@ -320,21 +320,21 @@
               @click="startImport"
               :disabled="!preview"
             >
-              开始导入
+              {{ $t('importDialog.buttons.start') }}
             </button>
             <button
               v-if="currentStep === 3 && isImporting"
               class="btn"
               @click="runInBackground"
             >
-              后台运行
+              {{ $t('importDialog.buttons.runInBackground') }}
             </button>
             <button 
               v-if="currentStep === 3 && !isImporting" 
               class="btn btn-primary" 
               @click="finish"
             >
-              完成
+              {{ $t('importDialog.buttons.finish') }}
             </button>
           </div>
         </div>
@@ -350,14 +350,14 @@
     >
       <div class="flex justify-between items-center mb-2">
         <h4 class="font-bold text-sm">
-          {{ isImporting ? '正在后台导入...' : '导入完成' }}
+          {{ isImporting ? $t('importDialog.importing.inBackground') : $t('importDialog.importing.complete') }}
         </h4>
-        <span v-if="isImporting" class="text-xs opacity-70">点击展开</span>
-        <button v-else class="btn btn-xs btn-ghost" @click.stop="finish">完成</button>
+        <span v-if="isImporting" class="text-xs opacity-70">{{ $t('common.tip') }}</span>
+        <button v-else class="btn btn-xs btn-ghost" @click.stop="finish">{{ $t('importDialog.buttons.finish') }}</button>
       </div>
       <progress class="progress progress-primary w-full" :value="importProgress" :max="importTotalFiles"></progress>
       <div class="text-center text-xs text-base-content/70 truncate mt-1">
-        <span>{{ importProgress }} / {{ importTotalFiles }}</span>
+        <span>{{ $t('importDialog.importing.progress', { current: importProgress, total: importTotalFiles }) }}</span>
         <p v-if="isImporting && currentImportFile" class="truncate ...">{{ currentImportFile }}</p>
       </div>
     </div>
@@ -366,11 +366,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { showAlert } from '../services/dialog'
 import { showToast } from '../services/notification'
+
+const { t } = useI18n()
 
 // 组件属性
 const props = defineProps<{
@@ -455,6 +458,7 @@ async function selectPath() {
     }
   } catch (error) {
     console.error('选择路径失败:', error)
+    await showAlert(t('importDialog.errors.pathSelectionFailed'), { title: t('common.error') })
   }
 }
 
@@ -494,8 +498,8 @@ async function nextStep() {
           notes: [],
           children: []
         }],
-        total_notes: '未知', // 显示未知，因为我们跳过了预览
-        total_images: '未知'
+        total_notes: t('importDialog.preview.unknown'), // 显示未知，因为我们跳过了预览
+        total_images: t('importDialog.preview.unknown')
       }
     }
     currentStep.value = 2
@@ -518,7 +522,7 @@ async function loadPreview() {
     })
   } catch (error) {
     console.error('获取预览失败:', error)
-    await showAlert('获取预览失败: ' + error, { title: '错误' })
+    await showAlert(`${t('importDialog.errors.previewFailed')}: ${error}`, { title: t('common.error') })
   } finally {
     isLoadingPreview.value = false
   }
@@ -529,7 +533,7 @@ async function startImport() {
   importProgress.value = 0
   importTotalFiles.value = 0
   currentImportFile.value = ''
-  importStatusMessage.value = '正在启动导入...'
+  importStatusMessage.value = t('importDialog.importing.status')
   currentStep.value = 3
 
   try {
@@ -552,8 +556,8 @@ async function startImport() {
             if (isMinimized.value) {
                 const { success, notes_imported, notebooks_created, errors } = progress.result;
                 const message = success
-                    ? `后台导入完成: 导入 ${notes_imported} 篇笔记, 创建 ${notebooks_created} 个笔记本。`
-                    : `后台导入失败: ${errors && errors.length > 0 ? errors[0] : '未知错误'}`;
+                    ? t('importDialog.backgroundImport.success', { notes: notes_imported, notebooks: notebooks_created })
+                    : t('importDialog.backgroundImport.failure', { error: errors && errors.length > 0 ? errors[0] : '未知错误' });
                 showToast(message, success ? 'success' : 'error', 10000);
             }
 
@@ -587,8 +591,8 @@ async function startImport() {
             if (isMinimized.value) {
                 const { success, notes_imported, notebooks_created, errors } = progress.result;
                 const message = success
-                    ? `后台导入完成: 导入 ${notes_imported} 篇笔记, 创建 ${notebooks_created} 个笔记本。`
-                    : `后台导入失败: ${errors && errors.length > 0 ? errors[0] : '未知错误'}`;
+                    ? t('importDialog.backgroundImport.success', { notes: notes_imported, notebooks: notebooks_created })
+                    : t('importDialog.backgroundImport.failure', { error: errors && errors.length > 0 ? errors[0] : '未知错误' });
                 showToast(message, success ? 'success' : 'error', 10000);
             }
             if (unlisten) {
@@ -642,19 +646,19 @@ function restoreDialog() {
 function getStatusMessage(status: string): string {
   switch (status) {
     case 'starting':
-      return '正在开始...'
+      return t('importDialog.status.starting')
     case 'cloning':
-      return '正在克隆仓库...'
+      return t('importDialog.status.cloning')
     case 'scanning':
-      return '正在扫描文件...'
+      return t('importDialog.status.scanning')
     case 'inProgress':
-      return '正在导入文件...'
+      return t('importDialog.status.inProgress')
     case 'completed':
-      return '导入完成！'
+      return t('importDialog.status.completed')
     case 'error':
-      return '导入时发生错误'
+      return t('importDialog.status.error')
     default:
-      return '正在导入...'
+      return t('importDialog.importing.status')
   }
 }
 
@@ -662,10 +666,10 @@ async function cancel() {
   if (isImporting.value) {
     try {
       await invoke('cancel_import')
-      showToast('正在取消导入...', 'info')
+      showToast(t('importDialog.importing.cancelImport'), 'info')
     } catch (e) {
       console.error('Failed to cancel import', e)
-      showToast('取消导入失败', 'error')
+      showToast(t('importDialog.importing.cancelFailed'), 'error')
     }
   }
   if (unlisten) {

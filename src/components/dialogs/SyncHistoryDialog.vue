@@ -9,7 +9,7 @@
       <div class="flex items-center justify-between p-6 border-b border-base-300">
         <h2 class="text-xl font-bold text-base-content flex items-center gap-3">
           <i class="fas fa-history text-primary"></i>
-          同步历史记录
+          {{ $t('syncHistoryDialog.title') }}
         </h2>
         <button class="btn btn-ghost btn-sm btn-circle" @click="closeDialog">
           <i class="fas fa-times text-lg"></i>
@@ -24,18 +24,18 @@
             <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text font-medium">显示记录数</span>
+                  <span class="label-text font-medium">{{ $t('syncHistoryDialog.showRecords') }}</span>
                 </label>
                 <select class="select select-bordered select-sm" v-model="historyLimit" @change="loadHistory">
-                  <option value="20">最近20条</option>
-                  <option value="50">最近50条</option>
-                  <option value="100">最近100条</option>
+                  <option value="20">{{ $t('syncHistoryDialog.records.20') }}</option>
+                  <option value="50">{{ $t('syncHistoryDialog.records.50') }}</option>
+                  <option value="100">{{ $t('syncHistoryDialog.records.100') }}</option>
                 </select>
               </div>
               
               <button class="btn btn-outline btn-sm gap-2" @click="loadHistory">
                 <i class="fas fa-refresh"></i>
-                刷新
+                {{ $t('syncHistoryDialog.refresh') }}
               </button>
             </div>
           </div>
@@ -44,14 +44,14 @@
         <!-- 加载状态 -->
         <div v-if="loading" class="flex flex-col items-center justify-center py-12">
           <span class="loading loading-spinner loading-lg text-primary"></span>
-          <p class="mt-4 text-base-content/70">正在加载历史记录...</p>
+          <p class="mt-4 text-base-content/70">{{ $t('syncHistoryDialog.loading') }}</p>
         </div>
         
         <!-- 空状态 -->
         <div v-else-if="history.length === 0" class="text-center py-12">
           <i class="fas fa-clock text-6xl text-base-content/30 mb-4"></i>
-          <h3 class="text-xl font-bold text-base-content mb-2">暂无历史记录</h3>
-          <p class="text-base-content/70">还没有任何同步操作或冲突解决记录</p>
+          <h3 class="text-xl font-bold text-base-content mb-2">{{ $t('syncHistoryDialog.noHistoryTitle') }}</h3>
+          <p class="text-base-content/70">{{ $t('syncHistoryDialog.noHistoryMessage') }}</p>
         </div>
                 
         <!-- 历史记录列表 -->
@@ -78,12 +78,12 @@
               <!-- 详细信息 -->
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div class="flex justify-between items-center">
-                  <span class="text-base-content/70 text-sm">记录ID:</span>
+                  <span class="text-base-content/70 text-sm">{{ $t('syncHistoryDialog.recordId') }}</span>
                   <span class="font-mono text-sm font-medium bg-base-300 px-2 py-1 rounded">{{ item.record_id }}</span>
                 </div>
                 
                 <div class="flex justify-between items-center">
-                  <span class="text-base-content/70 text-sm">解决方式:</span>
+                  <span class="text-base-content/70 text-sm">{{ $t('syncHistoryDialog.resolvedBy') }}</span>
                   <span class="text-sm font-medium">{{ getResolvedByDisplayName(item.resolved_by) }}</span>
                 </div>
               </div>
@@ -93,7 +93,7 @@
           <!-- 统计信息 -->
           <div class="mt-8">
             <div class="divider">
-              <span class="text-base-content font-medium">统计信息</span>
+              <span class="text-base-content font-medium">{{ $t('syncHistoryDialog.statistics') }}</span>
             </div>
             
             <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-200">
@@ -101,7 +101,7 @@
                 <div class="stat-figure text-primary">
                   <i class="fas fa-list text-2xl"></i>
                 </div>
-                <div class="stat-title">总记录数</div>
+                <div class="stat-title">{{ $t('syncHistoryDialog.totalRecords') }}</div>
                 <div class="stat-value text-primary">{{ history.length }}</div>
               </div>
               
@@ -109,7 +109,7 @@
                 <div class="stat-figure text-info">
                   <i class="fas fa-laptop text-2xl"></i>
                 </div>
-                <div class="stat-title">本地优先</div>
+                <div class="stat-title">{{ $t('syncHistoryDialog.localWins') }}</div>
                 <div class="stat-value text-info">{{ getStrategyCount('LOCAL_WINS') }}</div>
               </div>
               
@@ -117,7 +117,7 @@
                 <div class="stat-figure text-warning">
                   <i class="fas fa-cloud text-2xl"></i>
                 </div>
-                <div class="stat-title">远程优先</div>
+                <div class="stat-title">{{ $t('syncHistoryDialog.remoteWins') }}</div>
                 <div class="stat-value text-warning">{{ getStrategyCount('REMOTE_WINS') }}</div>
               </div>
               
@@ -125,7 +125,7 @@
                 <div class="stat-figure text-success">
                   <i class="fas fa-code-merge text-2xl"></i>
                 </div>
-                <div class="stat-title">自动合并</div>
+                <div class="stat-title">{{ $t('syncHistoryDialog.autoMerge') }}</div>
                 <div class="stat-value text-success">{{ getStrategyCount('MERGE') }}</div>
               </div>
             </div>
@@ -135,7 +135,7 @@
       
       <!-- 对话框底部 -->
       <div class="flex justify-end items-center p-6 border-t border-base-300 bg-base-50">
-        <button class="btn btn-primary" @click="closeDialog">关闭</button>
+        <button class="btn btn-primary" @click="closeDialog">{{ $t('syncHistoryDialog.close') }}</button>
       </div>
     </div>
   </div>
@@ -143,7 +143,10 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
+
+const { t } = useI18n()
 
 // Emits
 const emit = defineEmits(['close'])
@@ -185,14 +188,7 @@ const getTableIcon = (tableName) => {
 }
 
 const getTableDisplayName = (tableName) => {
-  const names = {
-    'tips': '笔记',
-    'categories': '分类',
-    'tags': '标签',
-    'ai_conversations': 'AI对话',
-    'ai_messages': 'AI消息'
-  }
-  return names[tableName] || tableName
+  return t(`conflictResolutionDialog.tables.${tableName}`, tableName)
 }
 
 const getStrategyBadgeClass = (strategy) => {
@@ -206,26 +202,20 @@ const getStrategyBadgeClass = (strategy) => {
 }
 
 const getStrategyDisplayName = (strategy) => {
-  const names = {
-    'LOCAL_WINS': '本地优先',
-    'REMOTE_WINS': '远程优先',
-    'MERGE': '自动合并',
-    'USER_CHOICE': '用户选择'
-  }
-  return names[strategy] || strategy
+  return t(`syncHistoryDialog.strategies.${strategy}`, strategy)
 }
 
 const getResolvedByDisplayName = (resolvedBy) => {
-  const names = {
-    'AUTO': '自动解决',
-    'USER': '用户手动',
-    'SYSTEM': '系统处理'
+  const resolvedByMap = {
+    'AUTO': t('syncHistoryDialog.resolvedByAuto'),
+    'USER': t('syncHistoryDialog.resolvedByManual'),
+    'SYSTEM': t('syncHistoryDialog.resolvedBySystem')
   }
-  return names[resolvedBy] || resolvedBy
+  return resolvedByMap[resolvedBy] || resolvedBy
 }
 
 const formatDate = (timestamp) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
+  return new Date(timestamp).toLocaleString()
 }
 
 const getStrategyCount = (strategy) => {

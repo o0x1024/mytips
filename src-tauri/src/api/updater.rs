@@ -26,20 +26,20 @@ pub struct UpdateStatus {
 /// 显示确认对话框
 #[command]
 pub async fn show_confirm_dialog(message: String, title: String) -> Result<bool, String> {
-    println!("显示对话框: {} - {}", title, message);
-    // 由于配置复杂性，我们暂时返回 true
-    // 用户可以通过控制台日志看到请求
+    println!("Showing dialog: {} - {}", title, message);
+    // For now, we return true due to configuration complexity.
+    // The user can see the request in the console log.
     Ok(true)
 }
 
 /// 打开外部URL
 #[command]
 pub async fn open_url(url: String) -> Result<(), String> {
-    println!("尝试打开URL: {}", url);
+    println!("Attempting to open URL: {}", url);
     
     // 使用 open crate 来打开URL
     if let Err(e) = open::that(&url) {
-        return Err(format!("打开URL失败: {}", e));
+        return Err(format!("Failed to open URL: {}", e));
     }
     
     Ok(())
@@ -105,17 +105,17 @@ async fn create_updater_builder_with_proxy(app: &tauri::AppHandle) -> Result<tau
                     proxy_settings.protocol, proxy_settings.host, proxy_settings.port
                 );
                 
-                println!("更新器使用代理: {}", proxy_url);
+                println!("Updater is using proxy: {}", proxy_url);
                 
                 if let Ok(parsed_proxy) = proxy_url.parse() {
                     updater_builder = updater_builder.proxy(parsed_proxy);
                 } else {
-                    println!("警告: 无法解析代理URL: {}", proxy_url);
+                    println!("Warning: Failed to parse proxy URL: {}", proxy_url);
                 }
             }
         }
         Err(e) => {
-            println!("警告: 获取代理设置失败: {}", e);
+            println!("Warning: Failed to get proxy settings: {}", e);
         }
     }
     
@@ -127,7 +127,7 @@ async fn create_updater_builder_with_proxy(app: &tauri::AppHandle) -> Result<tau
 #[command]
 pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, String> {
     let updater_builder = create_updater_builder_with_proxy(&app).await?;
-    let updater = updater_builder.build().map_err(|e| format!("创建更新器失败: {}", e))?;
+    let updater = updater_builder.build().map_err(|e| format!("Failed to create updater: {}", e))?;
     
     match updater.check().await {
         Ok(update_result) => {
@@ -147,7 +147,7 @@ pub async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateInfo, Stri
                 })
             }
         }
-        Err(e) => Err(format!("检查更新失败: {}", e)),
+        Err(e) => Err(format!("Failed to check for updates: {}", e)),
     }
 }
 
@@ -169,7 +169,7 @@ pub async fn check_for_updates_with_config(
     if let Some(ref proxy_url) = proxy {
         if let Ok(parsed_proxy) = proxy_url.parse() {
             updater_builder = updater_builder.proxy(parsed_proxy);
-            println!("使用自定义代理: {}", proxy_url);
+            println!("Using custom proxy: {}", proxy_url);
         }
     }
     
@@ -196,14 +196,14 @@ pub async fn check_for_updates_with_config(
                 Err(e) => {
                     // 如果签名验证失败，尝试使用无签名验证的方式
                     if e.to_string().contains("signature") {
-                        println!("签名验证失败，尝试无签名验证模式...");
+                        println!("Signature verification failed, trying without signature verification...");
                         return check_for_updates_no_signature(app, timeout_seconds, proxy).await;
                     }
-                    Err(format!("检查更新失败: {}", e))
+                    Err(format!("Failed to check for updates: {}", e))
                 }
             }
         }
-        Err(e) => Err(format!("构建更新器失败: {}", e)),
+        Err(e) => Err(format!("Failed to build updater: {}", e)),
     }
 }
 
@@ -215,7 +215,7 @@ pub async fn check_for_updates_no_signature(
     timeout_seconds: Option<u64>,
     proxy: Option<String>,
 ) -> Result<UpdateInfo, String> {
-    println!("使用无签名验证模式检查更新...");
+    println!("Checking for updates without signature verification...");
     
     // 构建更新端点URL
     let target = if cfg!(target_os = "windows") {
@@ -239,7 +239,7 @@ pub async fn check_for_updates_no_signature(
         target, arch
     );
     
-    println!("检查更新端点: {}", endpoint_url);
+    println!("Checking update endpoint: {}", endpoint_url);
     
     // 创建HTTP客户端
     let mut client_builder = reqwest::Client::builder();
@@ -255,7 +255,7 @@ pub async fn check_for_updates_no_signature(
     if let Some(ref proxy_url) = proxy {
         if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
             client_builder = client_builder.proxy(proxy);
-            println!("使用自定义代理: {}", proxy_url);
+            println!("Using custom proxy: {}", proxy_url);
         }
     } else {
         // 尝试使用全局代理设置
@@ -270,17 +270,17 @@ pub async fn check_for_updates_no_signature(
                     
                     if let Ok(proxy) = reqwest::Proxy::all(&proxy_url) {
                         client_builder = client_builder.proxy(proxy);
-                        println!("使用全局代理: {}", proxy_url);
+                        println!("Using global proxy: {}", proxy_url);
                     }
                 }
             }
             Err(e) => {
-                println!("警告: 获取代理设置失败: {}", e);
+                println!("Warning: Failed to get proxy settings: {}", e);
             }
         }
     }
     
-    let client = client_builder.build().map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
+    let client = client_builder.build().map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     
     // 发送请求
     match client.get(&endpoint_url).send().await {
@@ -308,9 +308,9 @@ pub async fn check_for_updates_no_signature(
                         let available = !version.is_empty() && is_newer_version(current_version, &version);
                         
                         if available {
-                            println!("发现新版本: {} (当前版本: {})", version, current_version);
+                            println!("New version found: {} (current version: {})", version, current_version);
                         } else {
-                            println!("当前已是最新版本: {}", current_version);
+                            println!("Current version is up to date: {}", current_version);
                         }
                         
                         Ok(UpdateInfo {
@@ -320,13 +320,13 @@ pub async fn check_for_updates_no_signature(
                             available,
                         })
                     }
-                    Err(e) => Err(format!("解析更新信息失败: {}", e)),
+                    Err(e) => Err(format!("Failed to parse update info: {}", e)),
                 }
             } else {
-                Err(format!("获取更新信息失败: HTTP {}", response.status()))
+                Err(format!("Failed to get update info: HTTP {}", response.status()))
             }
         }
-        Err(e) => Err(format!("网络请求失败: {}", e)),
+        Err(e) => Err(format!("Network request failed: {}", e)),
     }
 }
 
@@ -337,13 +337,13 @@ pub async fn start_auto_update(app: tauri::AppHandle) -> Result<(), String> {
     
     tauri::async_runtime::spawn(async move {
         if let Err(e) = perform_update(handle.clone()).await {
-            eprintln!("自动更新失败: {}", e);
+            eprintln!("Auto-update failed: {}", e);
             
             // 如果是签名相关错误，通知前端需要手动更新
             if e.to_string().to_lowercase().contains("signature") {
-                eprintln!("检测到签名验证错误，通知前端进行手动更新。");
+                eprintln!("Signature verification error detected, notifying frontend for manual update.");
                 if let Err(emit_err) = handle.emit("manual_update_required", ()) {
-                    eprintln!("发送手动更新事件失败: {}", emit_err);
+                    eprintln!("Failed to emit manual update event: {}", emit_err);
                 }
             }
         }
@@ -357,43 +357,71 @@ async fn perform_update(app: tauri::AppHandle) -> Result<(), Box<dyn std::error:
     let updater_builder = create_updater_builder_with_proxy(&app).await?;
     let updater = updater_builder.build()?;
     
-    if let Some(update) = updater.check().await? {
-        println!("发现新版本: {}", update.version);
-        
-        let mut downloaded = 0;
-        
-        // 下载并安装更新
-        update.download_and_install(
-            |chunk_length, content_length| {
-                downloaded += chunk_length;
-                if let Some(total) = content_length {
-                    let progress = (downloaded as f64 / total as f64) * 100.0;
-                    println!("下载进度: {:.1}%", progress);
-                    
-                    // 向前端发送进度事件
-                    if let Err(e) = app.emit("update-progress", progress) {
-                        eprintln!("发送进度事件失败: {}", e);
+    match updater.check().await {
+        Ok(Some(update)) => {
+            println!("New version found: {}", update.version);
+            
+            let mut downloaded = 0;
+            
+            // 下载并安装更新
+            update.download_and_install(
+                |chunk_length, content_length| {
+                    downloaded += chunk_length;
+                    if let Some(total) = content_length {
+                        let progress = (downloaded as f64 / total as f64) * 100.0;
+                        println!("Download progress: {:.1}%", progress);
+                        
+                        // 向前端发送进度事件
+                        if let Err(e) = app.emit("update-progress", progress) {
+                            eprintln!("Failed to emit progress event: {}", e);
+                        }
                     }
+                },
+                || {
+                    println!("Download complete, starting installation");
+                    // 向前端发送安装开始事件
+                    if let Err(e) = app.emit("update-installing", ()) {
+                        eprintln!("Failed to emit installation event: {}", e);
+                    }
+                },
+            ).await?;
+            
+            println!("Update installation complete");
+            
+            // 向前端发送更新完成事件
+            if let Err(e) = app.emit("update-completed", ()) {
+                eprintln!("Failed to emit completion event: {}", e);
+            }
+            
+            // 重启应用
+            app.restart();
+        },
+        Ok(None) => {
+            println!("No new version found.");
+        },
+        Err(e) => {
+            // 如果是签名相关错误，尝试无签名验证
+            if e.to_string().to_lowercase().contains("signature") {
+                println!("Signature verification failed. Trying update without signature verification...");
+                if let Ok(update_info) = check_for_updates_no_signature(app.clone(), None, None).await {
+                    if update_info.available {
+                        println!("New version available without signature. Manual download required.");
+                        // 通知前端需要手动更新
+                        if let Err(emit_err) = app.emit("manual_update_required", ()) {
+                            eprintln!("Failed to emit manual update event: {}", emit_err);
+                        }
+                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Manual update required due to missing signature")));
+                    } else {
+                        println!("No new version found (no signature).");
+                    }
+                } else {
+                    println!("Failed to check for updates without signature.");
+                    return Err(e.into());
                 }
-            },
-            || {
-                println!("下载完成，开始安装");
-                // 向前端发送安装开始事件
-                if let Err(e) = app.emit("update-installing", ()) {
-                    eprintln!("发送安装事件失败: {}", e);
-                }
-            },
-        ).await?;
-        
-        println!("更新安装完成");
-        
-        // 向前端发送更新完成事件
-        if let Err(e) = app.emit("update-completed", ()) {
-            eprintln!("发送完成事件失败: {}", e);
+            } else {
+                return Err(e.into());
+            }
         }
-        
-        // 重启应用
-        app.restart();
     }
     
     Ok(())
@@ -420,13 +448,13 @@ pub async fn set_update_endpoints(
         .map(|endpoint| endpoint.parse::<tauri::Url>())
         .collect();
     
-    let parsed_urls = urls.map_err(|e| format!("解析端点 URL 失败: {}", e))?;
+    let parsed_urls = urls.map_err(|e| format!("Failed to parse endpoint URL: {}", e))?;
     
     let _updater = app.updater_builder()
         .endpoints(parsed_urls)
-        .map_err(|e| format!("设置端点失败: {}", e))?
+        .map_err(|e| format!("Failed to set endpoints: {}", e))?
         .build()
-        .map_err(|e| format!("构建更新器失败: {}", e))?;
+        .map_err(|e| format!("Failed to build updater: {}", e))?;
         
     Ok(())
 }
@@ -434,30 +462,30 @@ pub async fn set_update_endpoints(
 /// 测试 Windows 更新功能（带代理支持）
 #[command]
 pub async fn test_windows_update_with_proxy(app: tauri::AppHandle) -> Result<String, String> {
-    println!("开始测试 Windows 更新功能...");
+    println!("Starting to test Windows update feature...");
     
     // 首先尝试正常的签名验证方式
     let updater_builder = create_updater_builder_with_proxy(&app).await?;
-    let updater = updater_builder.build().map_err(|e| format!("创建更新器失败: {}", e))?;
+    let updater = updater_builder.build().map_err(|e| format!("Failed to create updater: {}", e))?;
     
     match updater.check().await {
         Ok(update_result) => {
             if let Some(update) = update_result {
                 let info = format!(
-                    "✅ Windows 更新测试成功！\n\
-                    发现新版本: {}\n\
-                    发布时间: {}\n\
-                    更新说明: {}\n\
-                    当前平台: {}",
+                    "✅ Windows update test successful!\n\
+                    New version found: {}\n\
+                    Release date: {}\n\
+                    Update notes: {}\n\
+                    Current platform: {}",
                     update.version,
-                    update.date.map(|d| d.to_string()).as_deref().unwrap_or("未知"),
-                    update.body.as_deref().unwrap_or("无更新说明"),
+                    update.date.map(|d| d.to_string()).as_deref().unwrap_or("Unknown"),
+                    update.body.as_deref().unwrap_or("No update notes"),
                     std::env::consts::OS
                 );
                 println!("{}", info);
                 Ok(info)
             } else {
-                let info = "✅ Windows 更新测试成功！当前已是最新版本。".to_string();
+                let info = "✅ Windows update test successful! Already on the latest version.".to_string();
                 println!("{}", info);
                 Ok(info)
             }
@@ -465,11 +493,11 @@ pub async fn test_windows_update_with_proxy(app: tauri::AppHandle) -> Result<Str
         Err(e) => {
             // 如果签名验证失败，尝试无签名验证方式
             if e.to_string().contains("signature") {
-                println!("签名验证失败，尝试无签名验证测试...");
+                println!("Signature verification failed, trying test without signature verification...");
                 return test_windows_update_no_signature(app).await;
             }
             
-            let error = format!("❌ Windows 更新测试失败: {}", e);
+            let error = format!("❌ Windows update test failed: {}", e);
             println!("{}", error);
             Err(error)
         }
@@ -479,33 +507,33 @@ pub async fn test_windows_update_with_proxy(app: tauri::AppHandle) -> Result<Str
 /// 测试 Windows 更新功能（无签名验证）
 #[command]
 pub async fn test_windows_update_no_signature(app: tauri::AppHandle) -> Result<String, String> {
-    println!("开始测试 Windows 更新功能（无签名验证）...");
+    println!("Starting to test Windows update feature (no signature verification)...");
     
     match check_for_updates_no_signature(app, Some(30), None).await {
         Ok(update_info) => {
             if update_info.available {
                 let info = format!(
-                    "✅ Windows 更新测试成功！（无签名验证模式）\n\
-                    发现新版本: {}\n\
-                    发布时间: {}\n\
-                    更新说明: {}\n\
-                    当前平台: {}\n\
-                    ⚠️ 注意：当前使用无签名验证模式，建议在生产环境中启用签名验证",
+                    "✅ Windows update test successful! (no signature verification mode)\n\
+                    New version found: {}\n\
+                    Release date: {}\n\
+                    Update notes: {}\n\
+                    Current platform: {}\n\
+                    ⚠️ Note: Using no signature verification mode. It's recommended to enable signature verification in production.",
                     update_info.version,
-                    update_info.pub_date.as_deref().unwrap_or("未知"),
-                    update_info.body.as_deref().unwrap_or("无更新说明"),
+                    update_info.pub_date.as_deref().unwrap_or("Unknown"),
+                    update_info.body.as_deref().unwrap_or("No update notes"),
                     std::env::consts::OS
                 );
                 println!("{}", info);
                 Ok(info)
             } else {
-                let info = "✅ Windows 更新测试成功！当前已是最新版本。（无签名验证模式）".to_string();
+                let info = "✅ Windows update test successful! Already on the latest version. (no signature verification mode)".to_string();
                 println!("{}", info);
                 Ok(info)
             }
         }
         Err(e) => {
-            let error = format!("❌ Windows 更新测试失败: {}", e);
+            let error = format!("❌ Windows update test failed: {}", e);
             println!("{}", error);
             Err(error)
         }
@@ -516,9 +544,9 @@ pub async fn test_windows_update_no_signature(app: tauri::AppHandle) -> Result<S
 #[command]
 pub fn get_platform_info() -> String {
     format!(
-        "操作系统: {}\n\
-        架构: {}\n\
-        系列: {}",
+        "OS: {}\n\
+        Architecture: {}\n\
+        Family: {}",
         std::env::consts::OS,
         std::env::consts::ARCH,
         std::env::consts::FAMILY

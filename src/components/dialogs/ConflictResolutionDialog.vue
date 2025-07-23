@@ -9,7 +9,7 @@
       <div class="flex items-center justify-between p-6 border-b border-base-300">
         <h2 class="text-xl font-bold text-error flex items-center gap-3">
           <i class="fas fa-exclamation-triangle"></i>
-          同步冲突处理
+          {{ $t('conflictResolutionDialog.title') }}
         </h2>
         <button class="btn btn-ghost btn-sm btn-circle" @click="closeDialog">
           <i class="fas fa-times text-lg"></i>
@@ -21,14 +21,14 @@
         <!-- 加载状态 -->
         <div v-if="loading" class="flex flex-col items-center justify-center py-12">
           <span class="loading loading-spinner loading-lg text-primary"></span>
-          <p class="mt-4 text-base-content/70">正在加载冲突列表...</p>
+          <p class="mt-4 text-base-content/70">{{ $t('conflictResolutionDialog.loading') }}</p>
         </div>
         
         <!-- 空状态 -->
         <div v-else-if="conflicts.length === 0" class="text-center py-12">
           <i class="fas fa-check-circle text-6xl text-success mb-4"></i>
-          <h3 class="text-xl font-bold text-base-content mb-2">没有需要处理的冲突</h3>
-          <p class="text-base-content/70">所有数据都已成功同步</p>
+          <h3 class="text-xl font-bold text-base-content mb-2">{{ $t('conflictResolutionDialog.noConflictsTitle') }}</h3>
+          <p class="text-base-content/70">{{ $t('conflictResolutionDialog.noConflictsMessage') }}</p>
         </div>
         
         <!-- 冲突列表 -->
@@ -37,8 +37,8 @@
           <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle"></i>
             <div>
-              <h3 class="font-bold">发现 {{ conflicts.length }} 个同步冲突</h3>
-              <div class="text-sm">请选择如何处理这些冲突</div>
+              <h3 class="font-bold">{{ $t('conflictResolutionDialog.conflictOverview', { count: conflicts.length }) }}</h3>
+              <div class="text-sm">{{ $t('conflictResolutionDialog.conflictInstruction') }}</div>
             </div>
           </div>
           
@@ -57,15 +57,15 @@
               <!-- 冲突详情 -->
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div class="flex justify-between">
-                  <span class="text-base-content/70 text-sm">记录ID:</span>
+                  <span class="text-base-content/70 text-sm">{{ $t('conflictResolutionDialog.recordId') }}</span>
                   <span class="font-mono text-sm font-medium">{{ conflict.record_id }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-base-content/70 text-sm">创建时间:</span>
+                  <span class="text-base-content/70 text-sm">{{ $t('conflictResolutionDialog.createdAt') }}</span>
                   <span class="text-sm">{{ formatDate(conflict.created_at) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="text-base-content/70 text-sm">重试次数:</span>
+                  <span class="text-base-content/70 text-sm">{{ $t('conflictResolutionDialog.retryCount') }}</span>
                   <span class="text-sm font-medium">{{ conflict.retry_count }}</span>
                 </div>
               </div>
@@ -77,7 +77,7 @@
                   @click="toggleConflictData(conflict.id)"
                 >
                   <i class="fas" :class="expandedConflicts.has(conflict.id) ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
-                  {{ expandedConflicts.has(conflict.id) ? '隐藏' : '查看' }}冲突详情
+                  {{ expandedConflicts.has(conflict.id) ? $t('conflictResolutionDialog.hideDetails') : $t('conflictResolutionDialog.showDetails') }} {{ $t('conflictResolutionDialog.conflictDetails') }}
                 </button>
                 
                 <div v-if="expandedConflicts.has(conflict.id)" class="mt-3">
@@ -88,11 +88,11 @@
               </div>
               
               <!-- 解决策略 -->
-              <div class="divider text-sm">选择解决策略</div>
+              <div class="divider text-sm">{{ $t('conflictResolutionDialog.resolutionStrategy') }}</div>
               
               <div v-if="resolvingConflicts.has(conflict.id)" class="flex items-center gap-2 justify-center py-4">
                 <span class="loading loading-spinner loading-sm"></span>
-                <span class="text-sm">正在解决冲突...</span>
+                <span class="text-sm">{{ $t('conflictResolutionDialog.resolving') }}</span>
               </div>
               
               <div v-else class="flex flex-wrap gap-3">
@@ -101,7 +101,7 @@
                   @click="resolveConflict(conflict, 'LOCAL_WINS')"
                 >
                   <i class="fas fa-laptop"></i>
-                  本地优先
+                  {{ $t('conflictResolutionDialog.localWins') }}
                 </button>
                 
                 <button 
@@ -109,7 +109,7 @@
                   @click="resolveConflict(conflict, 'REMOTE_WINS')"
                 >
                   <i class="fas fa-cloud"></i>
-                  远程优先
+                  {{ $t('conflictResolutionDialog.remoteWins') }}
                 </button>
                 
                 <button 
@@ -117,7 +117,7 @@
                   @click="resolveConflict(conflict, 'MERGE')"
                 >
                   <i class="fas fa-code-merge"></i>
-                  尝试合并
+                  {{ $t('conflictResolutionDialog.tryMerge') }}
                 </button>
               </div>
             </div>
@@ -126,7 +126,7 @@
         
         <!-- 批量操作 -->
         <div v-if="conflicts.length > 0" class="mt-8">
-          <div class="divider">批量操作</div>
+          <div class="divider">{{ $t('conflictResolutionDialog.batchActions') }}</div>
           
           <div class="flex flex-wrap gap-3 justify-center">
             <button 
@@ -135,7 +135,7 @@
               :disabled="isBatchResolving"
             >
               <i class="fas fa-laptop"></i>
-              全部本地优先
+              {{ $t('conflictResolutionDialog.batchLocalWins') }}
             </button>
             
             <button 
@@ -144,7 +144,7 @@
               :disabled="isBatchResolving"
             >
               <i class="fas fa-cloud"></i>
-              全部远程优先
+              {{ $t('conflictResolutionDialog.batchRemoteWins') }}
             </button>
           </div>
         </div>
@@ -154,9 +154,9 @@
       <div class="flex justify-between items-center p-6 border-t border-base-300 bg-base-50">
         <button class="btn btn-ghost gap-2" @click="refreshConflicts">
           <i class="fas fa-refresh"></i>
-          刷新列表
+          {{ $t('conflictResolutionDialog.refreshList') }}
         </button>
-        <button class="btn btn-primary" @click="closeDialog">关闭</button>
+        <button class="btn btn-primary" @click="closeDialog">{{ $t('conflictResolutionDialog.close') }}</button>
       </div>
     </div>
   </div>
@@ -164,7 +164,10 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
+
+const { t } = useI18n()
 
 // Emits
 const emit = defineEmits(['close'])
@@ -262,14 +265,7 @@ const getTableIcon = (tableName) => {
 }
 
 const getTableDisplayName = (tableName) => {
-  const names = {
-    'tips': '笔记',
-    'categories': '分类',
-    'tags': '标签',
-    'ai_conversations': 'AI对话',
-    'ai_messages': 'AI消息'
-  }
-  return names[tableName] || tableName
+  return t(`conflictResolutionDialog.tables.${tableName}`, tableName)
 }
 
 const getOperationBadgeClass = (operation) => {
@@ -282,20 +278,15 @@ const getOperationBadgeClass = (operation) => {
 }
 
 const getOperationDisplayName = (operation) => {
-  const names = {
-    'INSERT': '新增',
-    'UPDATE': '更新',
-    'DELETE': '删除'
-  }
-  return names[operation] || operation
+  return t(`conflictResolutionDialog.operations.${operation}`, operation)
 }
 
 const formatDate = (timestamp) => {
-  return new Date(timestamp).toLocaleString('zh-CN')
+  return new Date(timestamp).toLocaleString()
 }
 
 const formatConflictData = (conflictData) => {
-  if (!conflictData) return '无冲突详情'
+  if (!conflictData) return t('conflictResolutionDialog.noConflictData')
   
   try {
     const data = JSON.parse(conflictData)

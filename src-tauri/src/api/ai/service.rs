@@ -2,21 +2,8 @@ use crate::api::settings::get_client_with_proxy;
 use crate::db::{self, UnifiedDbManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tauri::{AppHandle, Manager, State};
-use crate::api::ai::models::{create_genai_client, create_custom_genai_client};
-use genai::{Client, ModelIden};
-use super::{
-    conversations::{add_ai_message, list_ai_messages},
-    models::{
-        self, chat_with_history, stream_chat_with_history, stream_chat_with_history_custom_ai,
-        stream_message_from_ai, stream_message_from_custom_ai, stream_message_with_images_from_ai,
-        CustomModel,
-    },
-    roles::get_ai_role,
-};
-use futures::StreamExt;
-use genai::chat::{ChatMessage, ChatRole};
-use once_cell::sync::Lazy;
+use tauri::{AppHandle, State};
+use crate::api::ai::models::{create_genai_client};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiServiceInfo {
@@ -104,11 +91,11 @@ pub async fn test_ai_connection(
         "anthropic" => test_anthropic_connection(request, db_manager).await,
         "gemini" => test_gemini_connection(request, db_manager).await,
         "deepseek" => test_deepseek_connection(request, db_manager).await,
-        "ali" => test_ali_connection(request, db_manager).await,
+        "qwen" => test_qwen_connection(request, db_manager).await,
         "doubao" => test_doubao_connection(request, db_manager).await,
         "xai" => test_xai_connection(request, db_manager).await,
         "custom" => test_custom_connection(request, db_manager).await,
-        _ => Err(format!("不支持的提供商: {}", request.provider)),
+        _ => Err(format!("Unsupported provider: {}", request.provider)),
     }
 }
 
@@ -116,7 +103,7 @@ async fn test_openai_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
     let api_base = request
         .api_base
         .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
@@ -128,19 +115,19 @@ async fn test_openai_connection(
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
-        .map_err(|e| format!("请求OpenAI API失败: {}", e))?;
+        .map_err(|e| format!("Failed to request OpenAI API: {}", e))?;
 
     if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         return Ok(TestConnectionResponse {
             success: false,
-            message: format!("OpenAI API连接测试失败: {}", error),
+            message: format!("OpenAI API connection test failed: {}", error),
             models: None,
         });
     }
 
     let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("解析OpenAI响应失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
 
     let models = models_response["data"]
         .as_array()
@@ -154,7 +141,7 @@ async fn test_openai_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: format!("OpenAI API连接成功，找到 {} 个模型", models.len()),
+        message: format!("OpenAI API connection successful, found {} models", models.len()),
         models: Some(models),
     })
 }
@@ -163,7 +150,7 @@ async fn test_anthropic_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
     let api_base = request
         .api_base
         .unwrap_or_else(|| "https://api.anthropic.com".to_string());
@@ -177,13 +164,13 @@ async fn test_anthropic_connection(
         .header("anthropic-version", "2023-06-01")
         .send()
         .await
-        .map_err(|e| format!("请求Anthropic API失败: {}", e))?;
+        .map_err(|e| format!("Failed to request Anthropic API: {}", e))?;
 
     if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         return Ok(TestConnectionResponse {
             success: false,
-            message: format!("Anthropic API连接测试失败: {}", error),
+            message: format!("Anthropic API connection test failed: {}", error),
             models: None,
         });
     }
@@ -201,7 +188,7 @@ async fn test_anthropic_connection(
 
     // 尝试从响应中解析模型列表
     let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("解析Anthropic响应失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse Anthropic response: {}", e))?;
 
     let models = models_response["models"]
         .as_array()
@@ -214,7 +201,7 @@ async fn test_anthropic_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: format!("Anthropic API连接成功，找到 {} 个模型", models.len()),
+        message: format!("Anthropic API connection successful, found {} models", models.len()),
         models: Some(models),
     })
 }
@@ -223,7 +210,7 @@ async fn test_gemini_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
 
     // 使用GenAI库测试连接
     let client = match create_genai_client(api_key.clone(), "gemini", &db_manager).await {
@@ -231,7 +218,7 @@ async fn test_gemini_connection(
         Err(e) => {
             return Ok(TestConnectionResponse {
                 success: false,
-                message: format!("创建Gemini客户端失败: {}", e),
+                message: format!("Failed to create Gemini client: {}", e),
                 models: None,
             });
         }
@@ -248,7 +235,7 @@ async fn test_gemini_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: "Gemini API连接成功".to_string(),
+        message: "Gemini API connection successful".to_string(),
         models: Some(default_models),
     })
 }
@@ -257,7 +244,7 @@ async fn test_deepseek_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
     let api_base = request
         .api_base
         .unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
@@ -269,19 +256,19 @@ async fn test_deepseek_connection(
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
-        .map_err(|e| format!("请求DeepSeek API失败: {}", e))?;
+        .map_err(|e| format!("Failed to request DeepSeek API: {}", e))?;
 
     if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         return Ok(TestConnectionResponse {
             success: false,
-            message: format!("DeepSeek API连接测试失败: {}", error),
+            message: format!("DeepSeek API connection test failed: {}", error),
             models: None,
         });
     }
 
     let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("解析DeepSeek响应失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse DeepSeek response: {}", e))?;
 
     let models = models_response["data"]
         .as_array()
@@ -297,30 +284,54 @@ async fn test_deepseek_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: format!("DeepSeek API连接成功，找到 {} 个模型", models.len()),
+        message: format!("DeepSeek API connection successful, found {} models", models.len()),
         models: Some(models),
     })
 }
 
-async fn test_ali_connection(
+async fn test_qwen_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let _api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
 
-    // 通义千问API没有列出模型的端点，我们使用默认模型列表
-    let default_models = vec![
-        "qwen-max".to_string(),
-        "qwen-plus".to_string(),
-        "qwen-turbo".to_string(),
-        "qwen-long".to_string(),
-    ];
+    let client = get_client_with_proxy(&db_manager).await?;
 
-    Ok(TestConnectionResponse {
-        success: true,
-        message: "通义千问API密钥已保存".to_string(),
-        models: Some(default_models),
-    })
+    let payload = serde_json::json!({
+        "model": "qwen3-coder-plus",
+        "messages": [
+            {
+                "role": "user",
+                "content": "test"
+            }
+        ]
+    });
+
+    let response = client
+        .post("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Qwen API request failed: {}", e))?;
+
+    if response.status().is_success() {
+        // 如果成功，返回一个包含默认模型的成功响应
+        let models = vec![
+            "qwen3-coder-plus".to_string(),
+        ];
+
+        Ok(TestConnectionResponse {
+            success: true,
+            message: "Tongyi Qwen API connection successful".to_string(),
+            models: Some(models),
+        })
+    } else {
+        let status = response.status();
+        let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        Err(format!("Qwen API returned an error: {} - {}", status, error_text))
+    }
 }
 
 async fn test_doubao_connection(
@@ -347,12 +358,12 @@ async fn test_doubao_connection(
         ];
         Ok(TestConnectionResponse {
             success: true,
-            message: "连接成功".to_string(),
+            message: "Connection successful".to_string(),
             models: Some(default_models),
         })
     } else {
         let error_message = response.text().await.unwrap_or_default();
-        Err(format!("连接失败: {}", error_message))
+        Err(format!("Connection failed: {}", error_message))
     }
 }
 
@@ -360,7 +371,7 @@ async fn test_xai_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
-    let api_key = request.api_key.ok_or_else(|| "缺少API密钥".to_string())?;
+    let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
     let api_base = request
         .api_base
         .unwrap_or_else(|| "https://api.x.ai/v1".to_string());
@@ -372,19 +383,19 @@ async fn test_xai_connection(
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
-        .map_err(|e| format!("请求xAI API失败: {}", e))?;
+        .map_err(|e| format!("Failed to request xAI API: {}", e))?;
 
     if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         return Ok(TestConnectionResponse {
             success: false,
-            message: format!("xAI API连接测试失败: {}", error),
+            message: format!("xAI API connection test failed: {}", error),
             models: None,
         });
     }
 
     let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("解析xAI响应失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse xAI response: {}", e))?;
 
     let models = models_response["data"]
         .as_array()
@@ -401,7 +412,7 @@ async fn test_xai_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: format!("xAI API连接成功，找到 {} 个模型", models.len()),
+        message: format!("xAI API connection successful, found {} models", models.len()),
         models: Some(models),
     })
 }
@@ -411,7 +422,7 @@ async fn test_custom_connection(
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     if request.api_base.is_none() {
-        return Err("自定义API端点未设置".to_string());
+        return Err("Custom API endpoint is not set".to_string());
     }
     let endpoint = request.api_base.unwrap();
     let client = get_client_with_proxy(&db_manager).await?;
@@ -422,19 +433,19 @@ async fn test_custom_connection(
         .get(&endpoint)
         .send()
         .await
-        .map_err(|e| format!("请求自定义API失败: {}", e))?;
+        .map_err(|e| format!("Failed to request custom API: {}", e))?;
 
     if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "未知错误".to_string());
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
         return Ok(TestConnectionResponse {
             success: false,
-            message: format!("自定义API连接测试失败: {}", error),
+            message: format!("Custom API connection test failed: {}", error),
             models: None,
         });
     }
 
     let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("解析自定义响应失败: {}", e))?;
+        .map_err(|e| format!("Failed to parse custom response: {}", e))?;
 
     let models = models_response["data"]
         .as_array()
@@ -450,7 +461,7 @@ async fn test_custom_connection(
 
     Ok(TestConnectionResponse {
         success: true,
-        message: "自定义API连接成功".to_string(),
+        message: "Custom API connection successful".to_string(),
         models: Some(models),
     })
 }
@@ -510,8 +521,8 @@ pub async fn get_ai_chat_models(
             is_embedding: false,
         },
         ModelInfo {
-            name: "qwen-max".to_string(),
-            provider: "ali".to_string(),
+            name: "qwen3-coder-plus".to_string(),
+            provider: "qwen".to_string(),
             is_chat: true,
             is_embedding: false,
         },
@@ -627,7 +638,7 @@ pub async fn get_ai_config(
     if let Some(config_json) = config_json_opt {
         match serde_json::from_str::<SaveAiConfigRequest>(&config_json) {
             Ok(config) => Ok(Some(AiConfigResponse { providers: config.providers })),
-            Err(e) => Err(format!("解析AI配置失败: {}", e)),
+            Err(e) => Err(format!("Failed to parse AI config: {}", e)),
         }
     } else {
         Ok(None)
@@ -712,7 +723,7 @@ pub async fn reload_ai_services(
     if let Some(config_str) = config_json {
         // 解析配置
         let _config: SaveAiConfigRequest = serde_json::from_str(&config_str)
-            .map_err(|e| format!("解析AI配置失败: {}", e))?;
+            .map_err(|e| format!("Failed to parse AI config: {}", e))?;
 
         // 这里可以实现重新加载服务的逻辑
     }
