@@ -27,3 +27,4 @@ docs
 .cursorrules
 .cursor*
 todo.md
+src-tauri/gen/

@@ -33,10 +33,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
+    - name: Cache Rust dependencies
+      uses: swatinem/rust-cache@v2
+
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '20'
+        cache: 'yarn'
 
     - name: Set up Java for Android build
       if: matrix.platform == 'android'
@@ -65,8 +69,6 @@ jobs:
     - name: Install additional Rust targets for Android
       if: matrix.platform == 'android'
       run: |
-        rustup target add armv7-linux-androideabi
-        rustup target add i686-linux-android
         rustup target add x86_64-linux-android
 
     - name: Install Rust dependencies for Linux
@@ -81,6 +83,8 @@ jobs:
     - name: Setup Android signing
       if: matrix.platform == 'android'
       run: |
+        # 强制删除 gen 目录，确保 CI 环境重新生成
+        rm -rf src-tauri/gen
         KEYSTORE_PATH=$RUNNER_TEMP/keystore.jks
         echo "storeFile=$KEYSTORE_PATH" > src-tauri/keystore.properties
         echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> src-tauri/keystore.properties
