@@ -16,15 +16,15 @@ jobs:
         #   - os: ubuntu-latest
         #     platform: 'linux-x86_64'
         #     rust_target: 'x86_64-unknown-linux-gnu'
-          - os: macos-latest
-            platform: 'darwin-x86_64'
-            rust_target: 'x86_64-apple-darwin'
-          - os: macos-14
-            platform: 'darwin-aarch64'
-            rust_target: 'aarch64-apple-darwin'
-          - os: windows-latest
-            platform: 'windows-x86_64'
-            rust_target: 'x86_64-pc-windows-msvc'
+          # - os: macos-latest
+          #   platform: 'darwin-x86_64'
+          #   rust_target: 'x86_64-apple-darwin'
+          # - os: macos-14
+          #   platform: 'darwin-aarch64'
+          #   rust_target: 'aarch64-apple-darwin'
+          # - os: windows-latest
+          #   platform: 'windows-x86_64'
+          #   rust_target: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             platform: 'android'
             rust_target: 'aarch64-linux-android' 
@@ -61,6 +61,13 @@ jobs:
         toolchain: stable
         target: ${{ matrix.rust_target }}
         components: rust-src # for android
+
+    - name: Install additional Rust targets for Android
+      if: matrix.platform == 'android'
+      run: |
+        rustup target add armv7-linux-androideabi
+        rustup target add i686-linux-android
+        rustup target add x86_64-linux-android
 
     - name: Install Rust dependencies for Linux
       if: matrix.os == 'ubuntu-latest' && matrix.platform != 'android'
