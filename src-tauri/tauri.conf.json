@@ -7,12 +7,7 @@
     "beforeDevCommand": "yarn dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "yarn build",
-    "frontendDist": "../dist",
-    "config": {
-      "android": {
-        "abiFilters": ["arm64-v8a", "armeabi-v7a"]
-      }
-    }
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
