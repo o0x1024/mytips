@@ -110,7 +110,7 @@ jobs:
       run: |
         rm -rf src-tauri/gen
         yarn tauri android init
-        yarn tauri android build --target arm64-v8a --target armeabi-v7a
+        yarn tauri android build --target aarch64 --target armv7
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
