@@ -115,12 +115,22 @@ jobs:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-    - name: Upload artifact
+    - name: Upload Desktop artifact
+      if: matrix.platform != 'android'
       uses: actions/upload-artifact@v4
       with:
         name: tauri-build-${{ matrix.platform }}
         path: |
           src-tauri/target/${{ matrix.rust_target }}/release/bundle/
+
+    - name: Upload Android artifact
+      if: matrix.platform == 'android'
+      uses: actions/upload-artifact@v4
+      with:
+        name: tauri-build-${{ matrix.platform }}
+        path: |
+          src-tauri/gen/android/app/build/outputs/bundle/universalRelease/release/
+          src-tauri/gen/android/app/build/outputs/apk/universal/release/
 
   release:
     needs: build
@@ -214,9 +224,10 @@ jobs:
           find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
         fi
         
-        # 查找并移动 Android 产物 (AAB)
+        # 查找并移动 Android 产物 (AAB 和 APK)
         if [ -d "$TARGET_DIR/tauri-build-android" ]; then
-          find "$TARGET_DIR/tauri-build-android/android-artifacts/release/apk" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.apk" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk" \;
         fi
 
         # 查找并移动清单文件
