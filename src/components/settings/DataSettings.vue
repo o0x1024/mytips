@@ -51,7 +51,7 @@
 
             <!-- 模式选择卡片 -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div v-for="mode in availableModes.filter(m => m.supported)" 
+              <div v-for="mode in availableModes.filter((m: any) => m.supported)" 
                    :key="mode.value"
                    class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-all"
                    :class="{ 'border-2 border-primary': currentDatabaseMode === mode.value }"

@@ -118,12 +118,12 @@
         :notebook="child"
         :is-collapsed="isCollapsed"
         :selected-id="selectedId"
-        @select="id => $emit('select', id)"
-        @edit="data => $emit('edit', data)"
-        @add-child="id => $emit('add-child', id)"
-        @delete="id => $emit('delete', id)"
-        @encrypt="id => $emit('encrypt', id)"
-        @decrypt="id => $emit('decrypt', id)"
+        @select="(id: string) => $emit('select', id)"
+        @edit="(data: any) => $emit('edit', data)"
+        @add-child="(id: string) => $emit('add-child', id)"
+        @delete="(id: string) => $emit('delete', id)"
+        @encrypt="(id: string) => $emit('encrypt', id)"
+        @decrypt="(id: string) => $emit('decrypt', id)"
       />
     </div>
     

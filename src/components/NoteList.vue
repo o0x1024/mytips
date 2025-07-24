@@ -75,7 +75,7 @@
           v-for="virtualRow in virtualItems" 
           :key="filteredNotes[virtualRow.index]?.id || `index-${virtualRow.index}`"
           :data-index="virtualRow.index"
-          :ref="el => virtualizer.measureElement(el as Element)"
+          :ref="(el: Element) => virtualizer.measureElement(el)"
           :style="{
             position: 'absolute',
             top: 0,

@@ -118,15 +118,6 @@
       "solarizedLight": "Solarized Light",
       "tomorrowNight": "Tomorrow Night"
     },
-    "markdownTheme": "Markdown Theme",
-    "markdownThemeTitle": {
-      "github": "GitHub",
-      "typora": "Typora",
-      "academic": "Academic",
-      "material": "Material Dark",
-      "minimalist": "Minimalist",
-      "elegant": "Elegant"
-    },
     "fullscreen": "Fullscreen",
     "fullscreenHelp": "F1:Edit F2:Preview F3:Split ESC:Exit",
     "editOnly": "Edit Only",
@@ -139,6 +130,16 @@
     "taskList": "Task List",
     "toc": "Table of Contents",
     "unknownTool": "Unknown Tool"
+  },
+  "aiModels": {
+    "chatgpt": "ChatGPT",
+    "gemini": "Gemini",
+    "anthropic": "Claude",
+    "deepseek": "DeepSeek",
+    "qwen": "Qwen",
+    "doubao": "Doubao",
+    "grok": "Grok",
+    "custom": "Custom"
   },
   "editorTopBar": {
     "untitledNote": "Untitled Note...",
@@ -819,16 +820,6 @@
     "totalTokens": "Total Tokens",
     "tokenUsage": "Input: {input} / Output: {output}",
     "refreshStats": "Refresh Stats",
-    "models": {
-      "openai": "OpenAI ChatGPT",
-      "gemini": "Gemini",
-      "anthropic": "Anthropic Claude",
-      "deepseek": "DeepSeek",
-      "qwen": "Qwen",
-      "doubao": "Doubao",
-      "grok": "Grok",
-      "custom": "Custom Model"
-    },
     "notifications": {
       "providerNotFound": "Provider config not found: {providerId}",
       "providerOrModelMissing": "Provider or model name is missing for the selected default AI model.",

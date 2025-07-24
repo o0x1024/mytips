@@ -118,15 +118,6 @@
       "solarizedLight": "Solarized Light",
       "tomorrowNight": "Tomorrow Night"
     },
-    "markdownTheme": "Markdown主题",
-    "markdownThemeTitle": {
-      "github": "GitHub",
-      "typora": "Typora",
-      "academic": "Academic",
-      "material": "Material Dark",
-      "minimalist": "Minimalist",
-      "elegant": "Elegant"
-    },
     "fullscreen": "全屏",
     "fullscreenHelp": "F1:编辑 F2:预览 F3:分屏 ESC:退出",
     "editOnly": "仅编辑",
@@ -139,6 +130,16 @@
     "taskList": "任务列表",
     "toc": "目录",
     "unknownTool": "未知工具"
+  },
+  "aiModels": {
+    "chatgpt": "ChatGPT",
+    "gemini": "Gemini",
+    "anthropic": "Claude",
+    "deepseek": "DeepSeek",
+    "qwen": "Qwen",
+    "doubao": "Doubao",
+    "grok": "Grok",
+    "custom": "Custom"
   },
   "editorTopBar": {
     "untitledNote": "无标题笔记...",
@@ -819,16 +820,6 @@
     "totalTokens": "Token总数",
     "tokenUsage": "输入: {input} / 输出: {output}",
     "refreshStats": "刷新统计",
-    "models": {
-      "openai": "OpenAI ChatGPT",
-      "gemini": "Gemini",
-      "anthropic": "Anthropic Claude",
-      "deepseek": "DeepSeek",
-      "qwen": "通义千问",
-      "doubao": "豆包",
-      "grok": "Grok",
-      "custom": "自定义模型"
-    },
     "notifications": {
       "providerNotFound": "未找到提供商配置: {providerId}",
       "providerOrModelMissing": "提供商或模型名称丢失",

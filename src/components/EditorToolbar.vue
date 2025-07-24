@@ -205,60 +205,6 @@
             </li>
           </ul>
         </div>
-        <!-- Markdown 主题 -->
-        <div class="dropdown dropdown-bottom toolbar-item" data-priority="12">
-          <button tabindex="0" class="btn btn-sm btn-ghost" :title="t('editorToolbar.markdownTheme')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M12 2v20M4 12h16"></path>
-              <path d="M6 6l6-4 6 4v12l-6 4-6-4V6z"></path>
-            </svg>
-          </button>
-          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'github')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'github' }">
-                {{ t('editorToolbar.markdownTheme.github') }}
-                <span v-if="currentMarkdownTheme === 'github'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'typora')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'typora' }">
-                {{ t('editorToolbar.markdownTheme.typora') }}
-                <span v-if="currentMarkdownTheme === 'typora'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'academic')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'academic' }">
-                {{ t('editorToolbar.markdownTheme.academic') }}
-                <span v-if="currentMarkdownTheme === 'academic'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'material')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'material' }">
-                {{ t('editorToolbar.markdownTheme.material') }}
-                <span v-if="currentMarkdownTheme === 'material'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'minimalist')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'minimalist' }">
-                {{ t('editorToolbar.markdownTheme.minimalist') }}
-                <span v-if="currentMarkdownTheme === 'minimalist'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-markdown-theme', 'elegant')"
-                :class="{ 'bg-primary text-primary-content': currentMarkdownTheme === 'elegant' }">
-                {{ t('editorToolbar.markdownTheme.elegant') }}
-                <span v-if="currentMarkdownTheme === 'elegant'" class="ml-auto">✓</span>
-              </a>
-            </li>
-          </ul>
-        </div>
       </div>
 
       <!-- 右侧工具组 -->
