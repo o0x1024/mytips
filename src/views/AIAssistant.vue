@@ -1193,9 +1193,13 @@ async function loadConversations() {
   try {
     console.log('开始加载对话列表...')
     const result = await invoke('list_ai_conversations')
+    
+    // 过滤掉名为"浮动聊天"的对话
+    const allConversations = Array.isArray(result) ? result : []
+    const floatingConvTitle = t('floatingAI.floatingChat');
+    conversations.value = allConversations.filter(c => c.title !== floatingConvTitle);
 
-    conversations.value = Array.isArray(result) ? result : []
-    console.log(`加载到 ${conversations.value.length} 个对话`)
+    console.log(`加载到 ${conversations.value.length} 个对话 (已过滤)`)
 
     if (conversations.value.length > 0) {
       // 如果当前选中的对话不存在，选择第一个
