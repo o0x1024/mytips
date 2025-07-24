@@ -187,33 +187,49 @@ jobs:
         UPLOAD_DIR=$(mktemp -d)
         
         # 查找并移动 Linux 产物
-        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
-        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
-        # find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
+        # if [ -d "$TARGET_DIR/tauri-build-linux-x86_64" ]; then
+        #   find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
+        #   find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
+        #   find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
+        # fi
 
         # 查找并移动 macOS x64 产物
-        find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
-        find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz.sig" \;
-        find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
+        if [ -d "$TARGET_DIR/tauri-build-darwin-x86_64" ]; then
+          find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
+          find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz.sig" \;
+          find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
+        fi
 
         # 查找并移动 macOS aarch64 产物
-        find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz" \;
-        find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz.sig" \;
-        find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
+        if [ -d "$TARGET_DIR/tauri-build-darwin-aarch64" ]; then
+          find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz" \;
+          find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz.sig" \;
+          find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
+        fi
         
         # 查找并移动 Windows 产物 (NSIS)
-        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.exe" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.exe" \;
-        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip" \;
-        find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
+        if [ -d "$TARGET_DIR/tauri-build-windows-x86_64" ]; then
+          find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.exe" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.exe" \;
+          find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip" \;
+          find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
+        fi
         
         # 查找并移动 Android 产物 (AAB)
-        find "$TARGET_DIR/tauri-build-android/android-artifacts/release/apk" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+        if [ -d "$TARGET_DIR/tauri-build-android" ]; then
+          find "$TARGET_DIR/tauri-build-android/android-artifacts/release/apk" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+        fi
 
         # 查找并移动清单文件
-        find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
+        if [ -d "dist/update-manifests" ]; then
+          find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
+        fi
 
         # 显示所有待上传的文件
         ls -l "$UPLOAD_DIR"
 
         # 使用 gh cli 上传所有文件
-        gh release upload ${{ github.ref_name }} "$UPLOAD_DIR"/* 
+        if [ -n "$(ls -A "$UPLOAD_DIR")" ]; then
+          gh release upload ${{ github.ref_name }} "$UPLOAD_DIR"/*
+        else
+          echo "No files to upload."
+        fi 
