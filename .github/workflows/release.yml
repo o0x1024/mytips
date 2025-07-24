@@ -152,9 +152,9 @@ jobs:
       id: generate_manifest
       run: |
         # 赋予执行权限
-        chmod +x scripts/generate-update-manifest.js
+        chmod +x scripts/generate-update-manifest.cjs
         # 运行脚本
-        node scripts/generate-update-manifest.js
+        node scripts/generate-update-manifest.cjs
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}
         RELEASE_NOTES: "See the release notes for details."
