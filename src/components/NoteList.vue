@@ -87,7 +87,7 @@
           class="p-2 cursor-pointer hover:bg-base-200 transition-colors border-b border-dashed border-base-300 min-h-[60px] flex flex-col note-list-item"
           :class="{'bg-primary/10': selectedNoteId === filteredNotes[virtualRow.index]?.id}"
           @click="filteredNotes[virtualRow.index] && selectNote(filteredNotes[virtualRow.index])"
-          @contextmenu.prevent="filteredNotes[virtualRow.index] && openContextMenu($event, filteredNotes[virtualRow.index])">
+          @contextmenu="filteredNotes[virtualRow.index] && openContextMenu($event, filteredNotes[virtualRow.index])">
           
           <div v-if="filteredNotes[virtualRow.index]" class="flex items-center justify-between">
             <h3 class="font-medium">{{ filteredNotes[virtualRow.index].title || t('noteList.untitled') }}</h3>
@@ -621,8 +621,7 @@ function sortBy(field: string, order: 'asc' | 'desc') {
 
 // 打开上下文菜单
 async function openContextMenu(event: MouseEvent, note: Note) {
-  event.preventDefault()
-  event.stopPropagation() // 阻止事件冒泡
+  // 由于已全局禁用默认右键菜单，这里不再需要preventDefault和stopPropagation
   
   // 立即设置上下文笔记，用于右键菜单操作
   contextNote.value = note

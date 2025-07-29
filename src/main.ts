@@ -56,8 +56,16 @@ const router = createRouter({
 const pinia = createPinia()
 pinia.use(piniaPluginPersistedstate)
 
-// 创建并挂载应用
+// 创建应用实例
 const app = createApp(App)
+
+// 全局禁用浏览器默认右键菜单
+document.addEventListener('contextmenu', event => {
+  event.preventDefault()
+  return false
+}, { capture: true })
+
+// 创建并挂载应用
 app.use(pinia)
 app.use(router)
 app.use(i18n)
