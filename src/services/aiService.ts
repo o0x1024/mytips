@@ -107,6 +107,36 @@ export async function getAIServiceStatus(): Promise<AIServiceStatus[]> {
   return invoke('get_ai_service_status') as Promise<AIServiceStatus[]>
 }
 
+// 自定义模型配置
+export interface CustomModelConfig {
+  id: string
+  name: string
+  endpoint: string
+  model_name: string
+  adapter_type: string // openai, ollama, etc.
+  api_key?: string
+}
+
+// 获取自定义模型配置列表
+export async function listCustomModelConfigs(): Promise<CustomModelConfig[]> {
+  return invoke('list_custom_model_configs') as Promise<CustomModelConfig[]>
+}
+
+// 添加自定义模型配置
+export async function addCustomModelConfig(config: CustomModelConfig): Promise<void> {
+  return invoke('add_custom_model_config', { config }) as Promise<void>
+}
+
+// 更新自定义模型配置
+export async function updateCustomModelConfig(config: CustomModelConfig): Promise<void> {
+  return invoke('update_custom_model_config', { config }) as Promise<void>
+}
+
+// 删除自定义模型配置
+export async function deleteCustomModelConfig(modelId: string): Promise<void> {
+  return invoke('delete_custom_model_config', { modelId }) as Promise<void>
+}
+
 // 默认的AI提供商列表
 export const defaultProviders: Record<string, AIProvider> = {
   openai: {

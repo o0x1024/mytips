@@ -258,7 +258,7 @@
           <!-- 代码内容 -->
           <pre v-else-if="isCodeContent(previewItem.content)" class="p-4 bg-base-300 rounded-lg overflow-auto"><code>{{ previewItem.content }}</code></pre>
           <!-- 普通文本，支持Markdown -->
-          <div v-else v-html="renderMarkdown(previewItem.content)"></div>
+          <div v-else v-html="previewHtml"></div>
         </div>
         
         <div class="mt-4 flex gap-2">
@@ -351,25 +351,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, onActivated, onDeactivated, watch } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useRouter } from 'vue-router';
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import Prism from 'prismjs'
-import 'prismjs/themes/prism-tomorrow.css'
-import 'prismjs/components/prism-javascript'
-import 'prismjs/components/prism-typescript'
-import 'prismjs/components/prism-python'
-import 'prismjs/components/prism-java'
-import 'prismjs/components/prism-json'
-import 'prismjs/components/prism-bash'
-import 'prismjs/components/prism-css'
-import 'prismjs/components/prism-sql'
-import DOMPurify from 'dompurify'
-import { showAlert } from '../services/dialog'
-import { getAIConfig } from '../services/aiService'
 import { useI18n } from 'vue-i18n'
+import { renderInlineMarkdown } from '../services/markdownService'
+import { showAlert } from '../services/dialog'
+import { invoke } from '@tauri-apps/api/core';
 
 const { t, locale } = useI18n()
 
@@ -404,6 +391,7 @@ const summaryDays = ref<number | null>(7)
 const availableModels = ref<{ id: string, name: string }[]>([]);
 const selectedAiModel = ref('');
 const summaryPrompt = ref('{{CONTENT}}');
+const previewHtml = ref('')
 
 // 分页相关状态
 const currentPage = ref(1);
@@ -585,6 +573,8 @@ const mergeToNote = async () => {
 
     // 跳转到编辑页面，附加from=clipboard查询参数表示来源
     if (result && result.id) {
+      // 新建笔记后发送全局事件，通知主界面刷新
+      window.dispatchEvent(new CustomEvent('note-created'));
       router.push({
         path: `/editor/${result.id}`,
         query: { from: 'clipboard' }
@@ -653,6 +643,8 @@ const createNoteFromPreview = async () => {
     
     // 跳转到编辑页面
     if (result && result.id) {
+      // 新建笔记后发送全局事件，通知主界面刷新
+      window.dispatchEvent(new CustomEvent('note-created'));
       router.push({
         path: `/editor/${result.id}`,
         query: { from: 'clipboard' }
@@ -695,13 +687,13 @@ const openSummaryDialog = async () => {
 // 加载可用的AI模型
 const loadAvailableModels = async () => {
   try {
-    const configs = await getAIConfig();
+    const configs:any = await invoke('get_ai_config');
     if (configs && configs.providers) {
       availableModels.value = Object.entries(configs.providers)
-        .filter(([, provider]) => provider.api_key) // 只显示配置了API Key的服务
-        .map(([id, provider]) => ({
+        .filter(([, provider]: [string, any]) => provider.enabled) 
+        .map(([id, provider]: [string, any]) => ({
           id: id,
-          name: provider.name || id,
+          name: (provider as any).name || id,
         }));
     }
   } catch (error) {
@@ -750,89 +742,6 @@ async function summarizeNotes() {
     summarizing.value = false
   }
 }
-
-// 安全检查 Prism 语言是否可用
-function isPrismLanguageAvailable(lang: string): boolean {
-  try {
-    // plaintext 总是可用的，因为它不需要特殊的语法高亮
-    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
-      return true;
-    }
-    
-    return !!(
-      typeof Prism !== 'undefined' && 
-      Prism.languages && 
-      typeof Prism.languages === 'object' &&
-      Prism.languages[lang] &&
-      typeof Prism.highlight === 'function'
-    );
-  } catch (error) {
-    console.warn(`Error checking Prism language ${lang}:`, error);
-    return false;
-  }
-}
-
-// HTML 转义函数
-function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
-}
-
-// 渲染Markdown内容（使用marked库）
-const renderMarkdown = (content: string): string => {
-  if (!content) return '';
-  
-  try {
-    // 创建 marked 实例并配置高亮
-    const marked = new Marked();
-    
-    // 使用 marked-highlight 扩展
-    marked.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        // 如果没有指定语言，使用 plaintext 作为默认语言
-        const actualLang = lang || 'plaintext';
-        
-        // 使用安全检查函数
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang);
-          } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error);
-            return escapeHtml(code);
-          }
-        }
-        
-        // 如果 plaintext 也不可用，直接返回转义的代码
-        return escapeHtml(code);
-      }
-    }));
-
-    // 配置 marked 选项
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      silent: true,
-    });
-
-    // 使用 marked 渲染 Markdown
-    const htmlContent = marked.parse(content) as string;
-
-    // 使用DOMPurify清理HTML，防止XSS
-    const cleanHtml = DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
-    });
-
-    return cleanHtml;
-  } catch (err) {
-    console.error('Markdown rendering error:', err);
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return `<div class="text-error">${t('clipboardHistory.markdownRenderError', { error: errorMessage })}</div>
-            <pre>${DOMPurify.sanitize(content)}</pre>`;
-  }
-};
 
 // 检查是否为图片内容
 const isImageContent = (content: string): boolean => {
@@ -885,6 +794,25 @@ onDeactivated(() => {
 onUnmounted(() => {
   removeEventListeners();
 });
+
+const markdownToHtml = async (markdown: string) => {
+  if (!markdown) return ''
+  try {
+    return await renderInlineMarkdown(markdown)
+  } catch (error) {
+    console.error('Markdown rendering failed:', error)
+    return `<p class="text-error">Error rendering markdown.</p>`
+  }
+}
+
+// 监听 previewItem 变化，异步渲染 markdown
+watch(previewItem, async (item) => {
+  if (item && item.content && !isImageContent(item.content) && !isCodeContent(item.content)) {
+    previewHtml.value = await markdownToHtml(item.content)
+  } else {
+    previewHtml.value = ''
+  }
+})
 </script>
 
 <style scoped>

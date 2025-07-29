@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // App.vue 无需额外初始化，因为已经在main.ts中完成了UI初始化
-import FloatingAIButton from './components/FloatingAIButton.vue'
+// import FloatingAIButton from './components/FloatingAIButton.vue'
 import ToastContainer from './components/ToastContainer.vue'
 </script>
 
@@ -22,7 +22,7 @@ import ToastContainer from './components/ToastContainer.vue'
     <ToastContainer />
 
     <!-- 全局浮动AI按钮 -->
-    <FloatingAIButton />
+    <!-- <FloatingAIButton /> -->
   </div>
 </template>
 

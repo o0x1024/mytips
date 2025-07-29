@@ -1,14 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { Marked } from 'marked'
-import { markedHighlight } from 'marked-highlight'
-import DOMPurify from 'dompurify'
-import Prism from 'prismjs'
-import 'prismjs/themes/prism-okaidia.css'
-import { getDefaultAIModel } from '../services/aiService'
+import { useAIStore } from '../stores/aiStore'
+import { storeToRefs } from 'pinia'
+
 import { useI18n } from 'vue-i18n'
+import { renderInlineMarkdown } from '../services/markdownService'
 
 const { t } = useI18n()
 
@@ -59,8 +57,10 @@ const resizeStartRect = ref({ left: 0, top: 0, right: 0, bottom: 0 })
 // 消息区域引用
 const messagesContainer = ref<HTMLElement | null>(null)
 
-// 选择的模型
-const selectedModel = ref('chatgpt')
+// 使用 Pinia store 作为唯一数据源
+const aiStore = useAIStore()
+const { selectedModel } = storeToRefs(aiStore)
+
 // 可用的AI模型
 const availableModels = ref([
   { id: 'chatgpt', name: 'ChatGPT', avatar: '/img/chatgpt-avatar.svg' },
@@ -155,26 +155,6 @@ const getModelName = (modelId: string) => {
   return t('aiModels.custom');
 }
 
-// 加载全局默认AI模型
-const loadDefaultModel = async () => {
-  let modelId = 'chatgpt' // Fallback model
-
-  try {
-    const defaultModel = await getDefaultAIModel('chat')
-    if (defaultModel && defaultModel.provider && availableModels.value.some(m => m.id === defaultModel.provider)) {
-      modelId = defaultModel.provider
-    } else if (defaultModel && defaultModel.provider) {
-        console.warn(`FloatingAI: Global default model '${defaultModel.provider}' is not available, using fallback.`)
-    } else {
-        console.log(`FloatingAI: No global default model configured, using fallback.`)
-    }
-  } catch (error) {
-    console.error('FloatingAI: Failed to get global default AI model:', error)
-  }
-
-  selectedModel.value = modelId
-}
-
 // 获取或创建浮动聊天框对话
 const getOrCreateFloatingConversation = async () => {
   try {
@@ -218,6 +198,13 @@ const loadChatHistory = async () => {
     }))
     
     console.log(`FloatingAI: Loaded ${chatMessages.value.length} chat history messages`)
+    
+    // 预渲染所有AI消息
+    for (const msg of chatMessages.value) {
+      if (msg.role === 'assistant') {
+        await renderAndCacheMessage(msg)
+      }
+    }
     
     // 滚动到底部
     scrollToBottom()
@@ -283,6 +270,9 @@ const handleStreamChunk = async (event: any) => {
         timestamp: Date.now()
       }
       
+      // 预先渲染内容
+      await renderAndCacheMessage(assistantMsg)
+      
       chatMessages.value.push(assistantMsg)
       
       // 保存AI回复到数据库
@@ -293,6 +283,7 @@ const handleStreamChunk = async (event: any) => {
     isLoading.value = false
     isStreaming.value = false
     streamingContent.value = ''
+    renderedStreamingContent.value = ''
     currentStreamingId.value = ''
     
     // 稍后滚动到底部，确保新消息已渲染
@@ -546,118 +537,37 @@ const formatTime = (timestamp: number) => {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-// Markdown 渲染缓存
-const messageRenderCache = ref(new Map<string, string>())
+// 用于存储已渲染消息的映射
+const renderedMessages = ref<Map<number, string>>(new Map())
 
-// 渲染单个消息内容的计算属性工厂函数
-const createMessageRenderer = (content: string) => {
-  if (!content) return `<p class="text-base-content/50">${t('floatingAI.noContent')}</p>`
-
-  const cacheKey = content.substring(0, 1000) + content.length
-  
-  // 检查缓存
-  if (messageRenderCache.value.has(cacheKey)) {
-    return messageRenderCache.value.get(cacheKey)!
-  }
+// 渲染并缓存消息内容
+const renderAndCacheMessage = async (message: { content: string, timestamp: number }) => {
+  if (renderedMessages.value.has(message.timestamp)) return
 
   try {
-    // 创建 marked 实例并配置高亮
-    const markedInstance = new Marked()
-
-    // 使用 marked-highlight 扩展
-    markedInstance.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        const actualLang = lang || 'plaintext'
-
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang)
-          } catch (error) {
-            console.warn(`Prism highlighting failed (${actualLang}):`, error)
-            return escapeHtml(code)
-          }
-        }
-
-        return escapeHtml(code)
-      }
-    }))
-
-    // 配置 marked 选项
-    markedInstance.setOptions({
-      breaks: true,
-      gfm: true,
-      pedantic: false,
-      silent: true,
-    })
-
-    // 使用 marked 渲染 Markdown
-    const htmlContent = markedInstance.parse(content) as string
-
-    // 使用DOMPurify清理HTML，防止XSS
-    const result = DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
-    })
-
-    // 缓存结果，限制缓存大小
-    if (messageRenderCache.value.size > 50) {
-      // 清理最旧的缓存项
-      const firstKey = messageRenderCache.value.keys().next().value
-      if (firstKey) {
-        messageRenderCache.value.delete(firstKey)
-      }
-    }
-    messageRenderCache.value.set(cacheKey, result)
-
-    return result
-  } catch (err) {
-    console.error('Markdown rendering error:', err)
-    const errorMessage = err instanceof Error ? err.message : String(err)
-    return `<div class="text-error">${t('floatingAI.markdownRenderError', { message: errorMessage })}</div>
-            <pre>${DOMPurify.sanitize(content)}</pre>`
-  }
-}
-
-// 安全检查 Prism 语言是否可用
-function isPrismLanguageAvailable(lang: string): boolean {
-  try {
-    // plaintext 总是可用的，因为它不需要特殊的语法高亮
-    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
-      return true;
-    }
-
-    return !!(
-      typeof Prism !== 'undefined' &&
-      Prism.languages &&
-      typeof Prism.languages === 'object' &&
-      Prism.languages[lang] &&
-      typeof Prism.highlight === 'function'
-    );
+    const rendered = await renderInlineMarkdown(message.content)
+    renderedMessages.value.set(message.timestamp, rendered)
   } catch (error) {
-    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
-    return false;
+    console.error('Markdown渲染失败:', error)
+    // 渲染失败时返回原始内容作为回退
+    renderedMessages.value.set(message.timestamp, message.content)
   }
 }
 
-// HTML 转义函数
-function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
+// 用于流式内容的渲染
+const renderedStreamingContent = ref('')
+const updateRenderedStreamingContent = async () => {
+  if (streamingContent.value) {
+    renderedStreamingContent.value = await renderInlineMarkdown(streamingContent.value)
+  } else {
+    renderedStreamingContent.value = ''
+  }
 }
 
-// 渲染 Markdown 内容
-const renderMarkdown = (content: string): string => {
-  const result = createMessageRenderer(content)
-  
-  // 在下一个 tick 中处理代码块UI增强
-  nextTick(() => {
-    enhanceCodeBlocks()
-  })
-  
-  return result
-}
+// 监听流式内容的变化，并更新其渲染结果
+watch(streamingContent, () => {
+  updateRenderedStreamingContent()
+})
 
 // 新增函数：应用代码块主题样式
 function applyCodeBlockTheme() {
@@ -935,67 +845,6 @@ function applyCodeBlockTheme() {
   styleElement.textContent = cssContent
 }
 
-// 增强代码块UI的函数
-function enhanceCodeBlocks() {
-  // 查找浮动聊天框内的代码块
-  const codeElements = document.querySelectorAll('.floating-chat-window code[class*="language-"], .floating-chat-window pre > code:not([class*="language-"])')
-
-  codeElements.forEach((codeElement) => {
-    const pre = codeElement.closest('pre')
-    if (!pre) return
-
-    // 避免重复处理
-    if (pre.closest('.code-block-container')) {
-      return
-    }
-
-    // 获取语言类型
-    const classNames = codeElement.className.split(' ')
-    const langClass = classNames.find(cls => cls.startsWith('language-'))
-    const lang = langClass ? langClass.replace('language-', '') : 'plaintext'
-
-    // 如果没有指定语言，为code元素添加language-plaintext类
-    if (!langClass) {
-      codeElement.classList.add('language-plaintext')
-    }
-
-    // 获取原始代码内容
-    const codeText = codeElement.textContent || ''
-
-    // 创建容器
-    const container = document.createElement('div')
-    container.className = 'code-block-container'
-
-    // 创建头部
-    const header = document.createElement('div')
-    header.className = 'code-block-header'
-    header.innerHTML = `
-      <span class="code-language">${lang}</span>
-      <button class="copy-code-btn" data-code="${encodeURIComponent(codeText)}" title="${t('floatingAI.copyCode')}">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-        </svg>
-      </button>
-    `
-
-    // 将pre元素包装到容器中
-    const parent = pre.parentNode
-    if (parent) {
-      parent.insertBefore(container, pre)
-      container.appendChild(header)
-      container.appendChild(pre)
-      
-      // 确保应用 okaidia 主题样式
-      pre.classList.add('prism-okaidia')
-      if (langClass) {
-        pre.classList.add(langClass)
-      }
-    }
-  })
-
-  // 应用代码块主题样式
-  applyCodeBlockTheme()
-}
 
 // 设置代码复制功能
 const setupCodeCopyFeature = () => {
@@ -1148,12 +997,12 @@ const handleResize = () => {
 
 // 主题观察器引用
 let themeObserver: MutationObserver | null = null
-let unlistenSettingsChanged: (() => void) | null = null;
 
 onMounted(async () => {
   if (isBrowser) {
     window.addEventListener('resize', handleResize)
-    await loadDefaultModel()
+    // DEPRECATED: No longer need to load model manually, store handles it.
+    // await loadDefaultModel() 
     setupCodeCopyFeature()
     
     // 应用代码块主题样式
@@ -1175,7 +1024,15 @@ onMounted(async () => {
     // 监听流式输出事件
     await listen('ai-stream-chunk', handleStreamChunk)
 
-    // 监听全局设置变化
+    // 预渲染现有的AI消息
+    for (const msg of chatMessages.value) {
+      if (msg.role === 'assistant') {
+        await renderAndCacheMessage(msg)
+      }
+    }
+
+    // DEPRECATED: No longer need to listen for changes, store is reactive.
+    /*
     unlistenSettingsChanged = await listen('global-settings-changed', (event) => {
       const payload = event.payload as { key: string };
       if (payload.key === 'defaultAIModel') {
@@ -1183,6 +1040,7 @@ onMounted(async () => {
         loadDefaultModel();
       }
     });
+    */
 
     // 新增：监听 Alt+S 全局快捷键
     window.addEventListener('keydown', handleGlobalShortcut)
@@ -1206,10 +1064,12 @@ onUnmounted(() => {
     themeObserver = null
   }
   
-  // 清理设置变化监听器
+  // DEPRECATED: No longer needed
+  /*
   if (unlistenSettingsChanged) {
     unlistenSettingsChanged();
   }
+  */
 
   // 清理样式元素
   const styleElement = document.getElementById('floating-prism-theme-styles')
@@ -1226,12 +1086,64 @@ onUnmounted(() => {
 // 全局快捷键 Alt+S 打开浮动聊天框
 const handleGlobalShortcut = (event: KeyboardEvent) => {
   // 仅在按下 Shift+S 时触发
-  if (event.shiftKey && event.key.toLowerCase() === 's') {
+  if (event.shiftKey&& event.ctrlKey && event.key.toLowerCase() === 's') {
     event.preventDefault()
     // 切换聊天窗口（打开或关闭）
     toggleChat()
   }
 }
+
+const popoverVisible = ref(false)
+const popoverContent = ref('')
+const popoverLoading = ref(false)
+let unlisten: (() => void) | null = null
+
+const handleSelectionChange = async () => {
+  const selection = window.getSelection()
+  if (selection && selection.rangeCount > 0) {
+    const selectedText = selection.toString().trim()
+    if (selectedText.length > 5) {
+      // For simplicity, let's assume we show a summary or definition.
+      // In a real app, you might invoke a specific AI prompt here.
+      try {
+        popoverLoading.value = true
+        popoverContent.value = await renderInlineMarkdown(`*Summarizing...* **${selectedText}**`)
+        popoverVisible.value = true
+
+        // Example of calling backend
+        // const summary = await invoke('summarize_text', { text: selectedText });
+        // popoverContent.value = await renderInlineMarkdown(summary);
+
+      } catch (error) {
+        console.error("AI processing failed:", error)
+        popoverContent.value = "Error processing text."
+      } finally {
+        popoverLoading.value = false
+      }
+    } else {
+      popoverVisible.value = false
+    }
+  }
+}
+
+onMounted(async () => {
+  document.addEventListener('selectionchange', handleSelectionChange)
+  unlisten = await listen('ai-floating-button-data', (event: any) => {
+    popoverLoading.value = true
+    renderInlineMarkdown(event.payload.content).then(html => {
+      popoverContent.value = html
+      popoverLoading.value = false
+      popoverVisible.value = true
+    })
+  })
+})
+
+onUnmounted(() => {
+  document.removeEventListener('selectionchange', handleSelectionChange)
+  if (unlisten) {
+    unlisten()
+  }
+})
 </script>
 
 <template>
@@ -1314,7 +1226,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
                 {{ message.content }}
               </template>
               <!-- AI消息使用Markdown渲染 -->
-              <div v-else v-html="renderMarkdown(message.content)" class="markdown-content"></div>
+              <div v-else v-html="renderedMessages.get(message.timestamp) || message.content" class="markdown-content"></div>
             </div>
           </div>
           
@@ -1325,7 +1237,7 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
               <time>{{ formatTime(Date.now()) }}</time>
             </div>
             <div class="message-content">
-              <div v-if="streamingContent" v-html="renderMarkdown(streamingContent)" class="markdown-content"></div>
+              <div v-if="streamingContent" v-html="renderedStreamingContent" class="markdown-content"></div>
               <div v-else class="flex items-center gap-2">
                 <span class="loading loading-dots loading-sm"></span>
                 <!-- <span>{{ isCancelling ? '正在取消...' : '正在生成回复...' }}</span> -->
@@ -1409,6 +1321,17 @@ const handleGlobalShortcut = (event: KeyboardEvent) => {
         <div class="resize-handle resize-handle-bottom-right" @mousedown="startResize($event, 'bottom-right')"></div>
       </template>
     </div>
+  </div>
+
+  <div
+    v-if="popoverVisible"
+    class="fixed z-[9999] bg-base-100 shadow-lg rounded-lg p-4 max-w-sm"
+    style="/* position will be set dynamically */"
+  >
+    <div v-if="popoverLoading" class="flex items-center justify-center">
+      <span class="loading loading-spinner"></span>
+    </div>
+    <div v-else class="prose max-w-none" v-html="popoverContent"></div>
   </div>
 </template>
 

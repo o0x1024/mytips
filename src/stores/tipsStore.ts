@@ -271,20 +271,20 @@ export const useTipsStore = defineStore('tips', () => {
   }
 
   // 删除笔记
-  async function deleteTip(id: string) {
+  async function deleteTip(tip_id: string) {
     try {
       isLoading.value = true
       error.value = null
       
-      await invoke('delete_tip', { id })
+      await invoke('delete_tip', { tip_id })
       
       // 从本地存储中移除
-      tips.value = tips.value.filter(tip => tip.id !== id)
+      tips.value = tips.value.filter(tip => tip.id !== tip_id)
       
       return true
     } catch (err) {
       error.value = (err as Error).message
-      console.error(`Failed to delete tip with id ${id}:`, err)
+      console.error(`Failed to delete tip with id ${tip_id}:`, err)
       return false
     } finally {
       isLoading.value = false
@@ -575,6 +575,20 @@ export const useTipsStore = defineStore('tips', () => {
     }
   }
 
+  // 新增：在列表中更新单个笔记的摘要信息
+  function updateTipInList(updatedTip: Partial<TipSummary>) {
+    if (!updatedTip.id) return;
+
+    const index = tips.value.findIndex(t => t.id === updatedTip.id)
+    if (index !== -1) {
+      // 合并更新，只更新传入的字段
+      tips.value[index] = { ...tips.value[index], ...updatedTip };
+      
+      // 手动触发响应式更新
+      tips.value = [...tips.value];
+    }
+  }
+
   return {
     // 状态
     tips,
@@ -620,6 +634,9 @@ export const useTipsStore = defineStore('tips', () => {
     
     // 新增：分类浏览相关方法
     browseCategory,
-    loadMoreCategoryTips
+    loadMoreCategoryTips,
+
+    // 新增：更新列表中的笔记
+    updateTipInList
   }
 }) 

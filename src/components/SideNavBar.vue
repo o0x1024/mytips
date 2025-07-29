@@ -5,9 +5,14 @@
       <div :class="['transition-opacity duration-300 text-2xl font-bold text-primary relative flex items-center', (isCollapsed && !isMobile) ? 'opacity-0 w-0 absolute' : 'opacity-100']">
         {{ $t('common.appName') }}
         <!-- 更新Badge -->
-        <div v-if="updateStore.hasUpdate" class="badge badge-error badge-xs ml-2 animate-pulse">
+        <button
+          v-if="updateStore.hasUpdate"
+          class="badge badge-error badge-xs ml-2 animate-pulse cursor-pointer hover:scale-105 transition-transform"
+          @click.stop="goToUpdateSettings"
+          :title="$t('sideNavBar.goToUpdateSettings')"
+        >
           {{ $t('sideNavBar.newVersion') }}
-        </div>
+        </button>
       </div>
       <button 
         v-if="!isMobile"
@@ -20,9 +25,14 @@
           <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
         </svg>
         <!-- 折叠状态下的更新指示器 -->
-        <div v-if="isCollapsed && !isMobile && updateStore.hasUpdate" class="badge badge-error badge-xs absolute -top-1 -right-1">
+        <button
+          v-if="isCollapsed && !isMobile && updateStore.hasUpdate"
+          class="badge badge-error badge-xs absolute -top-1 -right-1 cursor-pointer"
+          @click.stop="goToUpdateSettings"
+          :title="$t('sideNavBar.goToUpdateSettings')"
+        >
           !
-        </div>
+        </button>
       </button>
     </div>
 
@@ -325,6 +335,7 @@
 
 <script setup lang="ts">
 import { ref, defineEmits, defineProps, watch, onMounted, onBeforeUnmount, computed, nextTick, onActivated } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import NotebookItem from './NotebookItem.vue'
 import { showConfirm } from '../services/dialog'
@@ -334,6 +345,7 @@ import { useResponsive } from '../composables/useResponsive'
 import { useTipsStore } from '../stores/tipsStore'
 
 const { t } = useI18n()
+const router = useRouter()
 
 // 获取UI存储
 const uiStore = useUIStore()
@@ -679,6 +691,13 @@ async function refreshAll() {
   await tipsStore.fetchAllCategories()
   await tipsStore.fetchAllTipSummaries()
   
+}
+
+function goToUpdateSettings() {
+  router.push({ path: '/settings', query: { page: 'update' } })
+  // 若在移动端，自动关闭侧边栏
+  if (!isMobile.value) return
+  emit('toggle-collapse')
 }
 </script>
 

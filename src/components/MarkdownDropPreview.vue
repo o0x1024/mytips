@@ -1,459 +1,150 @@
 <template>
-  <!-- 拖拽覆盖层 -->
-  <div 
-    v-if="isDragOver" 
-    class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center"
-    @click="closeDragOverlay"
+  <!-- 只有在拖拽或预览时才渲染 -->
+  <div
+    v-if="isDragging || showPreview"
+    class="fixed inset-0 z-[9999] flex items-center justify-center"
+    :class="{ 'pointer-events-none': showPreview }"
+    @dragenter.prevent
+    @dragover.prevent
+    @dragleave.prevent
+    @drop.prevent
+    @drop="handleFileDrop"
   >
-    <div class="bg-base-100 rounded-lg p-8 shadow-2xl border-2 border-dashed border-primary border-opacity-50 relative" @click.stop>
-      <!-- 关闭按钮 -->
-      <button 
-        class="absolute top-2 right-2 btn btn-sm btn-circle btn-ghost"
-        @click="closeDragOverlay"
-        :title="t('common.close')"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-      
-      <div class="text-center">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <h3 class="text-xl font-bold mb-2">{{ t('markdownDropPreview.dropTitle') }}</h3>
-        <p class="text-base-content/70">{{ t('markdownDropPreview.dropSubtitle') }}</p>
-        <p class="text-xs text-base-content/50 mt-2">{{ t('markdownDropPreview.dropHint') }}</p>
-      </div>
+    <!-- 半透明背景，点击无效 -->
+    <div v-if="isDragging && !showPreview" class="absolute inset-0 bg-base-300/60 backdrop-blur-sm"></div>
+
+    <!-- 拖拽提示 -->
+    <div
+      v-if="isDragging && !showPreview"
+      class="relative border-2 border-dashed border-primary bg-primary/10 rounded-lg p-8 text-center text-base-content max-w-lg w-full mx-4"
+    >
+      <p>{{ t('markdownDropPreview.dragAndDrop') }}</p>
     </div>
-  </div>
 
-  <!-- 预览模态框 -->
-  <div class="modal" :class="{'modal-open': showPreview}">
-    <div class="modal-box max-w-5xl h-5/6">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="font-bold text-lg">{{ previewFile?.name }}</h3>
-        <div class="flex gap-2">
-          <button 
-            class="btn btn-sm btn-primary" 
-            @click="importAsNote"
-            :disabled="!previewContent"
-          >
-            {{ t('markdownDropPreview.importAsNote') }}
-          </button>
-          <button class="btn btn-sm btn-ghost" @click="closePreview">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-      
-      <div class="divider my-2"></div>
-      
-      <!-- 预览内容 -->
-      <div class="h-full overflow-y-auto">
-        <div 
-          v-if="previewContent" 
-          class="prose max-w-none"
-          v-html="renderedContent"
-        ></div>
-        <div v-else-if="isLoading" class="flex items-center justify-center h-full">
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-        <div v-else class="flex items-center justify-center h-full text-base-content/50">
-          {{ t('markdownDropPreview.cannotReadFile') }}
-        </div>
-      </div>
-    </div>
-    <div class="modal-backdrop" @click="closePreview"></div>
-  </div>
-
-  <!-- 导入选项模态框 -->
-  <div class="modal" :class="{'modal-open': showImportOptions}">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg">{{ t('markdownDropPreview.importOptions') }}</h3>
-      
-      <div class="form-control w-full mt-4">
+    <!-- 预览卡片 -->
+    <div v-if="showPreview" class="relative p-6 border rounded-lg bg-base-200 text-left max-w-2xl w-full mx-4 shadow-xl">
+      <h3 class="font-bold mb-2">
+        {{ t('markdownDropPreview.preview') }}: {{ previewFile?.name }}
+      </h3>
+      <div class="prose max-w-none max-h-60 overflow-y-auto" v-html="renderedHtml"></div>
+      <div class="mt-4">
         <label class="label">
-          <span class="label-text">{{ t('markdownDropPreview.noteTitle') }}</span>
+          <span class="label-text">{{ t('markdownDropPreview.importTitle') }}</span>
         </label>
-        <input 
-          type="text" 
-          class="input input-bordered w-full" 
-          v-model="importTitle"
-          :placeholder="previewFile?.name.replace(/\.[^/.]+$/, '') || ''"
-        />
+        <input v-model="importTitle" type="text" class="input input-bordered w-full" />
       </div>
-
-      <div class="form-control w-full mt-4">
-        <label class="label">
-          <span class="label-text">{{ t('markdownDropPreview.selectNotebook') }}</span>
-        </label>
-        <select class="select select-bordered w-full" v-model="selectedNotebookId">
-          <option value="">{{ t('markdownDropPreview.selectNotebookPlaceholder') }}</option>
-          <option v-for="notebook in notebooks" :key="notebook.id" :value="notebook.id">
-            {{ notebook.name }}
-          </option>
-        </select>
-      </div>
-
-      <div class="modal-action">
-        <button class="btn" @click="cancelImport">{{ t('common.cancel') }}</button>
-        <button 
-          class="btn btn-primary" 
-          @click="confirmImport"
-          :disabled="!importTitle.trim() || !selectedNotebookId"
-        >
-          {{ t('markdownDropPreview.confirmImport') }}
+      <div class="mt-4 flex justify-end gap-2">
+        <button class="btn btn-sm" @click="cancelImport">{{ t('common.cancel') }}</button>
+        <button class="btn btn-sm btn-primary" @click="confirmImport" :disabled="!importTitle.trim()">
+          {{ t('common.import') }}
         </button>
       </div>
     </div>
-    <div class="modal-backdrop" @click="cancelImport"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Marked } from 'marked'
-import { markedHighlight } from "marked-highlight";
-import Prism from 'prismjs'
-import 'prismjs/themes/prism-okaidia.css'
-import 'prismjs/components/prism-javascript'
-import 'prismjs/components/prism-typescript'
-import 'prismjs/components/prism-python'
-import 'prismjs/components/prism-java'
-import 'prismjs/components/prism-json'
-import 'prismjs/components/prism-bash'
-import 'prismjs/components/prism-css'
-import 'prismjs/components/prism-sql'
-import DOMPurify from 'dompurify'
-import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { readTextFile, exists } from '@tauri-apps/plugin-fs'
-import { showAlert } from '../services/dialog'
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { renderInlineMarkdown } from '../services/markdownService'
 
 const { t } = useI18n()
+const emit = defineEmits(['import'])
 
-// Props
-interface Props {
-  notebooks: Array<{id: string, name: string}>
-}
+const isDragging = ref(false)
+// Counter 解决嵌套 dragenter / dragleave 导致的闪烁
+let dragCounter = 0
 
-const props = defineProps<Props>()
-
-// Emits
-const emit = defineEmits<{
-  import: [data: {
-    title: string
-    content: string
-    notebookId: string
-    fileName: string
-  }]
-}>()
-
-// 状态
-const isDragOver = ref(false)
+const previewFile = ref<{ name: string; path: string } | null>(null)
+const markdownContent = ref('')
+const renderedHtml = ref('')
 const showPreview = ref(false)
-const showImportOptions = ref(false)
-const isLoading = ref(false)
-const previewFile = ref<{name: string, path: string} | null>(null)
-const previewContent = ref('')
 const importTitle = ref('')
-const selectedNotebookId = ref('')
-const dragPosition = ref({ x: 0, y: 0 })
 
-// Tauri拖拽事件监听器
-let unlistenDragDrop: (() => void) | null = null
-
-// 安全检查 Prism 语言是否可用
-function isPrismLanguageAvailable(lang: string): boolean {
-  try {
-    // plaintext 总是可用的，因为它不需要特殊的语法高亮
-    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
-      return true;
-    }
-    
-    return !!(
-      typeof Prism !== 'undefined' && 
-      Prism.languages && 
-      typeof Prism.languages === 'object' &&
-      Prism.languages[lang] &&
-      typeof Prism.highlight === 'function'
-    );
-  } catch (error) {
-    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
-    return false;
-  }
-}
-
-// HTML 转义函数
-function escapeHtml(text: string): string {
-  const div = document.createElement('div')
-  div.textContent = text
-  return div.innerHTML
-}
-
-// 计算属性
-const renderedContent = computed(() => {
-  if (!previewContent.value) return ''
-  
-  try {
-    // 创建 marked 实例并配置高亮
-    const marked = new Marked();
-    
-    // 使用 marked-highlight 扩展
-    marked.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        // 如果没有指定语言，使用 plaintext 作为默认语言
-        const actualLang = lang || 'plaintext';
-        
-        // 使用安全检查函数
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang);
-          } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error);
-            return escapeHtml(code);
-          }
-        }
-        
-        // 如果 plaintext 也不可用，直接返回转义的代码
-        return escapeHtml(code);
-      }
-    }));
-
-    // 配置 marked 选项
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      silent: true,
-    });
-
-    // 使用 marked 渲染 Markdown
-    const htmlContent = marked.parse(previewContent.value) as string;
-    
-    return DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
-    });
-  } catch (error) {
-    console.error('Markdown rendering error:', error)
-    return `<p>${t('markdownDropPreview.renderError')}</p>`
+watch(markdownContent, async (newContent) => {
+  if (newContent) {
+    renderedHtml.value = await renderInlineMarkdown(newContent)
+  } else {
+    renderedHtml.value = ''
   }
 })
 
-// Tauri拖拽事件处理
-async function handleTauriDragDrop(event: any) {
-  console.log('Tauri拖拽事件:', event.payload)
-  
-  try {
-    if (event.payload.type === 'over') {
-      // 文件悬停
-  isDragOver.value = true
-      dragPosition.value = { x: event.payload.position.x, y: event.payload.position.y }
-      console.log('文件悬停在位置:', dragPosition.value)
-    } else if (event.payload.type === 'drop') {
-      // 文件放置
-      isDragOver.value = false
-      const paths = event.payload.paths
-      console.log('文件放置，路径:', paths)
-      
-      if (paths && paths.length > 0) {
-        // 查找markdown文件
-        const markdownFiles = await filterMarkdownFiles(paths)
-        console.log('找到的markdown文件:', markdownFiles)
-        
-        if (markdownFiles.length > 0) {
-          const markdownFile = markdownFiles[0]
-          console.log('Choosing markdown file to preview:', markdownFile)
-          await previewMarkdownFileFromPath(markdownFile)
-        } else {
-          console.log('No markdown files found')
-          const fileNames = paths.map((path: string) => path.split('/').pop() || path).join(', ')
-          await showAlert(t('markdownDropPreview.fileTypeHintMessage', { files: fileNames }), { title: t('markdownDropPreview.fileTypeHintTitle') })
-        }
+// -------- 全局拖拽监听 --------
+function handleWindowDragEnter(e: DragEvent) {
+  dragCounter++
+  if (e.dataTransfer?.types.includes('Files')) {
+    isDragging.value = true
+  }
+}
+
+function handleWindowDragLeave() {
+  dragCounter = Math.max(0, dragCounter - 1)
+  if (dragCounter === 0) {
+    isDragging.value = false
+  }
+}
+
+function handleWindowDrop() {
+  dragCounter = 0
+  isDragging.value = false
+}
+
+onMounted(() => {
+  window.addEventListener('dragenter', handleWindowDragEnter)
+  window.addEventListener('dragover', handleWindowDragEnter)
+  window.addEventListener('dragleave', handleWindowDragLeave)
+  window.addEventListener('drop', handleWindowDrop)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('dragenter', handleWindowDragEnter)
+  window.removeEventListener('dragover', handleWindowDragEnter)
+  window.removeEventListener('dragleave', handleWindowDragLeave)
+  window.removeEventListener('drop', handleWindowDrop)
+})
+
+const handleFileDrop = (event: DragEvent) => {
+  isDragging.value = false
+  const file = event.dataTransfer?.files[0]
+  if (file && file.type === 'text/markdown') {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      if (content) {
+        markdownContent.value = content
+        previewFile.value = { name: file.name, path: (file as any).path } // 'path' is a Tauri-specific property
+        importTitle.value = file.name.replace(/\.md$/, '')
+        showPreview.value = true
       }
-    } else if (event.payload.type === 'cancelled') {
-      // 拖拽取消
-      isDragOver.value = false
-      console.log('文件拖拽取消')
     }
-  } catch (error) {
-    console.error('处理Tauri拖拽事件时出错:', error)
-  isDragOver.value = false
+    reader.readAsText(file)
   }
 }
 
-// 过滤markdown文件
-async function filterMarkdownFiles(paths: string[]): Promise<string[]> {
-  const markdownFiles: string[] = []
-  
-  for (const path of paths) {
-    if (await isMarkdownFile(path)) {
-      markdownFiles.push(path)
-    }
-  }
-  
-  return markdownFiles
-}
-
-// 文件类型检查 - Tauri版本（基于文件路径）
-async function isMarkdownFile(path: string): Promise<boolean> {
-  try {
-    const fileName = path.split('/').pop()?.toLowerCase() || ''
-    console.log('检查文件类型:', fileName)
-    
-    // 支持更多的markdown文件扩展名
-    const markdownExtensions = [
-      '.md', '.markdown', '.mdown', '.mkdn', '.mkd', 
-      '.mdwn', '.mdtxt', '.mdtext', '.text','.txt'
-    ]
-    
-    const isMarkdown = markdownExtensions.some(ext => fileName.endsWith(ext))
-    console.log(`文件 ${fileName} 是否为markdown:`, isMarkdown)
-    
-    // 检查文件是否存在
-    if (isMarkdown) {
-      const fileExists = await exists(path)
-      console.log(`文件 ${path} 是否存在:`, fileExists)
-      return fileExists
-    }
-    
-    return false
-  } catch (error) {
-    console.error('检查文件类型时出错:', error)
-    return false
+const confirmImport = () => {
+  if (importTitle.value.trim() && markdownContent.value) {
+    emit('import', {
+      title: importTitle.value.trim(),
+      content: markdownContent.value,
+    })
+    resetState()
   }
 }
 
-// 预览文件（从文件路径）
-async function previewMarkdownFileFromPath(filePath: string) {
-  const fileName = filePath.split('/').pop() || filePath
-  previewFile.value = { name: fileName, path: filePath }
-  isLoading.value = true
-  showPreview.value = true
-  
-  try {
-    const content = await readTextFile(filePath)
-    previewContent.value = content
-    console.log(`Successfully read file ${fileName}, content length: ${content.length}`)
-  } catch (error) {
-    console.error('Failed to read file:', error)
-    previewContent.value = ''
-    await showAlert(t('markdownDropPreview.readFileError', { error }), { title: t('markdownDropPreview.readFileErrorTitle') })
-  } finally {
-    isLoading.value = false
-  }
+const cancelImport = () => {
+  resetState()
 }
 
-// 关闭预览
-function closePreview() {
+const resetState = () => {
   showPreview.value = false
   previewFile.value = null
-  previewContent.value = ''
-}
-
-// 导入为笔记
-function importAsNote() {
-  if (!previewFile.value || !previewContent.value) return
-  
-  importTitle.value = previewFile.value.name.replace(/\.[^/.]+$/, '')
-  selectedNotebookId.value = props.notebooks[0]?.id || ''
-  showImportOptions.value = true
-}
-
-// 确认导入
-function confirmImport() {
-  if (!previewFile.value || !previewContent.value || !importTitle.value.trim() || !selectedNotebookId.value) {
-    return
-  }
-  
-  emit('import', {
-    title: importTitle.value.trim(),
-    content: previewContent.value,
-    notebookId: selectedNotebookId.value,
-    fileName: previewFile.value.name
-  })
-  
-  // 显示成功提示
-  console.log(`Markdown file "${previewFile.value.name}" imported successfully!`)
-  
-  // 重置状态
-  showImportOptions.value = false
-  closePreview()
+  markdownContent.value = ''
   importTitle.value = ''
-  selectedNotebookId.value = ''
-}
-
-// 取消导入
-function cancelImport() {
-  showImportOptions.value = false
-  importTitle.value = ''
-  selectedNotebookId.value = ''
-}
-
-// 生命周期
-onMounted(async () => {
-  
-  try {
-    // 使用Tauri的原生拖拽事件API
-    const webview = getCurrentWebview()
-    unlistenDragDrop = await webview.onDragDropEvent(handleTauriDragDrop)
-    
-  
-    // 添加测试函数到全局
-  ;(window as any).testDragFunction = () => {
-    console.log('手动测试拖拽功能')
-    isDragOver.value = !isDragOver.value
-    console.log('拖拽覆盖层状态:', isDragOver.value)
-  }
-
-    
-    // 添加ESC键监听
-    document.addEventListener('keydown', handleKeyDown)
-    
-  } catch (error) {
-    console.error('设置Tauri拖拽事件监听器失败:', error)
-    // 如果Tauri API不可用，可以考虑回退到HTML5拖拽API
-    console.warn('将尝试使用HTML5拖拽API作为备用方案')
-  }
-})
-
-onUnmounted(() => {
-  console.log('MarkdownDropPreview 组件卸载，移除拖拽事件监听器')
-  
-  // 移除Tauri拖拽事件监听器
-  if (unlistenDragDrop) {
-    unlistenDragDrop()
-    unlistenDragDrop = null
-    console.log('✅ Tauri拖拽事件监听器已移除')
-  }
-  
-  // 移除ESC键监听
-  document.removeEventListener('keydown', handleKeyDown)
-  
-  // 清理全局测试函数
-  if ((window as any).testDragFunction) {
-    delete (window as any).testDragFunction
-  }
-})
-
-// ESC键处理函数
-function handleKeyDown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isDragOver.value) {
-    closeDragOverlay()
-  }
-}
-
-// 关闭拖拽覆盖层
-function closeDragOverlay() {
-  isDragOver.value = false
 }
 </script>
 
 <style scoped>
+/* 基础排版 */
 .prose {
   color: inherit;
   font-size: var(--base-font-size); /* 继承全局字体大小 */

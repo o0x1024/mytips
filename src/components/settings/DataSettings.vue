@@ -51,7 +51,7 @@
 
             <!-- 模式选择卡片 -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div v-for="mode in availableModes.filter((m: any) => m.supported)" 
+              <div v-for="mode in availableModes.filter((m: any) => m.supported && m.value !== 'embedded_replica')" 
                    :key="mode.value"
                    class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-all"
                    :class="{ 'border-2 border-primary': currentDatabaseMode === mode.value }"
@@ -70,14 +70,14 @@
 
             <!-- 快速操作按钮 -->
             <div class="flex gap-2 flex-wrap">
-              <button 
+              <!-- <button 
                 v-if="currentDatabaseMode !== 'embedded_replica' && hasRemoteConfig"
                 class="btn btn-primary btn-sm"
                 @click="switchToEmbeddedReplicaMode"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
                 {{ $t('dataSettings.actions.switchToEmbedded') }}
-              </button>
+              </button> -->
               
               <button 
                 v-if="databaseStore.supportsSync"
@@ -97,7 +97,7 @@
               </button>
               
               <button 
-                v-if="currentDatabaseMode === 'embedded_replica' || currentDatabaseMode === 'local'"
+                v-if="currentDatabaseMode === 'local'"
                 class="btn btn-outline btn-info btn-sm"
                 @click="optimizeDatabaseWAL"
                 :disabled="isOperationInProgress">
@@ -385,20 +385,20 @@ const isLocalDevUrl = computed(() => {
          url.startsWith('https://localhost')
 })
 
-const hasRemoteConfig = computed(() => {
-  const hasUrl = syncConfig.value?.remote_url?.trim() !== ''
-  if (!hasUrl) return false
+// const hasRemoteConfig = computed(() => {
+//   const hasUrl = syncConfig.value?.remote_url?.trim() !== ''
+//   if (!hasUrl) return false
   
-  const hasToken = syncConfig.value?.auth_token?.trim() !== ''
+//   const hasToken = syncConfig.value?.auth_token?.trim() !== ''
   
-  // 本地开发环境允许空token
-  if (isLocalDevUrl.value) {
-    return true
-  }
+//   // 本地开发环境允许空token
+//   if (isLocalDevUrl.value) {
+//     return true
+//   }
   
-  // 生产环境需要token
-  return hasToken
-})
+//   // 生产环境需要token
+//   return hasToken
+// })
 
 // === 数据库状态管理 ===
 
@@ -472,7 +472,7 @@ async function switchDatabaseMode(mode: string, params?: any) {
 /**
  * 切换到嵌入式副本模式（推荐）
  */
-async function switchToEmbeddedReplicaMode() {
+/* async function switchToEmbeddedReplicaMode() {
   
   // 检查是否有远程配置信息
   if (!hasRemoteConfig.value) {
@@ -529,7 +529,7 @@ async function switchToEmbeddedReplicaMode() {
       showMessage(`${t('dataSettings.prompts.switchFailed')}: ${error}`, { title: t('common.error') })
     }
   }
-}
+} */
 
 /**
  * 执行数据库同步

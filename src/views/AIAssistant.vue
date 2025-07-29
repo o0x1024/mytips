@@ -165,7 +165,7 @@
                   {{ selectedRole ? selectedRole.name : getSelectedModelName() }}
                   <time class="text-xs opacity-50 ml-1">{{ formatTime(Date.now()) }}</time>
                 </div>
-                <div class="chat-bubble" v-html="formatMessage(streamingContent)"></div>
+                <div class="chat-bubble" v-html="formattedStreamingContent"></div>
               </div>
             </div>
 
@@ -240,7 +240,7 @@
                     </div>
 
                     <!-- 消息内容 -->
-                    <div v-html="formatMessage(message.content)"></div>
+                    <div v-html="message.formattedContent"></div>
                   </div>
                   <div class="chat-footer opacity-50 flex gap-1" v-if="message.role === 'assistant'">
                     <button class="btn btn-xs btn-ghost"
@@ -389,7 +389,7 @@
               <div class="input-toolbar flex items-center justify-between p-2 border-b border-base-300">
                 <div class="flex items-center gap-2">
                   <!-- AI模型选择 -->
-                  <select v-model="selectedModel" class="select select-sm select-bordered" @change="handleModelChange">
+                  <select v-model="selectedModel" class="select select-sm select-bordered" :class="{ 'max-w-[120px]': showNotePanel }" @change="handleModelChange">
                     <option disabled value="">{{ $t('ai.select_ai_model') }}</option>
                     <option v-for="model in availableModels" :key="model.id" :value="model.id">
                       {{ model.name }}
@@ -402,7 +402,7 @@
 
                   <!-- 角色选择显示 -->
                   <div class="flex items-center gap-2">
-                    <div v-if="selectedRole" class="role-badge badge badge-primary badge-sm flex items-center gap-1">
+                    <div v-if="selectedRole && !showNotePanel" class="role-badge badge badge-primary badge-sm flex items-center gap-1">
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -419,12 +419,12 @@
                     </div>
                     <button class="btn btn-xs btn-outline tooltip tooltip-bottom flex items-center"
                       :data-tip="$t('ai.select_role')" @click="openRoleManager">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{ 'mr-1': !isMobile }" fill="none"
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" :class="{ 'mr-1': !isMobile && !showNotePanel }" fill="none"
                         viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                       </svg>
-                      <span v-if="!isMobile">{{ selectedRole ? $t('ai.change_role') : $t('ai.select_role') }}</span>
+                      <span v-if="!isMobile && !showNotePanel">{{ selectedRole ? $t('ai.change_role') : $t('ai.select_role') }}</span>
                     </button>
                   </div>
 
@@ -447,31 +447,31 @@
                 <!-- 右侧工具 -->
                 <div v-if="!isMobile" class="flex items-center gap-1">
                   <!-- 工具按钮 -->
-                  <button class="btn btn-sm btn-outline" @click="createNewConversation"
+                  <button class="btn btn-sm btn-outline flex items-center" @click="createNewConversation"
                     :title="$t('ai.new_conversation')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    {{ $t('ai.new_conversation') }}
+                    <span v-if="!showNotePanel" class="ml-1">{{ $t('ai.new_conversation') }}</span>
                   </button>
-                  <button class="btn btn-sm btn-outline" @click="clearMessages"
+                  <button class="btn btn-sm btn-outline flex items-center" @click="clearMessages"
                     :title="$t('ai.clear_conversation_history')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                    {{ $t('ai.clear_conversation') }}
+                    <span v-if="!showNotePanel" class="ml-1">{{ $t('ai.clear_conversation') }}</span>
                   </button>
-                  <button class="btn btn-sm btn-outline" @click="exportMessages"
+                  <button class="btn btn-sm btn-outline flex items-center" @click="exportMessages"
                     :title="$t('ai.export_conversation_content')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                       stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    {{ $t('ai.export_conversation') }}
+                    <span v-if="!showNotePanel" class="ml-1">{{ $t('ai.export_conversation') }}</span>
                   </button>
                 </div>
               </div>
@@ -591,10 +591,13 @@
           </div>
         </div>
 
-        <!-- 右侧笔记区域 (仅桌面) -->
+        
+      </div>
+
+      <!-- 右侧笔记区域 (仅桌面) -->
+      <div v-show="showNotePanel && !isMobile" class="flex-1 flex flex-col p-1 md:p-4 border-r border-base-300 overflow-hidden">
         <transition name="fade-slide">
-          <div class="w-1/3 min-w-[350px] flex-col p-4 overflow-hidden hidden md:flex"
-            v-show="showNotePanel && !isMobile">
+          <div class=" min-w-[300px] h-full flex-col p-4 overflow-hidden hidden md:flex">
             <div class="flex justify-between items-center mb-4">
               <h2 class="text-xl font-bold">{{ $t('ai.notes') }}</h2>
               <div class="flex gap-2">
@@ -642,15 +645,13 @@
                   </button>
                 </div>
               </div>
-
               <!-- 编辑模式 -->
               <textarea v-if="!isNotePreviewMode" v-model="noteContent"
                 :placeholder="$t('ai.add_content_from_left_ai_conversation') + '...'"
-                class="textarea textarea-bordered w-full flex-1 font-mono resize-none"></textarea>
-
+                class="textarea textarea-bordered w-full h-full  font-mono resize-none"></textarea>
               <!-- 预览模式 -->
               <div v-else
-                class="flex-1 p-4 overflow-auto prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
+                class="flex-1 p-4 overflow-auto h-full prose prose-sm max-w-none bg-base-200 rounded-lg border border-base-300"
                 v-html="renderedNoteContent"></div>
             </div>
           </div>
@@ -981,15 +982,12 @@ import { getAIConfig } from '../services/aiService'
 import 'highlight.js/styles/github.css'
 import { useTipsStore } from '../stores/tipsStore'
 import { invoke } from '@tauri-apps/api/core'
-import DOMPurify from 'dompurify'
-import Prism from 'prismjs'
-import { Marked } from 'marked'
-import { markedHighlight } from 'marked-highlight'
 import { listen } from '@tauri-apps/api/event'
 import { useI18n } from 'vue-i18n'
 import { useAIStore } from '../stores/aiStore'
 import { storeToRefs } from 'pinia'
 import { open } from '@tauri-apps/plugin-shell'
+import { renderInlineMarkdown } from '../services/markdownService'
 
 
 const { t } = useI18n()
@@ -1041,26 +1039,6 @@ const goBack = () => {
   router.push({ path: '/', query: { refresh: 'tips', timestamp: Date.now().toString() } })
 }
 
-// 安全检查 Prism 语言是否可用
-function isPrismLanguageAvailable(lang: string): boolean {
-  try {
-    // plaintext 总是可用的，因为它不需要特殊的语法高亮
-    if (lang === 'plaintext' || lang === 'text' || lang === 'plain') {
-      return true;
-    }
-
-    return !!(
-      typeof Prism !== 'undefined' &&
-      Prism.languages &&
-      typeof Prism.languages === 'object' &&
-      Prism.languages[lang] &&
-      typeof Prism.highlight === 'function'
-    );
-  } catch (error) {
-    console.warn(`检查 Prism 语言 ${lang} 时出错:`, error);
-    return false;
-  }
-}
 
 // HTML 转义函数
 function escapeHtml(text: string): string {
@@ -1095,6 +1073,7 @@ const scrollThreshold = ref(50) // 滚动阈值，用于判断是否接近底部
 // 流式输出相关
 const isStreaming = ref(false)
 const streamingContent = ref('')
+const formattedStreamingContent = ref('')
 const currentStreamingId = ref<string | null>(null)
 
 // 性能优化相关
@@ -1237,7 +1216,7 @@ async function loadMessages(conversationId: string) {
     const rawMessages = Array.isArray(result) ? result : []
 
     // 解析消息中的附件信息
-    messages.value = rawMessages.map((msg: any) => {
+    messages.value = await Promise.all(rawMessages.map(async (msg: any) => {
       const processedMsg = { ...msg }
 
       // 检查消息内容中是否包含附件信息
@@ -1280,9 +1259,11 @@ async function loadMessages(conversationId: string) {
           processedMsg.role_name = parts[1] // 角色名称
         }
       }
+      
+      processedMsg.formattedContent = await renderInlineMarkdown(processedMsg.content || '')
 
       return processedMsg
-    })
+    }))
 
     console.log(`加载到 ${messages.value.length} 条消息`)
 
@@ -1342,40 +1323,65 @@ async function deleteConversation(conversationId: string) {
 
 // 监听流式输出事件
 const setupStreamListeners = async () => {
-  let unlisten: any = null;
+  if (unlistenStream) {
+    unlistenStream();
+    unlistenStream = null;
+  }
+  
   try {
-    unlisten = await listen('ai-stream-chunk', async (event: any) => {
-      const payload = event.payload as { id: string, chunk: string, done: boolean };
+    unlistenStream = await listen('ai-stream-chunk', async (event: any) => {
+      const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string };
+      console.log('Received ai-stream-chunk event:', payload);
 
-      // 忽略不匹配当前会话ID的事件
-      if (payload.id !== currentStreamingId.value) return;
+      // 忽略不匹配当前流ID的事件（除非 currentStreamingId 为 null，我们将其初始化）
+      if (!currentStreamingId.value) {
+        console.warn(`currentStreamingId 为空，初始化为 ${payload.id}`)
+        currentStreamingId.value = payload.id
+      }
+      if (payload.id !== currentStreamingId.value) {
+        console.warn(`Ignoring event for different stream ID. Expected: ${currentStreamingId.value}, Got: ${payload.id}`);
+        return;
+      }
 
       if (payload.done) {
-        console.log(`收到完成事件: id=${payload.id}`);
-
-        // 流式输出完成，添加完整消息到数据库，包含角色信息
-        const messageContent = streamingContent.value
-        let finalContent = messageContent
-
-        // 如果有选中的角色，在消息内容中添加角色信息标记
-        if (selectedRole.value) {
-          finalContent += `\n\n__ROLE_NAME__:${selectedRole.value.name}`
+        // 安全检查，确保是当前流的完成事件
+        if (payload.id !== currentStreamingId.value) {
+          console.warn(`Ignoring 'done' event for an old or different stream. Expected: ${currentStreamingId.value}, Got: ${payload.id}`);
+          return;
         }
 
-        await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContent })
+        console.log(`收到完成事件: id=${payload.id}`);
 
-        // 重新加载消息列表
-        await loadMessages(activeConversationId.value)
+        const finalContentToSave = streamingContent.value;
 
-        // 重置状态
+        // 1. 立即重置流状态，以便可以立即开始新的流
         isStreaming.value = false;
         streamingContent.value = '';
         currentStreamingId.value = null;
         isLoading.value = false;
 
-        // 滚动到底部
-        await nextTick();
-        scrollToBottom();
+        console.log('setupStreamListeners isLoading', isLoading.value)
+        // 2. 然后在后台执行耗时的数据库和加载操作
+        try {
+          // 如果有选中的角色，在消息内容中添加角色信息标记
+          let finalContentWithRole = finalContentToSave;
+          if (selectedRole.value) {
+            finalContentWithRole += `\n\n__ROLE_NAME__:${selectedRole.value.name}`;
+          }
+
+          if (finalContentToSave.trim()) { // 只有在有内容时才保存
+             await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
+          }
+
+          // 重新加载消息列表
+          await loadMessages(activeConversationId.value);
+        } catch(e) {
+            console.error("Error while finalizing stream:", e);
+        } finally {
+            // 滚动到底部
+            await nextTick();
+            scrollToBottom();
+        }
       } else {
         // 收到内容chunk，累加到流式内容中
         streamingContent.value += payload.chunk;
@@ -1394,15 +1400,6 @@ const setupStreamListeners = async () => {
   } catch (error) {
     console.error('设置流式输出监听失败:', error);
   }
-
-  // 在组件卸载时取消监听
-  onBeforeUnmount(() => {
-    if (unlisten && typeof unlisten === 'function') {
-      unlisten();
-    }
-  });
-
-  return unlisten;
 };
 
 // 发送消息到AI - 使用流式输出
@@ -1519,14 +1516,25 @@ async function sendMessage(resendMessage?: any) {
       const notesJson = JSON.stringify(referencedNotes)
       messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
     }
+    
+    // 立即更新UI
+    messages.value.push({
+      role: 'user',
+      content: userInput.value,
+      timestamp: Date.now(),
+      attachments: attachments,
+      referencedNotes: referencedNotes,
+      formattedContent: await renderInlineMarkdown(userInput.value)
+    });
 
-    await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+    // 异步保存到数据库
+    invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+      .catch(err => console.error("Failed to save user message:", err));
 
     userInput.value = ''
     clearAllFiles() // 清空已上传的文件
     clearAllSelectedNotes() // 清空选中的笔记（清空内部记录，不影响输入框）
-    await loadMessages(activeConversationId.value)
-
+    
     // 立即设置加载状态，让用户看到机器人正在思考
     isLoading.value = true
 
@@ -1682,101 +1690,17 @@ watch(selectedModel, async (newModel) => {
 
 // 格式化消息内容（支持Markdown）
 const formatMessage = (content: string): string => {
-  // 检查缓存
-  const cacheKey = content.substring(0, 1000) + content.length; // 使用内容前1000字符+长度作为缓存键
-  if (messageRenderCache.value.has(cacheKey)) {
-    return messageRenderCache.value.get(cacheKey)!;
+  // This is a placeholder now. The actual rendering is done when messages are loaded/streamed.
+  // We keep this function to avoid breaking the template during refactoring,
+  // but we will replace its usage with pre-formatted content.
+  // The actual rendering happens in `loadMessages` and the `streamingContent` watcher.
+  if (content) {
+    // Return a basic escaped version to prevent raw HTML injection before real rendering.
+    const div = document.createElement('div')
+    div.textContent = content
+    return div.innerHTML.replace(/\n/g, '<br>') // Simple newline handling
   }
-
-  try {
-    // 创建 marked 实例并配置高亮
-    const marked = new Marked();
-
-    // 使用 marked-highlight 扩展
-    marked.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        // 如果没有指定语言，使用 plaintext 作为默认语言
-        const actualLang = lang || 'plaintext';
-
-        // 限制代码块大小，超过50KB的代码块不进行语法高亮
-        const MAX_CODE_SIZE = 50 * 1024; // 50KB
-        const MAX_LINES = 1000; // 最大行数限制
-
-        const codeLines = code.split('\n');
-        const isLargeCode = code.length > MAX_CODE_SIZE || codeLines.length > MAX_LINES;
-
-        if (isLargeCode) {
-          // 对于大代码块，显示警告并提供折叠功能
-          const truncatedCode = codeLines.length > MAX_LINES
-            ? codeLines.slice(0, MAX_LINES).join('\n') + `\n\n... (剩余 ${codeLines.length - MAX_LINES} 行已省略)`
-            : code;
-
-          return `<div class="large-code-block">
-            <div class="code-warning bg-warning/20 text-warning-content p-2 text-sm rounded-t border border-warning/40">
-              ⚠️ {{ $t('ai.large_code_block') }} (${codeLines.length} {{ t('ai.lines') }}, ${(code.length / 1024).toFixed(1)}KB) - {{ $t('ai.syntax_highlighting_disabled_to_improve_performance') }}
-              <button class="btn btn-xs btn-outline ml-2" onclick="this.parentElement.nextElementSibling.style.display = this.parentElement.nextElementSibling.style.display === 'none' ? 'block' : 'none'; this.textContent = this.textContent.includes('显示') ? '隐藏代码' : '显示代码'">
-                ${codeLines.length > MAX_LINES ? t('ai.show_full_code') : t('ai.hide_code')}
-              </button>
-            </div>
-            <pre class="code-content"><code class="language-${actualLang}">${DOMPurify.sanitize(truncatedCode)}</code></pre>
-            ${codeLines.length > MAX_LINES ? `<pre class="code-content" style="display: none;"><code class="language-${actualLang}">${DOMPurify.sanitize(code)}</code></pre>` : ''}
-          </div>`;
-        }
-
-        // 使用安全检查函数
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang);
-          } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error);
-            return escapeHtml(code);
-          }
-        }
-
-        // 如果 plaintext 也不可用，直接返回转义的代码
-        return escapeHtml(code);
-      }
-    }));
-
-    // 配置 marked 选项
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      silent: true,
-    });
-
-    // 使用 marked 渲染 Markdown
-    const htmlContent = marked.parse(content) as string;
-
-    // 使用DOMPurify清理HTML，防止XSS
-    const result = DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code', 'div', 'button'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled', 'onclick', 'data-code', 'data-language']
-    });
-
-    // 缓存结果，限制缓存大小
-    if (messageRenderCache.value.size > 200) {
-      // 清理最旧的缓存项
-      const firstKey = messageRenderCache.value.keys().next().value;
-      if (firstKey) {
-        messageRenderCache.value.delete(firstKey);
-      }
-    }
-    messageRenderCache.value.set(cacheKey, result);
-
-    // 在下一个 tick 中处理代码块UI增强
-    nextTick(() => {
-      enhanceCodeBlocks()
-    })
-
-    return result;
-  } catch (err) {
-    console.error('Markdown渲染错误:', err);
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    return `<div class="text-error">${t('ai.markdown_rendering_error')}: ${errorMessage}</div>
-            <pre>${DOMPurify.sanitize(content)}</pre>`;
-  }
+  return ''
 }
 
 // 增强代码块UI的函数
@@ -2191,6 +2115,7 @@ function setupCodeCopyFeature() {
 // 滚动事件防抖
 let scrollTimeout: number | null = null
 let isUserScrolling = ref(false)
+let unlistenStream: (() => void) | null = null;
 
 // 处理滚动事件 - 适配反向布局
 const handleScroll = () => {
@@ -2447,6 +2372,7 @@ onActivated(async () => {
   console.log('AI Assistant component activated.')
   window.addEventListener('resize', onResize)
   await reloadAIConfig() // 激活时重新加载配置
+  await setupStreamListeners();
 
   // 重新设置监听器
   if (!unlistenSettings) {
@@ -2457,9 +2383,14 @@ onActivated(async () => {
     })
   }
 
-  // 强制滚动到底部
-  await nextTick()
-  forceScrollToBottom()
+  if (unlistenStream) {
+    unlistenStream();
+    unlistenStream = null;
+  }
+
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('click', handleLinkClick)
+  }
 })
 
 onDeactivated(() => {
@@ -3460,55 +3391,23 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
 }
 
 // 笔记内容的markdown渲染
-const renderedNoteContent = computed(() => {
-  if (!noteContent.value) return `<p class="text-base-content/50">${t('ai.no_content')}</p>`
+const renderedNoteContent = ref('')
 
+watch(noteContent, async (newContent) => {
+  if (!newContent) {
+    renderedNoteContent.value = `<p class="text-base-content/50">${t('ai.no_content')}</p>`
+    return
+  }
   try {
-    // 创建 marked 实例并配置高亮
-    const marked = new Marked()
-
-    // 使用 marked-highlight 扩展
-    marked.use(markedHighlight({
-      langPrefix: 'language-',
-      highlight(code: string, lang: string) {
-        const actualLang = lang || 'plaintext'
-
-        if (actualLang && isPrismLanguageAvailable(actualLang)) {
-          try {
-            return Prism.highlight(code, Prism.languages[actualLang], actualLang)
-          } catch (error) {
-            console.warn(`Prism 高亮失败 (${actualLang}):`, error)
-            return escapeHtml(code)
-          }
-        }
-
-        return escapeHtml(code)
-      }
-    }))
-
-    // 配置 marked 选项
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      pedantic: false,
-      silent: true,
-    })
-
-    // 使用 marked 渲染 Markdown
-    const htmlContent = marked.parse(noteContent.value) as string
-
-    // 使用DOMPurify清理HTML，防止XSS
-    return DOMPurify.sanitize(htmlContent, {
-      ADD_TAGS: ['iframe', 'pre', 'code'],
-      ADD_ATTR: ['allowfullscreen', 'frameborder', 'target', 'src', 'alt', 'class', 'style', 'data-highlighted', 'checked', 'disabled']
-    })
+    renderedNoteContent.value = await renderInlineMarkdown(newContent)
   } catch (err) {
     console.error('笔记Markdown渲染错误:', err)
     const errorMessage = err instanceof Error ? err.message : String(err)
-    return `<div class="text-error">${t('ai.markdown_rendering_error')}: ${errorMessage}</div>
-            <pre>${DOMPurify.sanitize(noteContent.value)}</pre>`
+    const escapedContent = escapeHtml(newContent)
+    renderedNoteContent.value = `<div class="text-error">${t('ai.markdown_rendering_error')}: ${errorMessage}</div>
+            <pre>${escapedContent}</pre>`
   }
-})
+}, { immediate: true })
 
 // 监听预览模式变化
 watch(isNotePreviewMode, (newValue) => {
@@ -3556,6 +3455,16 @@ const handleLinkClick = (event: MouseEvent) => {
     }
   }
 }
+
+watch(streamingContent, async (newContent) => {
+  if (newContent) {
+    formattedStreamingContent.value = await renderInlineMarkdown(newContent)
+  } else {
+    formattedStreamingContent.value = ''
+  }
+  await nextTick()
+  enhanceCodeBlocks()
+})
 </script>
 
 <style scoped>

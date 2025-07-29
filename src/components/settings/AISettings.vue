@@ -7,16 +7,24 @@
         <label class="label">
           <span class="label-text">{{ $t('aiSettings.defaultModel') }}</span>
         </label>
-        <select v-model="selectedModel" class="select select-bordered w-full" @change="saveDefaultAIModel">
-          <option value="openai">{{ $t('aiSettings.models.openai') }}</option>
-          <option value="gemini">{{ $t('aiSettings.models.gemini') }}</option>
-          <option value="anthropic">{{ $t('aiSettings.models.anthropic') }}</option>
-          <option value="deepseek">{{ $t('aiSettings.models.deepseek') }}</option>
-          <option value="qwen">{{ $t('aiSettings.models.qwen') }}</option>
-          <option value="doubao">{{ $t('aiSettings.models.doubao') }}</option>
-          <option value="grok">{{ $t('aiSettings.models.grok') }}</option>
-          <option value="custom">{{ $t('aiSettings.models.custom') }}</option>
-        </select>
+        <div class="relative">
+          <select 
+            v-model="selectedModel" 
+            class="select select-bordered w-full pr-10" 
+            @change="saveDefaultAIModel"
+          >
+            <option disabled value="">{{ $t('aiSettings.defaultModelPlaceholder') }}</option>
+            <option v-for="model in availableModelOptions" :key="model" :value="model">{{ model }}</option>
+          </select>
+          <button 
+            class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-primary"
+            @click="saveDefaultAIModel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+        </div>
       </div>
       
       <div class="tabs tabs-boxed mb-4 flex-wrap gap-2">
@@ -152,6 +160,147 @@
       </button>
     </div>
   </div>
+
+  <!-- 自定义模型管理部分 -->
+  <div v-if="selectedConfigModel === 'custom'" class="space-y-4 mt-4">
+    <div class="flex justify-between items-center">
+      <h3 class="font-medium">{{ $t('aiSettings.customModels') }}</h3>
+      <button class="btn btn-sm btn-primary" @click="openCustomModelForm()">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        {{ $t('aiSettings.addCustomModel') }}
+      </button>
+    </div>
+
+    <!-- 自定义模型列表 -->
+    <div v-if="customModels.length === 0" class="text-center py-4 text-base-content/70">
+      {{ $t('aiSettings.noCustomModels') }}
+    </div>
+    
+    <div v-else class="space-y-3">
+      <div v-for="model in customModels" :key="model.id" 
+           class="card bg-base-200 shadow-sm border border-base-300">
+        <div class="card-body p-4">
+          <div class="flex justify-between">
+            <h3 class="card-title text-base">{{ model.name }}</h3>
+            <div class="flex gap-1">
+              <button class="btn btn-xs btn-ghost" @click="editCustomModel(model)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button class="btn btn-xs btn-error" @click="confirmDeleteCustomModel(model.id)">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <span class="font-semibold">{{ $t('aiSettings.endpoint') }}:</span> 
+              <span class="text-base-content/70">{{ model.endpoint }}</span>
+            </div>
+            <div>
+              <span class="font-semibold">{{ $t('aiSettings.modelName') }}:</span> 
+              <span class="text-base-content/70">{{ model.model_name }}</span>
+            </div>
+            <div>
+              <span class="font-semibold">{{ $t('aiSettings.adapterType') }}:</span> 
+              <span class="text-base-content/70">{{ model.adapter_type }}</span>
+            </div>
+            <div>
+              <span class="font-semibold">{{ $t('aiSettings.apiKey') }}:</span> 
+              <span class="text-base-content/70">{{ model.api_key ? '******' : $t('aiSettings.notSet') }}</span>
+            </div>
+          </div>
+          <div class="card-actions justify-end mt-2">
+            <button class="btn btn-xs btn-outline" @click="testCustomModelConnection(model)">
+              {{ $t('aiSettings.testConnection') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自定义模型表单弹窗 -->
+  <dialog ref="customModelModal" class="modal">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg mb-4">
+        {{ editingCustomModel ? $t('aiSettings.editCustomModel') : $t('aiSettings.addCustomModel') }}
+      </h3>
+      
+      <div class="space-y-4">
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">{{ $t('aiSettings.modelName') }}</span>
+          </label>
+          <input 
+            type="text" 
+            v-model="customModelForm.name" 
+            class="input input-bordered w-full" 
+            :placeholder="$t('aiSettings.modelNamePlaceholder')"
+          />
+        </div>
+        
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">{{ $t('aiSettings.endpoint') }}</span>
+          </label>
+          <input 
+            type="text" 
+            v-model="customModelForm.endpoint" 
+            class="input input-bordered w-full" 
+            :placeholder="$t('aiSettings.endpointPlaceholder')"
+          />
+        </div>
+        
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">{{ $t('aiSettings.modelName') }}</span>
+          </label>
+          <input 
+            type="text" 
+            v-model="customModelForm.model_name" 
+            class="input input-bordered w-full" 
+            :placeholder="$t('aiSettings.modelIdentifierPlaceholder')"
+          />
+        </div>
+        
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">{{ $t('aiSettings.adapterType') }}</span>
+          </label>
+          <select v-model="customModelForm.adapter_type" class="select select-bordered w-full">
+            <option value="openai">OpenAI</option>
+            <option value="ollama">Ollama</option>
+            <option value="custom">{{ $t('aiSettings.custom') }}</option>
+          </select>
+        </div>
+        
+        <div class="form-control">
+          <label class="label">
+            <span class="label-text">{{ $t('aiSettings.apiKey') }}</span>
+          </label>
+          <input 
+            type="password" 
+            v-model="customModelForm.api_key" 
+            class="input input-bordered w-full" 
+            :placeholder="$t('aiSettings.apiKeyOptionalPlaceholder')"
+          />
+        </div>
+      </div>
+      
+      <div class="modal-action">
+        <button class="btn" @click="closeCustomModelForm">{{ $t('aiSettings.cancel') }}</button>
+        <button class="btn btn-primary" @click="saveCustomModel" :disabled="!customModelForm.name || !customModelForm.endpoint">
+          {{ $t('aiSettings.save') }}
+        </button>
+      </div>
+    </div>
+  </dialog>
 </template>
 
 <script setup lang="ts">
@@ -163,7 +312,8 @@ import {
   AIProvider, TestConnectionRequest,
   getChatModels,
   testAIConnection, saveAIConfig, getAIConfig, getAIUsageStats, reloadAIServices,
-  getAIServiceStatus, defaultProviders
+  getAIServiceStatus, defaultProviders, CustomModelConfig,
+  listCustomModelConfigs, addCustomModelConfig, updateCustomModelConfig, deleteCustomModelConfig
 } from '../../services/aiService'
 import { useI18n } from 'vue-i18n'
 import { useAIStore } from '../../stores/aiStore';
@@ -206,20 +356,26 @@ async function saveDefaultAIModel() {
     const providerId = selectedModel.value
     aiStore.setSelectedModel(providerId);
 
-    const providerConfig = aiProviders.value[providerId]
+    // 检查是否是已知的提供商
+    const isKnownProvider = Object.keys(providerMapping).includes(providerId);
+    const actualProviderId = isKnownProvider ? providerId : 'custom';
+    
+    const providerConfig = aiProviders.value[actualProviderId]
     
     if (!providerConfig) {
-      console.error(`Provider config not found for: ${providerId}`)
-      showMessage(t('aiSettings.notifications.providerNotFound', { providerId }), { title: t('aiSettings.notifications.error') })
+      console.error(`Provider config not found for: ${actualProviderId}`)
+      showMessage(t('aiSettings.notifications.providerNotFound', { providerId: actualProviderId }), { title: t('aiSettings.notifications.error') })
       return
     }
 
-    const providerForBackend = providerMapping[providerId]
-    const modelName = providerConfig.default_model
+    // 如果是已知提供商，使用配置的默认模型
+    // 如果是自定义输入，则将输入值作为模型名称
+    const providerForBackend = isKnownProvider ? providerMapping[providerId] : 'custom';
+    const modelName = isKnownProvider ? providerConfig.default_model : providerId;
     
-    if (!providerForBackend || !modelName) {
-        console.error('Provider or model name is missing for the selected default AI model.')
-        showMessage(t('aiSettings.notifications.providerOrModelMissing'), { title: t('aiSettings.notifications.error') })
+    if (!providerForBackend) {
+        console.error('Provider is missing for the selected default AI model.')
+        showMessage(t('aiSettings.notifications.providerMissing'), { title: t('aiSettings.notifications.error') })
         return
     }
     
@@ -351,6 +507,7 @@ async function loadAIProvidersConfig() {
         aiProviders.value[providerKey].enabled = status.is_available
       }
     }
+    updateAvailableModelOptions()
   } catch (error) {
     console.error('加载AI配置失败:', error)
     showMessage(t('aiSettings.notifications.loadConfigFailed', { error }), { title: t('aiSettings.notifications.error') })
@@ -368,10 +525,143 @@ async function refreshAIStats() {
   }
 }
 
-// 组件挂载时加载设置
+// 自定义模型相关数据和函数
+const customModels = ref<CustomModelConfig[]>([])
+const customModelModal = ref<HTMLDialogElement | null>(null)
+const editingCustomModel = ref(false)
+const customModelForm = ref<CustomModelConfig>({
+  id: '',
+  name: '',
+  endpoint: '',
+  model_name: '',
+  adapter_type: 'openai'
+})
+
+// 加载自定义模型列表
+async function loadCustomModels() {
+  try {
+    customModels.value = await listCustomModelConfigs()
+    updateAvailableModelOptions()
+  } catch (error) {
+    console.error('加载自定义模型失败:', error)
+    showMessage(t('aiSettings.notifications.loadCustomModelsFailed', { error }), { title: t('aiSettings.notifications.error') })
+  }
+}
+
+// 打开自定义模型表单
+function openCustomModelForm(model?: CustomModelConfig) {
+  editingCustomModel.value = !!model
+  
+  if (model) {
+    customModelForm.value = { ...model }
+  } else {
+    customModelForm.value = {
+      id: generateUniqueId(),
+      name: '',
+      endpoint: '',
+      model_name: '',
+      adapter_type: 'openai'
+    }
+  }
+  
+  if (customModelModal.value) {
+    customModelModal.value.showModal()
+  }
+}
+
+// 关闭自定义模型表单
+function closeCustomModelForm() {
+  if (customModelModal.value) {
+    customModelModal.value.close()
+  }
+}
+
+// 编辑自定义模型
+function editCustomModel(model: CustomModelConfig) {
+  openCustomModelForm(model)
+}
+
+// 确认删除自定义模型
+async function confirmDeleteCustomModel(modelId: string) {
+  const confirmed = confirm(t('aiSettings.confirmDeleteCustomModel'))
+  if (confirmed) {
+    try {
+      await deleteCustomModelConfig(modelId)
+      await loadCustomModels()
+      showMessage(t('aiSettings.notifications.customModelDeleted'), { title: t('aiSettings.notifications.success') })
+    } catch (error) {
+      console.error('删除自定义模型失败:', error)
+      showMessage(t('aiSettings.notifications.deleteCustomModelFailed', { error }), { title: t('aiSettings.notifications.error') })
+    }
+  }
+}
+
+// 保存自定义模型
+async function saveCustomModel() {
+  try {
+    if (editingCustomModel.value) {
+      await updateCustomModelConfig(customModelForm.value)
+    } else {
+      await addCustomModelConfig(customModelForm.value)
+    }
+    
+    closeCustomModelForm()
+    await loadCustomModels()
+    showMessage(t('aiSettings.notifications.customModelSaved'), { title: t('aiSettings.notifications.success') })
+  } catch (error) {
+    console.error('保存自定义模型失败:', error)
+    showMessage(t('aiSettings.notifications.saveCustomModelFailed', { error }), { title: t('aiSettings.notifications.error') })
+  }
+}
+
+// 测试自定义模型连接
+async function testCustomModelConnection(model: CustomModelConfig) {
+  try {
+    const request: TestConnectionRequest = {
+      provider: 'custom',
+      api_key: model.api_key,
+      api_base: model.endpoint,
+      model: model.adapter_type
+    }
+    
+    const response = await testAIConnection(request)
+    
+    if (response.success) {
+      showMessage(response.message, { title: t('aiSettings.notifications.connectionSuccess') })
+    } else {
+      showMessage(response.message, { title: t('aiSettings.notifications.connectionFailed') })
+    }
+  } catch (error) {
+    console.error('测试自定义模型连接失败:', error)
+    showMessage(t('aiSettings.notifications.testConnectionFailed', { error }), { title: t('aiSettings.notifications.error') })
+  }
+}
+
+// 生成唯一ID
+function generateUniqueId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
+}
+
+// 获取所有可用的模型名称，用于默认模型下拉框
+const availableModelOptions = ref<string[]>([])
+
+// 更新全局默认AI模型下拉选项，只包含 getAIConfig 和 listCustomModelConfigs 返回的模型
+function updateAvailableModelOptions() {
+  // provider.models 里的 name
+  const providerModels = Object.values(aiProviders.value)
+    .flatMap(p => Array.isArray(p.models) ? p.models.map((m: any) => m.name) : [])
+    .filter(Boolean)
+  // customModels 里的 model_name
+  const customModelNames = customModels.value.map(m => m.model_name).filter(Boolean)
+  availableModelOptions.value = [...new Set([...providerModels, ...customModelNames])].sort()
+}
+
+// 组件挂载时加载自定义模型
 onMounted(async () => {
   await loadDefaultAIModel()
   await loadAIProvidersConfig()
   await refreshAIStats()
+  await loadCustomModels()
+  updateAvailableModelOptions()
 })
 </script> 

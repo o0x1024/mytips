@@ -68,11 +68,12 @@ class DialogService {
 
     // 创建Vue应用实例
     this.app = createApp(CommonDialog, {
-      type: config.type,
-      message: config.message,
+      visible: true,
       title: config.title,
+      content: config.message,
       confirmText: config.confirmText,
       cancelText: config.cancelText,
+      showCancel: config.type === 'confirm',
       onConfirm: () => {
         config.onConfirm()
         this.cleanup()
@@ -80,17 +81,18 @@ class DialogService {
       onCancel: () => {
         config.onCancel()
         this.cleanup()
+      },
+      onClose: () => {
+        config.onCancel()
+        this.cleanup()
       }
     })
 
     this.app.use(i18n)
     // 挂载组件
-    const instance = this.app.mount(this.container)
+    this.app.mount(this.container)
     
-    // 显示对话框
-    setTimeout(() => {
-      (instance as any).show()
-    }, 10)
+    // 不需要调用show方法，因为我们已经设置了visible为true
   }
 
   /**

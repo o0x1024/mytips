@@ -12,6 +12,8 @@ use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use serde::{Deserialize, Serialize};
+use tauri::State;
+use std::collections::HashMap;
 
 // 自定义模型配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -24,12 +26,22 @@ pub struct CustomModel {
     pub custom_headers: Option<std::collections::HashMap<String, String>>,
 }
 
-// 创建GenAI客户端并添加认证
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomModelConfig {
+    pub id: String,
+    pub name: String,
+    pub endpoint: String,
+    pub model_name: String,
+    pub adapter_type: String, // openai, ollama, etc.
+    pub api_key: Option<String>,
+}
+
+// Function to create a genai client
 pub async fn create_genai_client(
     api_key: String,
-    model_id: &str,
+    provider: &str,
     db_manager: &UnifiedDbManager,
-) -> Result<Client, String> {
+) -> Result<genai::Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
     
@@ -71,6 +83,9 @@ pub async fn create_genai_client(
                     );
                     service_target.auth = AuthData::from_single(key);
                     // 强制使用 OpenAI 适配器
+                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
+                } else {
+                    // 其余未知模型统一按 OpenAI 兼容处理，避免被自动识别为 Ollama
                     service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 }
                 Ok::<_, genai::resolver::Error>(service_target)
@@ -159,8 +174,14 @@ pub async fn send_to_custom(
         ]
     });
 
+    let url = if endpoint.trim_end_matches('/').ends_with("chat/completions") {
+        endpoint
+    } else {
+        format!("{}/chat/completions", endpoint.trim_end_matches('/'))
+    };
+
     let response = client
-        .post(&endpoint)
+        .post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", api_key))
         .json(&payload)
@@ -371,16 +392,12 @@ pub async fn send_to_doubao(
 
 // 支持图片的AI消息发送（非流式）
 pub async fn send_message_with_images_to_ai(
-    api_key: String,
+    client: Client,
     model_id: &str,
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
-    custom_model_name: Option<&str>,
-    db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
-    let client = create_genai_client(api_key, model_id, db_manager).await?;
-
-    let model_name = get_model_name(model_id, custom_model_name);
+    let model_name = get_model_name(model_id, None);
 
     // 构建消息内容
     let mut content_parts: Vec<ContentPart> = Vec::new();
@@ -413,27 +430,23 @@ pub async fn send_message_with_images_to_ai(
 
     let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
         Ok(res) => res,
-        Err(e) => return Err(format!("AI请求失败: {}", e)),
+        Err(e) => return Err(format!("AI request failed: {}", e)),
     };
 
     match chat_res.first_text() {
         Some(content) => Ok(content.to_string()),
-        None => Err("无法获取AI响应内容".to_string()),
+        None => Err("Unable to get AI response content".to_string()),
     }
 }
 
 // 支持图片的AI消息发送（流式）
 pub async fn stream_message_with_images_from_ai(
-    api_key: String,
+    client: Client,
     model_id: &str,
     text_message: String,
     image_files: Vec<(String, Vec<u8>)>, // (文件名, 文件数据)
-    custom_model_name: Option<&str>,
-    db_manager: &UnifiedDbManager,
 ) -> Result<TextStream, String> {
-    let client = create_genai_client(api_key, model_id, db_manager).await?;
-
-    let model_name = get_model_name(model_id, custom_model_name);
+    let model_name = get_model_name(model_id, None);
 
     // 构建消息内容
     let mut content_parts: Vec<ContentPart> = Vec::new();
@@ -463,9 +476,13 @@ pub async fn stream_message_with_images_from_ai(
     };
 
     let chat_req = ChatRequest::new(vec![message]);
-
+    
+    // 创建请求选项，启用内容捕获
+    let mut request_options = genai::chat::ChatOptions::default();
+    request_options.capture_content = Some(true);
+    
     let chat_stream_response = client
-        .exec_chat_stream(&model_name, chat_req, None)
+        .exec_chat_stream(&model_name, chat_req, Some(&request_options))
         .await
         .map_err(|e| e.to_string())?;
 
@@ -473,19 +490,46 @@ pub async fn stream_message_with_images_from_ai(
 
     tokio::spawn(async move {
         let mut stream = chat_stream_response.stream;
+        let mut has_content = false;
+        
         while let Some(event) = stream.next().await {
             match event {
                 Ok(genai::chat::ChatStreamEvent::Chunk(chunk)) => {
+                    has_content = true;
                     if tx.send(Ok(chunk.content)).await.is_err() {
                         break;
+                    }
+                }
+                Ok(genai::chat::ChatStreamEvent::End(end)) => {
+                    println!("Image stream received End event: {:?}", end);
+                    // 处理End事件中可能包含的内容
+                    if let Some(contents) = end.captured_content {
+                        for content in contents {
+                            if let genai::chat::MessageContent::Text(text) = content {
+                                if !text.is_empty() {
+                                    has_content = true;
+                                    println!("Sending captured content from image stream: {}", 
+                                        if text.len() > 50 { format!("{}...", &text[..50]) } else { text.clone() });
+                                    let _ = tx.send(Ok(text)).await;
+                                }
+                            }
+                        }
                     }
                 }
                 Err(e) => {
                     let _ = tx.send(Err(e.to_string())).await;
                     break;
                 }
-                _ => {} // 其他事件如ToolCall, End等暂时忽略
+                _ => {
+                    println!("Image stream received other event type");
+                } // 记录其他事件类型但不处理
             }
+        }
+        
+        // 如果整个流程结束后没有收到任何内容，发送一个后备消息
+        if !has_content {
+            println!("No content received from image stream, sending fallback message");
+            let _ = tx.send(Ok("I'm processing your message with images. Please wait a moment or try again if no response appears.".to_string())).await;
         }
     });
 
@@ -500,26 +544,32 @@ pub async fn create_custom_genai_client(
     api_key: String,
     model_name: String,
     adapter_type: String,
-    custom_headers: Option<std::collections::HashMap<String, String>>,
+    _custom_headers: Option<std::collections::HashMap<String, String>>,
     db_manager: &UnifiedDbManager,
 ) -> Result<Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
 
-    // 如果代理启用，设置环境变量
-    if proxy_settings.enabled {
-        let proxy_url = format!(
+    let proxy_url = if proxy_settings.enabled {
+        format!(
             "{}://{}:{}",
             proxy_settings.protocol, proxy_settings.host, proxy_settings.port
-        );
-        println!("为自定义GenAI客户端配置代理: {}", proxy_url);
-        std::env::set_var("HTTP_PROXY", &proxy_url);
-        std::env::set_var("HTTPS_PROXY", &proxy_url);
-
+        )
     } else {
-        std::env::remove_var("HTTP_PROXY");
-        std::env::remove_var("HTTPS_PROXY");
-    }
+        "".to_string()
+    };
+    
+    println!("[Custom Client] Configuring proxy: {}", if proxy_url.is_empty() { "None" } else { &proxy_url });
+
+    let reqwest_client = if !proxy_url.is_empty() {
+        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?;
+        reqwest::Client::builder()
+            .proxy(proxy)
+            .build()
+            .map_err(|e| format!("Failed to build client with proxy: {}", e))?
+    } else {
+        reqwest::Client::new()
+    };
 
     // 解析适配器类型
     let adapter_kind = match adapter_type.to_lowercase().as_str() {
@@ -530,37 +580,58 @@ pub async fn create_custom_genai_client(
         _ => AdapterKind::OpenAI, // 默认使用OpenAI格式
     };
 
-    println!("创建自定义客户端: endpoint={}, model={}, adapter={:?}", 
+    println!("[Custom Client] Creating client: endpoint={}, model={}, adapter={:?}",
              endpoint_url, model_name, adapter_kind);
 
     // 创建ServiceTargetResolver
-    let target_resolver = ServiceTargetResolver::from_resolver_fn(
-        move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
-            let ServiceTarget { .. } = service_target;
-            
-            // 使用自定义端点
-            let endpoint = Endpoint::from_owned(endpoint_url.clone());
-            
-            // 使用提供的API密钥，如果为空则不设置认证
-            let auth = if api_key.is_empty() {
-                AuthData::from_single("") // 空认证
-            } else {
-                AuthData::from_single(api_key.clone())
-            };
-            
-            // 创建模型标识符，使用自定义模型名称
-            let model_iden = ModelIden::new(adapter_kind, &model_name);
+    let target_resolver = ServiceTargetResolver::from_resolver_async_fn(
+        move |mut service_target: ServiceTarget| {
+            let endpoint_url = endpoint_url.clone();
+            let api_key = api_key.clone();
+            let model_name = model_name.clone();
+            let adapter_kind = adapter_kind.clone();
 
-            Ok(ServiceTarget {
-                endpoint,
-                auth,
-                model: model_iden,
-            })
+            async move {
+                // 使用自定义端点
+                service_target.endpoint = Endpoint::from_owned(endpoint_url);
+
+                // 使用提供的API密钥
+                service_target.auth = if api_key.is_empty() {
+                    AuthData::from_single("")
+                } else {
+                    // 根据不同的适配器类型，可能需要不同的认证头格式
+                    match adapter_kind {
+                        AdapterKind::OpenAI => {
+                            // OpenAI 格式通常是 "Bearer {api_key}"
+                            AuthData::from_single(api_key)
+                        },
+                        AdapterKind::Anthropic => {
+                            // Anthropic 可能使用 "x-api-key" 头
+                            AuthData::from_single(api_key)
+                        },
+                        AdapterKind::Gemini => {
+                            // Gemini 可能有不同的认证方式
+                            AuthData::from_single(api_key)
+                        },
+                        _ => AuthData::from_single(api_key)
+                    }
+                };
+                
+                // 创建模型标识符
+                service_target.model = ModelIden::new(adapter_kind, &model_name);
+                
+                // 打印更多调试信息
+                println!("[Custom Client] Resolved target: endpoint={}, model={}, adapter={:?}",
+                    service_target.endpoint.base_url(), service_target.model.model_name, service_target.model.adapter_kind);
+
+                Ok(service_target)
+            }.boxed()
         },
     );
 
     // 构建客户端
     let client = Client::builder()
+        .with_reqwest(reqwest_client)
         .with_service_target_resolver(target_resolver)
         .build();
 
@@ -577,6 +648,7 @@ pub async fn send_message_to_custom_ai(
     message: String,
     db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
+    println!("[Custom AI] Sending message to model: {}", model_name);
     // 创建自定义genai客户端
     let client = create_custom_genai_client(
         endpoint_url,
@@ -589,16 +661,28 @@ pub async fn send_message_to_custom_ai(
 
     // 创建聊天请求
     let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
-
+    
+    println!("[Custom AI] Executing chat request...");
     // 发送请求并获取响应
     let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
         Ok(res) => res,
-        Err(e) => return Ok(format_ai_error(&format!("自定义AI请求失败: {}", e))),
+        Err(e) => {
+            let error_message = format!("Custom AI request failed: {}", e);
+            println!("[Custom AI] Error: {}", error_message);
+            return Ok(format_ai_error(&error_message));
+        }
     };
-
+    
+    println!("[Custom AI] Chat request successful, processing response...");
     // 提取响应文本
     match chat_res.first_text() {
-        Some(content) => Ok(content.to_string()),
-        None => Ok(format_ai_error("无法获取自定义AI响应内容")),
+        Some(content) => {
+            println!("[Custom AI] Received content of length: {}", content.len());
+            Ok(content.to_string())
+        },
+        None => {
+            println!("[Custom AI] Error: Could not get content from response");
+            Ok(format_ai_error("无法获取自定义AI响应内容"))
+        }
     }
 }

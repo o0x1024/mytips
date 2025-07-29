@@ -14,7 +14,7 @@
       @wheel="setUserScrollingPane('editor')"
       @touchstart="setUserScrollingPane('editor')"
       ref="editorTextarea"
-      @blur="emit('blur')"
+      @blur="emit('blur')" dx
     ></textarea>
 
     <!-- Markdown预览 -->

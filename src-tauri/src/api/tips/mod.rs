@@ -302,7 +302,7 @@ pub async fn save_tip(tip_data: TipData, app: AppHandle) -> Result<TipWithTags, 
 }
 
 // 删除笔记
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn delete_tip(tip_id: String, app: AppHandle) -> Result<(), String> {
     let unified_manager = get_unified_manager(&app).await?;
     let conn = unified_manager.get_conn().await.map_err(|e| e.to_string())?;

@@ -55,6 +55,13 @@ pub async fn list_ai_messages(
     conversation_id: String,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<Message>, String> {
+    list_ai_messages_internal(conversation_id, db_manager.inner().clone()).await
+}
+
+pub async fn list_ai_messages_internal(
+    conversation_id: String,
+    db_manager: UnifiedDbManager,
+) -> Result<Vec<Message>, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
     let mut rows = conn
         .query(

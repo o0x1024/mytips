@@ -44,8 +44,15 @@ pub async fn delete_ai_role(
 // 获取指定ID的角色
 #[tauri::command]
 pub async fn get_ai_role(
-    _role_id: String,
-    _db_manager: State<'_, UnifiedDbManager>,
+    role_id: String,
+    db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<crate::db::models::AIRole, String> {
-    Err("AI角色功能暂未实现".to_string())
+    get_ai_role_internal(role_id, db_manager.inner().clone()).await
+}
+
+pub async fn get_ai_role_internal(
+    _role_id: String,
+    _db_manager: UnifiedDbManager,
+) -> Result<crate::db::models::AIRole, String> {
+    Err("AI role functionality is not yet implemented".to_string())
 }

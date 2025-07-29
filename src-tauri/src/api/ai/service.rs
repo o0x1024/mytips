@@ -3,7 +3,7 @@ use crate::db::{self, UnifiedDbManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
-use crate::api::ai::models::{create_genai_client};
+use crate::api::ai::models::{create_genai_client, CustomModelConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiServiceInfo {
@@ -417,6 +417,116 @@ async fn test_xai_connection(
     })
 }
 
+// 列出自定义模型配置
+#[tauri::command]
+pub async fn list_custom_model_configs(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<Vec<CustomModelConfig>, String> {
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+
+    let config_json_opt = db::get_setting(&conn, "custom_ai_models").await.map_err(|e| e.to_string())?;
+    
+    if let Some(config_json) = config_json_opt {
+        match serde_json::from_str::<Vec<CustomModelConfig>>(&config_json) {
+            Ok(models) => Ok(models),
+            Err(e) => Err(format!("Failed to parse custom models: {}", e)),
+        }
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+// 添加自定义模型配置
+#[tauri::command]
+pub async fn add_custom_model_config(
+    config: CustomModelConfig,
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<(), String> {
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    
+    // 获取现有配置
+    let mut models = match db::get_setting(&conn, "custom_ai_models").await.map_err(|e| e.to_string())? {
+        Some(json) => serde_json::from_str::<Vec<CustomModelConfig>>(&json)
+            .map_err(|e| format!("Failed to parse custom models: {}", e))?,
+        None => Vec::new(),
+    };
+    
+    // 检查ID是否已存在
+    if models.iter().any(|model| model.id == config.id) {
+        return Err(format!("Custom model with ID {} already exists", config.id));
+    }
+    
+    // 添加新配置
+    models.push(config);
+    
+    // 保存
+    let json = serde_json::to_string(&models).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, "custom_ai_models", &json).await.map_err(|e| e.to_string())
+}
+
+// 更新自定义模型配置
+#[tauri::command]
+pub async fn update_custom_model_config(
+    config: CustomModelConfig,
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<(), String> {
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    
+    // 获取现有配置
+    let mut models = match db::get_setting(&conn, "custom_ai_models").await.map_err(|e| e.to_string())? {
+        Some(json) => serde_json::from_str::<Vec<CustomModelConfig>>(&json)
+            .map_err(|e| format!("Failed to parse custom models: {}", e))?,
+        None => Vec::new(),
+    };
+    
+    // 查找并更新
+    let mut found = false;
+    for model in &mut models {
+        if model.id == config.id {
+            *model = config.clone();
+            found = true;
+            break;
+        }
+    }
+    
+    if !found {
+        return Err(format!("Custom model with ID {} not found", config.id));
+    }
+    
+    // 保存
+    let json = serde_json::to_string(&models).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, "custom_ai_models", &json).await.map_err(|e| e.to_string())
+}
+
+// 删除自定义模型配置
+#[tauri::command]
+pub async fn delete_custom_model_config(
+    model_id: String,
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<(), String> {
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    
+    // 获取现有配置
+    let mut models = match db::get_setting(&conn, "custom_ai_models").await.map_err(|e| e.to_string())? {
+        Some(json) => serde_json::from_str::<Vec<CustomModelConfig>>(&json)
+            .map_err(|e| format!("Failed to parse custom models: {}", e))?,
+        None => Vec::new(),
+    };
+    
+    // 移除指定ID的模型
+    let initial_len = models.len();
+    models.retain(|model| model.id != model_id);
+    
+    if models.len() == initial_len {
+        return Err(format!("Custom model with ID {} not found", model_id));
+    }
+    
+    // 保存
+    let json = serde_json::to_string(&models).map_err(|e| e.to_string())?;
+    db::save_setting(&conn, "custom_ai_models", &json).await.map_err(|e| e.to_string())
+}
+
+// 测试自定义模型连接
 async fn test_custom_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
@@ -424,46 +534,113 @@ async fn test_custom_connection(
     if request.api_base.is_none() {
         return Err("Custom API endpoint is not set".to_string());
     }
+    
     let endpoint = request.api_base.unwrap();
     let client = get_client_with_proxy(&db_manager).await?;
+    let adapter_type = request.model.unwrap_or_else(|| "openai".to_string());
 
-    // 根据不同的adapter_type，可能需要不同的测试方法
-    // 这里我们假设一个通用的GET请求可以验证连接
-    let response = client
-        .get(&endpoint)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to request custom API: {}", e))?;
+    // 根据不同的adapter_type，使用不同的测试方法
+    match adapter_type.as_str() {
+        "openai" => {
+            // OpenAI兼容接口测试
+            let response = client
+                .get(format!("{}/models", endpoint))
+                .header("Authorization", format!("Bearer {}", request.api_key.unwrap_or_default()))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to request custom OpenAI-compatible API: {}", e))?;
 
-    if !response.status().is_success() {
-        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-        return Ok(TestConnectionResponse {
-            success: false,
-            message: format!("Custom API connection test failed: {}", error),
-            models: None,
-        });
+            if !response.status().is_success() {
+                let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                return Ok(TestConnectionResponse {
+                    success: false,
+                    message: format!("Custom OpenAI-compatible API connection test failed: {}", error),
+                    models: None,
+                });
+            }
+
+            let models_response: serde_json::Value = response.json().await
+                .map_err(|e| format!("Failed to parse custom OpenAI-compatible response: {}", e))?;
+
+            let models = models_response["data"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec![
+                    "default-model".to_string(),
+                ]);
+
+            Ok(TestConnectionResponse {
+                success: true,
+                message: "Custom OpenAI-compatible API connection successful".to_string(),
+                models: Some(models),
+            })
+        },
+        "ollama" => {
+            // Ollama API测试
+            let response = client
+                .get(format!("{}/api/tags", endpoint))
+                .send()
+                .await
+                .map_err(|e| format!("Failed to request Ollama API: {}", e))?;
+
+            if !response.status().is_success() {
+                let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                return Ok(TestConnectionResponse {
+                    success: false,
+                    message: format!("Ollama API connection test failed: {}", error),
+                    models: None,
+                });
+            }
+
+            let models_response: serde_json::Value = response.json().await
+                .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+
+            let models = models_response["models"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_else(|| vec![
+                    "llama3".to_string(),
+                    "mistral".to_string(),
+                ]);
+
+            Ok(TestConnectionResponse {
+                success: true,
+                message: "Ollama API connection successful".to_string(),
+                models: Some(models),
+            })
+        },
+        _ => {
+            // 通用测试 - 简单尝试访问端点
+            let response = client
+                .get(&endpoint)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to request custom API: {}", e))?;
+
+            if !response.status().is_success() {
+                let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                return Ok(TestConnectionResponse {
+                    success: false,
+                    message: format!("Custom API connection test failed: {}", error),
+                    models: None,
+                });
+            }
+
+            Ok(TestConnectionResponse {
+                success: true,
+                message: "Custom API connection successful".to_string(),
+                models: Some(vec!["custom-model".to_string()]),
+            })
+        }
     }
-
-    let models_response: serde_json::Value = response.json().await
-        .map_err(|e| format!("Failed to parse custom response: {}", e))?;
-
-    let models = models_response["data"]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_else(|| vec![
-            "custom-model-1".to_string(),
-            "custom-model-2".to_string(),
-        ]);
-
-    Ok(TestConnectionResponse {
-        success: true,
-        message: "Custom API connection successful".to_string(),
-        models: Some(models),
-    })
 }
 
 // 获取聊天模型列表

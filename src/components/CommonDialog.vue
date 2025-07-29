@@ -1,82 +1,46 @@
 <template>
-  <div class="modal" :class="{ 'modal-open': visible }">
-    <div class="modal-box">
-      <h3 v-if="title" class="font-bold text-lg">{{ title }}</h3>
-      <div class="py-4" v-html="renderedMessage"></div>
-      <div class="modal-action">
-        <button v-if="type === 'confirm'" class="btn" @click="onCancel">{{ $t(cancelText) }}</button>
-        <button class="btn btn-primary" @click="onConfirm">{{ $t(confirmText) }}</button>
+  <div v-if="visible" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]" @click.self="close">
+    <div class="bg-base-100 rounded-lg shadow-xl p-6 w-full max-w-lg">
+      <h3 class="font-bold text-lg mb-4">{{ title }}</h3>
+      <div class="prose max-w-none max-h-[60vh] overflow-y-auto" v-html="renderedContent"></div>
+      <div class="mt-6 flex justify-end gap-2">
+        <button v-if="showCancel" class="btn" @click="cancel">{{ cancelText || t('common.cancel') }}</button>
+        <button class="btn btn-primary" @click="confirm">{{ confirmText || t('common.confirm') }}</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import DOMPurify from 'dompurify'
-import Prism from 'prismjs'
+import { defineProps, defineEmits, ref, watchEffect } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { renderInlineMarkdown } from '../services/markdownService'
 
-
-
-interface Props {
-  type?: 'confirm' | 'alert'
-  title?: string
-  message: string
-  confirmText?: string
-  cancelText?: string
-}
-
-const props = withDefaults(defineProps<Props>(), {
-  type: 'alert',
-  title: '',
-  confirmText: 'common.confirm',
-  cancelText: 'common.cancel'
+const props = defineProps({
+  visible: Boolean,
+  title: String,
+  content: String,
+  confirmText: String,
+  cancelText: String,
+  showCancel: {
+    type: Boolean,
+    default: true,
+  },
 })
 
-const emit = defineEmits(['confirm', 'cancel'])
+const emit = defineEmits(['confirm', 'cancel', 'close'])
+const { t } = useI18n()
+const renderedContent = ref('')
 
-const visible = ref(false)
-
-const show = () => {
-  visible.value = true
-}
-
-const hide = () => {
-  visible.value = false
-}
-
-defineExpose({ show, hide })
-
-const onConfirm = () => {
-  emit('confirm')
-  hide()
-}
-
-const onCancel = () => {
-  emit('cancel')
-  hide()
-}
-
-const renderedMessage = computed(() => {
-  try {
-    const marked = new Marked(
-      markedHighlight({
-        langPrefix: 'language-',
-        highlight(code, lang) {
-          const language = Prism.languages[lang] || Prism.languages.plaintext;
-          return Prism.highlight(code, language, lang);
-        }
-      })
-    );
-    const dirty = marked.parse(props.message) as string;
-    return DOMPurify.sanitize(dirty);
-  } catch (e) {
-    console.error("Markdown parsing error:", e);
-    return props.message;
+watchEffect(async () => {
+  if (props.content) {
+    renderedContent.value = await renderInlineMarkdown(props.content)
   }
-});
+})
+
+const confirm = () => emit('confirm')
+const cancel = () => emit('cancel')
+const close = () => emit('close')
 </script>
 
 <style scoped>

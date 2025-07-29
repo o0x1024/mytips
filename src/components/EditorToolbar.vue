@@ -1,503 +1,165 @@
 <template>
-  <div class="border-b border-base-300 p-2 bg-base-200" ref="toolbarContainer">
-    <!-- 主工具栏 - 动态响应式布局 -->
-    <div class="flex items-center justify-between gap-2">
-      <!-- 左侧工具组 -->
-      <div class="flex items-center gap-1 flex-shrink-0" ref="toolbarLeft">
-        <!-- 目录按钮 -->
-        
-        <!-- 标题下拉菜单 - 始终显示 -->
-        <div class="dropdown dropdown-bottom toolbar-item" data-priority="1">
-          <button tabindex="0" class="btn btn-sm btn-ghost" :title="t('editorToolbar.insertTitle')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M6 12h12M6 20V4M18 20V4M14 4v16M10 4v16"></path>
-            </svg>
-            <span class="ml-1 text-xs toolbar-text">{{ t('editorToolbar.title') }}</span>
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 ml-1" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
-            <li><a @click="emit('command', 'insert-markdown', '# ')" class="text-2xl font-bold">H1</a></li>
-            <li><a @click="emit('command', 'insert-markdown', '## ')" class="text-xl font-bold">H2</a></li>
-            <li><a @click="emit('command', 'insert-markdown', '### ')" class="text-lg font-bold">H3</a></li>
-            <li><a @click="emit('command', 'insert-markdown', '#### ')" class="text-base font-bold">H4</a></li>
-            <li><a @click="emit('command', 'insert-markdown', '##### ')" class="text-sm font-bold">H5</a></li>
-            <li><a @click="emit('command', 'insert-markdown', '###### ')" class="text-xs font-bold">H6</a></li>
-          </ul>
-        </div>
-
-        <!-- 文本格式工具组 -->
-        <div class="btn-group toolbar-item" data-priority="2">
-          <button class="btn btn-sm btn-ghost" :title="t('editorToolbar.bold')" @click="emit('command', 'insert-markdown', '**', '**')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-              <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-ghost" :title="t('editorToolbar.italic')" @click="emit('command', 'insert-markdown', '*', '*')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <line x1="19" y1="4" x2="10" y2="4"></line>
-              <line x1="14" y1="20" x2="5" y2="20"></line>
-              <line x1="15" y1="4" x2="9" y2="20"></line>
-            </svg>
-          </button>
-        </div>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="3" :title="t('editorToolbar.strikethrough')"
-          @click="emit('command', 'insert-markdown', '~~', '~~')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M17 9V5H7v4"></path>
-            <path d="M7 13v6h10v-6"></path>
-            <line x1="4" y1="12" x2="20" y2="12"></line>
-          </svg>
+  <div class="p-2 border-b border-base-300 bg-base-100 flex items-center justify-between text-base-content text-sm" ref="toolbarContainer">
+    <div class="flex items-center gap-2 flex-wrap" ref="toolbarLeft">
+      <!-- 模式切换 -->
+      <div class="flex items-center gap-1 rounded-md p-0.5">
+        <button
+          @click="emitCommand('set-edit-mode', 'editOnly')"
+          class="btn btn-xs btn-ghost"
+          :class="{ 'btn-active': isEditOnly }"
+          :title="t('noteEditor.editModeTooltip')"
+          data-priority="1"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
         </button>
-
-        <!-- 列表工具组 -->
-        <div class="btn-group toolbar-item" data-priority="4">
-          <button class="btn btn-sm btn-ghost" :title="t('editorToolbar.unorderedList')" @click="emit('command', 'insert-markdown', '- ')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <line x1="8" y1="6" x2="21" y2="6"></line>
-              <line x1="8" y1="12" x2="21" y2="12"></line>
-              <line x1="8" y1="18" x2="21" y2="18"></line>
-              <line x1="3" y1="6" x2="3.01" y2="6"></line>
-              <line x1="3" y1="12" x2="3.01" y2="12"></line>
-              <line x1="3" y1="18" x2="3.01" y2="18"></line>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-ghost" :title="t('editorToolbar.orderedList')" @click="emit('command', 'insert-markdown', '1. ')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              stroke-width="2">
-              <line x1="10" y1="6" x2="21" y2="6"></line>
-              <line x1="10" y1="12" x2="21" y2="12"></line>
-              <line x1="10" y1="18" x2="21" y2="18"></line>
-              <path d="M4 6h1v4"></path>
-              <path d="M4 10h2"></path>
-              <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path>
-            </svg>
-          </button>
-        </div>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="5" :title="t('editorToolbar.insertLink')"
-          @click="insertLink">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-          </svg>
+        <button
+          @click="emitCommand('set-edit-mode', 'split')"
+          class="btn btn-xs btn-ghost"
+          :class="{ 'btn-active': isSplitMode }"
+          :title="t('noteEditor.splitModeTooltip')"
+          data-priority="1"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line><path d="M7 8h2M7 12h2M16 8h1M16 12h1M16 16h1M7 16h2"></path></svg>
         </button>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="6" :title="t('editorToolbar.blockquote')"
-          @click="emit('command', 'insert-markdown', '> ')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path>
-            <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path>
-          </svg>
+        <button
+          @click="emitCommand('set-edit-mode', 'preview')"
+          class="btn btn-xs btn-ghost"
+          :class="{ 'btn-active': isPreviewMode }"
+          :title="t('noteEditor.previewModeTooltip')"
+          data-priority="1"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         </button>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="7" :title="t('editorToolbar.codeBlock')"
-          @click="emit('command', 'insert-markdown', '```\\n', '\\n```')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <polyline points="16 18 22 12 16 6"></polyline>
-            <polyline points="8 6 2 12 8 18"></polyline>
-          </svg>
+        <button
+          @click="emitCommand('set-edit-mode', 'wysiwyg')"
+          class="btn btn-xs btn-ghost"
+          :class="{ 'btn-active': isWysiwygMode }"
+          title="WYSIWYG Mode"
+          data-priority="1"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
         </button>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="8" :title="t('editorToolbar.insertImage')"
-          @click="insertImage">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <circle cx="8.5" cy="8.5" r="1.5"></circle>
-            <polyline points="21 15 16 10 5 21"></polyline>
-          </svg>
-        </button>
-
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="9" :title="t('editorToolbar.insertTable')"
-          @click="emit('command', 'insert-table')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="3" y1="9" x2="21" y2="9"></line>
-            <line x1="3" y1="15" x2="21" y2="15"></line>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-            <line x1="15" y1="3" x2="15" y2="21"></line>
-          </svg>
-        </button>
-        <button class="btn btn-sm btn-ghost toolbar-item" :class="{ 'btn-active': showToc }" data-priority="10"
-          :title="t('editorToolbar.toggleToc')" @click="emit('command', 'toggle-toc')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-          </svg>
-        </button>
-
-        <!-- 音频录制按钮 -->
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="11"
-          :title="t('editorToolbar.recordAudio')" @click="emit('command', 'toggle-audio-recording')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-              d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-          </svg>
-        </button>
-
-        <!-- 音频播放器按钮 -->
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="12"
-          :title="t('editorToolbar.audioPlayer')" @click="emit('command', 'toggle-audio-player')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-              d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
-          </svg>
-        </button>
-
-        <!-- 代码高亮主题 -->
-        <div class="dropdown dropdown-bottom dropdown-end toolbar-item" data-priority="13">
-          <button tabindex="0" class="btn btn-sm btn-ghost" :title="t('editorToolbar.codeHighlightTheme')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M12 2v20M4 12h16"></path>
-              <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
-            </svg>
-          </button>
-          <ul tabindex="0"
-            class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52 max-h-96 overflow-y-auto">
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-highlight-theme', 'default')"
-                :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'default' }">
-                {{ t('editorToolbar.theme.default') }}
-                <span v-if="currentHighlightTheme === 'default'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-highlight-theme', 'okaidia')"
-                :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'okaidia' }">
-                {{ t('editorToolbar.theme.okaidia') }}
-                <span v-if="currentHighlightTheme === 'okaidia'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-highlight-theme', 'twilight')"
-                :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'twilight' }">
-                {{ t('editorToolbar.theme.twilight') }}
-                <span v-if="currentHighlightTheme === 'twilight'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-highlight-theme', 'solarized-light')"
-                :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'solarized-light' }">
-                {{ t('editorToolbar.theme.solarizedLight') }}
-                <span v-if="currentHighlightTheme === 'solarized-light'" class="ml-auto">✓</span>
-              </a>
-            </li>
-            <li>
-              <a href="#" @click.prevent="emit('command', 'set-highlight-theme', 'tomorrow-night')"
-                :class="{ 'bg-primary text-primary-content': currentHighlightTheme === 'tomorrow-night' }">
-                {{ t('editorToolbar.theme.tomorrowNight') }}
-                <span v-if="currentHighlightTheme === 'tomorrow-night'" class="ml-auto">✓</span>
-              </a>
-            </li>
-          </ul>
-        </div>
       </div>
 
-      <!-- 右侧工具组 -->
-      <div class="flex items-center gap-1 flex-shrink-0 toolbar-right-group" ref="toolbarRight">
-        
-        <div v-if="isFullscreen" class="text-xs text-base-content/60 mr-2 toolbar-item" data-priority="13">
-          <span class="badge badge-primary badge-xs mr-1">{{ t('editorToolbar.fullscreen') }}</span>
-          <span class="toolbar-text">{{ t('editorToolbar.fullscreenHelp') }}</span>
-        </div>
-
-        <!-- 视图模式 -->
-        <div class="btn-group toolbar-item" data-priority="13">
-          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isEditOnly }" :title="t('editorToolbar.editOnly')"
-            @click="emit('command', 'set-edit-mode', 'editOnly')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor">
-              <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isPreviewMode }"
-            @click="emit('command', 'set-edit-mode', 'preview')" :title="isFullscreen ? t('editorToolbar.previewF2') : t('editorToolbar.preview')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
-          <button class="btn btn-sm btn-ghost" :class="{ 'btn-active': isSplitMode }"
-            @click="emit('command', 'set-edit-mode', 'split')" :title="isFullscreen ? t('editorToolbar.splitModeF3') : t('editorToolbar.splitMode')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="12" y1="3" x2="12" y2="21"></line>
-            </svg>
-          </button>
-        </div>
-
-        <!-- 全屏切换按钮 -->
-        <button class="btn btn-sm btn-ghost toolbar-item" data-priority="14" :class="{ 'btn-active': isFullscreen }"
-          :title="t('editorToolbar.toggleFullscreen')" @click="emit('command', 'toggle-fullscreen')">
-          <!-- 进入全屏图标 -->
-          <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4" />
-          </svg>
-          <!-- 退出全屏图标 -->
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8 4H4v4M16 4h4v4M8 20H4v-4M20 16v4h-4" />
-          </svg>
+      <div class="divider divider-horizontal mx-1"></div>
+      
+      <!-- Markdown编辑工具，仅在非所见即所得模式下显示 -->
+      <template v-if="!isWysiwygMode">
+        <!-- 加粗 -->
+        <button @click="emitCommand('insert-markdown', '**', '**')" class="btn btn-xs btn-ghost" :title="t('noteEditor.boldTooltip')" data-priority="2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
         </button>
+        <!-- 斜体 -->
+        <button @click="emitCommand('insert-markdown', '*', '*')" class="btn btn-xs btn-ghost" :title="t('noteEditor.italicTooltip')" data-priority="2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
+        </button>
+        <!-- 删除线 -->
+        <button @click="emitCommand('insert-markdown', '~~', '~~')" class="btn btn-xs btn-ghost" :title="t('noteEditor.strikethroughTooltip')" data-priority="3">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4H9a3 3 0 0 0-2.83 4"></path><path d="M14 12a4 4 0 0 1 0 8H6"></path><line x1="4" y1="12" x2="20" y2="12"></line></svg>
+        </button>
+        <!-- 任务列表 -->
+        <button @click="emitCommand('insert-markdown', '- [ ] ')" class="btn btn-xs btn-ghost" :title="t('noteEditor.taskListTooltip')" data-priority="4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-3-3 3-3"></path><path d="M15 18l3-3-3-3"></path><path d="M21 6H3"></path><path d="M21 12H3"></path><path d="M21 18H3"></path></svg>
+        </button>
+        <!-- 链接 -->
+        <button @click="emitCommand('insert-markdown', '[', `](${t('noteEditor.linkUrlPlaceholder')})`)" class="btn btn-xs btn-ghost" :title="t('noteEditor.linkTooltip')" data-priority="5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+        </button>
+        <!-- 引用 -->
+        <button @click="emitCommand('insert-markdown', '> ')" class="btn btn-xs btn-ghost" :title="t('noteEditor.quoteTooltip')" data-priority="6">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path></svg>
+        </button>
+        <!-- 代码块 -->
+        <button @click="emitCommand('insert-markdown', '```\\n', '\\n```')" class="btn btn-xs btn-ghost" :title="t('noteEditor.codeBlockTooltip')" data-priority="7">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        </button>
+        <!-- 表格 -->
+        <button @click="emitCommand('insert-table')" class="btn btn-xs btn-ghost" :title="t('noteEditor.tableTooltip')" data-priority="9">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+        </button>
+      </template>
 
-        <!-- 更多工具下拉菜单 -->
-        <div class="dropdown dropdown-bottom dropdown-end" ref="moreToolsDropdown" v-if="hiddenItems.length > 0">
-          <button tabindex="0" class="btn btn-sm btn-ghost" :title="t('editorToolbar.moreTools')">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h.01M12 12h.01M19 12h.01" />
-            </svg>
-          </button>
-          <div tabindex="0" class="dropdown-content z-[1] mt-2 p-2 shadow-lg bg-base-200 rounded-box w-auto">
-            <div class="flex flex-wrap items-center gap-1">
-              <button v-for="item in hiddenItems" :key="item.priority" @click="item.action()" v-html="item.content" class="btn btn-sm btn-ghost flex items-center gap-1"></button>
-              <div class="divider divider-horizontal mx-1" v-if="hiddenItems.length > 0"></div>
-              <button @click="emit('command', 'insert-markdown', '- [ ] ')" class="btn btn-sm btn-ghost flex items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" stroke-width="2">
-                  <rect x="3" y="5" width="6" height="6" rx="1"></rect>
-                  <path d="m9 11-6-6"></path>
-                  <line x1="13" y1="8" x2="21" y2="8"></line>
-                  <rect x="3" y="17" width="6" height="6" rx="1"></rect>
-                  <line x1="13" y1="20" x2="21" y2="20"></line>
-                </svg>
-                {{ t('editorToolbar.taskList') }}
-              </button>
-            </div>
-          </div>
-        </div>
+      <!-- 所见即所得模式下的工具 -->
+      <template v-if="isWysiwygMode">
+        <!-- <button @click="emitCommand('prosemirror-command', 'toggleBold')" class="btn btn-xs btn-ghost" title="Bold">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
+        </button>
+        <button @click="emitCommand('prosemirror-command', 'toggleItalic')" class="btn btn-xs btn-ghost" title="Italic">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
+        </button>
+        <button @click="emitCommand('prosemirror-command', 'toggleBulletList')" class="btn btn-xs btn-ghost" title="Bullet List">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        </button>
+        <button @click="emitCommand('prosemirror-command', 'toggleOrderedList')" class="btn btn-xs btn-ghost" title="Ordered List">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg>
+        </button> -->
+      </template>
+    </div>
+
+    <div class="flex items-center gap-2" ref="toolbarRight">
+      <!-- 目录 -->
+      <button @click="emitCommand('toggle-toc')" class="btn btn-xs btn-ghost" :class="{ 'btn-active': showToc }" :title="t('noteEditor.toggleTocTooltip')" data-priority="10">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+      </button>
+
+      <!-- 音频录制 -->
+      <button @click="emitCommand('toggle-audio-recording')" class="btn btn-xs btn-ghost" :title="t('noteEditor.audioRecordingTooltip')" data-priority="11">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+      </button>
+
+      <!-- 音频播放列表 -->
+      <button @click="emitCommand('toggle-audio-player')" class="btn btn-xs btn-ghost" :title="t('noteEditor.audioPlayerTooltip')" data-priority="12">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+      </button>
+
+      <div class="divider divider-horizontal mx-1"></div>
+
+      <!-- 主题选择 -->
+      <div class="dropdown dropdown-end">
+        <label tabindex="0" class="btn btn-xs btn-ghost" :title="t('noteEditor.themeTooltip')">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+        </label>
+        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-52 z-20">
+          <li class="menu-title"><span>{{ t('noteEditor.codeTheme') }}</span></li>
+          <li><a @click="emitCommand('set-highlight-theme', 'default')" :class="{'active': currentHighlightTheme === 'default'}">Default</a></li>
+          <li><a @click="emitCommand('set-highlight-theme', 'okaidia')" :class="{'active': currentHighlightTheme === 'okaidia'}">Okaidia</a></li>
+          <li><a @click="emitCommand('set-highlight-theme', 'twilight')" :class="{'active': currentHighlightTheme === 'twilight'}">Twilight</a></li>
+          <li><a @click="emitCommand('set-highlight-theme', 'solarized-light')" :class="{'active': currentHighlightTheme === 'solarized-light'}">Solarized Light</a></li>
+          <li><a @click="emitCommand('set-highlight-theme', 'tomorrow-night')" :class="{'active': currentHighlightTheme === 'tomorrow-night'}">Tomorrow Night</a></li>
+        </ul>
       </div>
+
+      <!-- 全屏切换 -->
+      <button @click="emitCommand('toggle-fullscreen')" class="btn btn-xs btn-ghost" :title="isFullscreen ? t('noteEditor.exitFullscreenTooltip') : t('noteEditor.enterFullscreenTooltip')" data-priority="12">
+        <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0-2-2h-3M3 16h3a2 2 0 0 0 2 2v3"></path></svg>
+      </button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick, onDeactivated } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { defineProps, defineEmits } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 defineProps({
   isFullscreen: Boolean,
   isEditOnly: Boolean,
   isPreviewMode: Boolean,
   isSplitMode: Boolean,
+  isWysiwygMode: Boolean,
   showToc: Boolean,
   currentHighlightTheme: String,
   currentMarkdownTheme: String,
 });
 
-const { t } = useI18n()
 const emit = defineEmits(['command']);
 
-function insertLink() {
-  emit('command', 'insert-markdown', '[', `](${t('editorToolbar.linkUrlPlaceholder')})`)
-}
-
-function insertImage() {
-  emit('command', 'insert-markdown', '![', `](${t('editorToolbar.imageUrlPlaceholder')})`)
-}
-
-// 动态响应式工具栏相关状态
-const toolbarContainer = ref<HTMLElement | null>(null)
-const toolbarLeft = ref<HTMLElement | null>(null)
-const toolbarRight = ref<HTMLElement | null>(null)
-const moreToolsDropdown = ref<HTMLElement | null>(null)
-const hiddenItems = ref<any[]>([])
-const resizeObserver = ref<ResizeObserver | null>(null)
-
-function updateToolbar() {
-  if (!toolbarContainer.value || !toolbarLeft.value || !toolbarRight.value || !moreToolsDropdown.value) return
-
-  const availableWidth = toolbarContainer.value.clientWidth
-  const rightWidth = toolbarRight.value.clientWidth
-  const leftWidth = toolbarLeft.value.clientWidth
-  const moreMenuWidth = moreToolsDropdown.value.clientWidth
-  const totalWidth = leftWidth + rightWidth
-
-  const allItems = Array.from(toolbarLeft.value.querySelectorAll('.toolbar-item'))
-    .map(el => ({
-      element: el as HTMLElement,
-      priority: parseInt((el as HTMLElement).dataset.priority || '999')
-    }))
-    .sort((a, b) => b.priority - a.priority)
-
-  hiddenItems.value = []
-
-  // 先将所有项目设为可见
-  allItems.forEach(({ element }) => {
-    element.style.display = ''
-  });
-
-  let currentWidth = totalWidth
-  if (currentWidth > availableWidth) {
-    moreToolsDropdown.value.style.display = ''
-    currentWidth += moreMenuWidth
-  } else {
-    moreToolsDropdown.value.style.display = 'none'
-  }
-
-  for (const item of allItems) {
-    if (currentWidth <= availableWidth) break
-
-    const itemWidth = item.element.offsetWidth
-    item.element.style.display = 'none'
-    currentWidth -= itemWidth
-
-    hiddenItems.value.push({
-      priority: item.priority,
-      content: getItemContent(item.element),
-      action: () => {
-        const command = getItemAction(item.element);
-        if (command) {
-          command();
-        }
-      }
-    })
-  }
-
-  // 按优先级排序隐藏项目
-  hiddenItems.value.sort((a, b) => a.priority - b.priority)
-
-  // 隐藏文本标签如果空间不足
-  updateTextVisibility(availableWidth, currentWidth)
-}
-
-function updateTextVisibility(availableWidth: number, currentWidth: number) {
-  const textElements = toolbarLeft.value?.querySelectorAll('.toolbar-text') as NodeListOf<HTMLElement>
-
-  if (!textElements) return
-
-  // 如果空间紧张，隐藏文本标签
-  const shouldHideText = currentWidth > availableWidth * 0.8
-
-  textElements.forEach(element => {
-    element.style.display = shouldHideText ? 'none' : ''
-  })
-}
-
-function getItemAction(item: HTMLElement): (() => void) | null {
-  const priority = parseInt(item.dataset.priority || '999')
-
-  // 根据优先级返回对应的操作函数
-  switch (priority) {
-    case 3: return () => emit('command', 'insert-markdown', '~~', '~~')
-    case 4: return () => emit('command', 'insert-markdown', '- ')
-    case 5: return insertLink
-    case 6: return () => emit('command', 'insert-markdown', '> ')
-    case 7: return () => emit('command', 'insert-markdown', '```\\n', '\\n```')
-    case 8: return insertImage
-    case 9: return () => emit('command', 'insert-table')
-    case 10: return () => { } // 显示/隐藏目录，由父组件处理
-    case 11: return () => { } // 代码高亮主题 - 在模板中处理
-    case 12: return () => { } // Markdown主题 - 在模板中处理
-    case 13: return () => { } // 全屏提示 - 在模板中处理
-    default: return null
-  }
-}
-
-function getItemContent(item: HTMLElement): string {
-  const priority = parseInt(item.dataset.priority || '999')
-
-  // 根据优先级返回对应的HTML内容
-  switch (priority) {
-    case 3: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M17 9V5H7v4"></path>
-        <path d="M7 13v6h10v-6"></path>
-        <line x1="4" y1="12" x2="20" y2="12"></line>
-      </svg>
-      ${t('editorToolbar.strikethrough')}`
-    case 4: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="8" y1="6" x2="21" y2="6"></line>
-        <line x1="8" y1="12" x2="21" y2="12"></line>
-        <line x1="8" y1="18" x2="21" y2="18"></line>
-        <line x1="3" y1="6" x2="3.01" y2="6"></line>
-        <line x1="3" y1="12" x2="3.01" y2="12"></line>
-        <line x1="3" y1="18" x2="3.01" y2="18"></line>
-      </svg>
-      ${t('editorToolbar.unorderedList')}`
-    case 5: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-      </svg>
-      ${t('editorToolbar.insertLink')}`
-    case 6: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path>
-        <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path>
-      </svg>
-      ${t('editorToolbar.blockquote')}`
-    case 7: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="16 18 22 12 16 6"></polyline>
-        <polyline points="8 6 2 12 8 18"></polyline>
-      </svg>
-      ${t('editorToolbar.codeBlock')}`
-    case 8: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <circle cx="8.5" cy="8.5" r="1.5"></circle>
-        <polyline points="21 15 16 10 5 21"></polyline>
-      </svg>
-      ${t('editorToolbar.insertImage')}`
-    case 9: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <line x1="3" y1="9" x2="21" y2="9"></line>
-        <line x1="3" y1="15" x2="21" y2="15"></line>
-        <line x1="9" y1="3" x2="9" y2="21"></line>
-        <line x1="15" y1="3" x2="15" y2="21"></line>
-      </svg>
-      ${t('editorToolbar.insertTable')}`
-    case 10: return `
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-      </svg>
-      ${t('editorToolbar.toc')}`
-    default: return t('editorToolbar.unknownTool')
-  }
-}
-
-
-onMounted(() => {
-  if (typeof window !== 'undefined') {
-    resizeObserver.value = new ResizeObserver(() => {
-      updateToolbar()
-    })
-    if (toolbarContainer.value) {
-      resizeObserver.value.observe(toolbarContainer.value)
-    }
-    nextTick(updateToolbar);
-  }
-})
-
-onBeforeUnmount(() => {
-  if (resizeObserver.value) {
-    resizeObserver.value.disconnect()
-  }
-})
-
-onDeactivated(() => {
-  if (resizeObserver.value) {
-    resizeObserver.value.disconnect()
-    resizeObserver.value = null
-  }
-})
+const emitCommand = (command: string, ...args: any[]) => {
+  emit('command', command, ...args);
+};
 </script>
 
 <style scoped>

@@ -16,7 +16,11 @@ use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{mpsc, Mutex as TokioMutex};
 use self::service::SaveAiConfigRequest;
-use genai::chat::{ChatMessage, ChatRole};
+use genai::chat::{ChatMessage, ChatRequest, ChatRole, ContentPart, ImageSource, MessageContent};
+use genai::Client;
+use roles::get_ai_role_internal;
+use conversations::list_ai_messages_internal;
+
 
 // 系统提示词常量
 const SYSTEM_PROMPT: &str = "";
@@ -53,16 +57,37 @@ pub async fn send_ai_message(
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    let config_json_opt = db::get_setting(&conn, "ai_providers_config").await.map_err(|e| e.to_string())?;
-    let config_json = config_json_opt.ok_or_else(|| "AI configuration not found in database".to_string())?;
-    let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
-    let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Configuration for provider '{}' not found", provider_id))?;
 
-    let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for provider '{}' not found", provider_id))?;
-    let model_name = &provider_config.default_model;
+    let (client, model_name) = if provider_id.starts_with("custom_") {
+        let id = provider_id.strip_prefix("custom_").unwrap();
+        let cfg_json = db::get_setting(&conn, "custom_ai_models")
+            .await.map_err(|e| e.to_string())?.ok_or("No custom models configured")?;
+        let custom_models: Vec<models::CustomModelConfig> = serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+        let m = custom_models.into_iter().find(|c| c.id == id).ok_or(format!("Custom model {} not found", id))?;
+        
+        let client = models::create_custom_genai_client(
+            m.endpoint,
+            m.api_key.unwrap_or_default(),
+            m.model_name.clone(),
+            m.adapter_type,
+            None,
+            db_manager.inner(),
+        ).await?;
+        (client, m.model_name)
+    } else {
+        let config_json = db::get_setting(&conn, "ai_providers_config")
+            .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
+        let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
+        let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+        let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+        let model_name = provider_config.default_model.clone();
 
+        let client = models::create_genai_client(api_key, &provider_id, db_manager.inner()).await?;
+        (client, model_name)
+    };
+    
     let role_description = if let Some(ref role_id) = role_id {
-        if let Ok(role) = get_ai_role(role_id.clone(), db_manager.clone()).await {
+        if let Ok(role) = get_ai_role_internal(role_id.clone(), db_manager.inner().clone()).await {
             role.description.unwrap_or_default()
         } else {
             String::new()
@@ -71,53 +96,89 @@ pub async fn send_ai_message(
         String::new()
     };
 
-    // 构建系统提示词
     let system_content = if role_description.is_empty() {
         SYSTEM_PROMPT.to_string()
     } else {
         format!("{}\n{}", SYSTEM_PROMPT, role_description)
     };
 
-    // 收集聊天消息
     let mut chat_messages: Vec<ChatMessage> = Vec::new();
-    chat_messages.push(ChatMessage {
-        role: ChatRole::System,
-        content: system_content.into(),
-        options: Default::default(),
-    });
+    if !system_content.trim().is_empty() {
+        chat_messages.push(ChatMessage {
+            role: ChatRole::System,
+            content: system_content.into(),
+            options: Default::default(),
+        });
+    }
 
-    // 加载历史
-    if let Some(conv_id) = conversation_id.clone() {
-        let history = conversations::list_ai_messages(conv_id, db_manager.clone()).await?;
+    // 加载历史消息，确保不会重复
+    let mut seen_contents = std::collections::HashSet::new();
+    if let Some(conv_id) = conversation_id {
+        let history = list_ai_messages_internal(conv_id.clone(), db_manager.inner().clone()).await?;
+        
+        println!("Loaded {} history messages for conversation {}", history.len(), conv_id);
+        
         let history_chat_messages: Vec<ChatMessage> = history
             .into_iter()
-            .map(|m| {
-                let role = match m.role.as_str() {
-                    "user" => ChatRole::User,
-                    "assistant" => ChatRole::Assistant,
-                    "system" => ChatRole::System,
-                    _ => ChatRole::User,
-                };
-                ChatMessage {
-                    role,
-                    content: m.content.into(),
-                    options: Default::default(),
+            .filter_map(|m| {
+                // 检查消息内容是否已经处理过，避免重复
+                if seen_contents.insert(m.content.clone()) {
+                    let role = match m.role.as_str() {
+                        "user" => ChatRole::User,
+                        "assistant" => ChatRole::Assistant,
+                        "system" => ChatRole::System,
+                        _ => ChatRole::User,
+                    };
+                    Some(ChatMessage { 
+                        role, 
+                        content: m.content.into(), 
+                        options: Default::default() 
+                    })
+                } else {
+                    println!("Skipping duplicate message content");
+                    None
                 }
             })
             .collect();
+        
         chat_messages.extend(history_chat_messages);
     }
 
-    // 当前用户消息
-    chat_messages.push(ChatMessage {
-        role: ChatRole::User,
-        content: message.clone().into(),
-        options: Default::default(),
-    });
+    // 添加当前用户消息，确保不重复
+    if seen_contents.insert(message.clone()) {
+        chat_messages.push(ChatMessage {
+            role: ChatRole::User,
+            content: message.clone().into(),
+            options: Default::default(),
+        });
+    } else {
+        println!("Current message is a duplicate of an existing message, skipping");
+    }
 
-    println!("chat_messages: {:?}", chat_messages);
-    // 调用AI
-    let result_str = models::chat_with_history(api_key, model_name, chat_messages, &db_manager).await?;
+    println!("chat_messages (non-stream): {:?}", chat_messages.len());
+
+    // 针对特定模型添加自定义选项
+    let mut request_options = genai::chat::ChatOptions::default();
+    if provider_id.starts_with("custom_") {
+        // 自定义模型的选项在请求中设置
+        request_options.temperature = Some(0.7);
+        request_options.max_tokens = Some(2000);
+    }
+    
+    // 启用内容捕获，确保在流式响应结束时能获取完整内容
+    request_options.capture_content = Some(true);
+    
+    println!("Request options: {:?}", request_options);
+
+    let chat_req = ChatRequest::new(chat_messages);
+    println!("Sending request to model: {}, adapter type: {}", model_name, if provider_id.starts_with("custom_") { "custom" } else { "standard" });
+    let chat_res = client.exec_chat(&model_name, chat_req, Some(&request_options)).await.map_err(|e| {
+        println!("Request failed: {}", e);
+        e.to_string()
+    })?;
+    
+    let result_str = chat_res.first_text().unwrap_or("").to_string();
+    println!("Received response: {}", if result_str.is_empty() { "[empty]" } else { &result_str[..std::cmp::min(50, result_str.len())] });
 
     Ok(serde_json::json!({ "reply": result_str }))
 }
@@ -133,33 +194,102 @@ pub async fn send_ai_message_stream(
     conversation_id: Option<String>,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
-    let (tx, mut rx) = mpsc::channel(1);
-
     let should_cancel = Arc::new(AtomicBool::new(false));
     STREAM_CANCEL_MAP.lock().await.insert(stream_id.clone(), should_cancel.clone());
 
+    let app_clone = app.clone();
+    let db_manager_clone = db_manager.inner().clone();
+    let stream_id_clone = stream_id.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let stream_result = handle_stream_request(
+            app_clone.clone(),
+            message,
+            stream_id_clone.clone(),
+            provider_id.clone(),
+            role_id,
+            conversation_id,
+            db_manager_clone,
+            should_cancel.clone(),
+        ).await;
+
+        if let Err(e) = stream_result {
+            app_clone.emit("ai-stream-error", serde_json::json!({ "id": stream_id_clone, "error": e.to_string() })).ok();
+        }
+        if !provider_id.starts_with("custom_") {
+            app_clone.emit(
+                "ai-stream-chunk",
+                serde_json::json!({
+                    "id": stream_id_clone,
+                    "chunk": "",
+                    "done": true
+                    }),
+                ).ok();
+        }
+        
+        STREAM_CANCEL_MAP.lock().await.remove(&stream_id_clone);
+        println!("Cleaned up stream_id: {}", stream_id_clone);
+    });
+
+    Ok(())
+}
+
+async fn handle_stream_request(
+    app: AppHandle,
+    message: String,
+    stream_id: String,
+    provider_id: String,
+    role_id: Option<String>,
+    conversation_id: Option<String>,
+    db_manager: UnifiedDbManager,
+    should_cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    let config_json = db::get_setting(&conn, "ai_providers_config")
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "AI configuration not found".to_string())?;
 
-    let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json)
-        .map_err(|e| format!("Failed to parse AI config: {}", e))?;
+    // 打印请求参数，帮助调试
+    println!("Stream request params: provider_id={}, role_id={:?}, conversation_id={:?}", 
+             provider_id, role_id, conversation_id);
+    
+    // 自定义模型使用非流式请求，然后模拟流式输出
+    if provider_id.starts_with("custom_") {
+        return handle_custom_model_as_nonstream(app, message, stream_id, provider_id, role_id, conversation_id, 
+                                                db_manager, should_cancel).await;
+    }
 
-    let provider_config = ai_config.providers.get(&provider_id)
-        .ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+    let (client, model_name) = if provider_id.starts_with("custom_") {
+        let id = provider_id.strip_prefix("custom_").unwrap();
+        let cfg_json = db::get_setting(&conn, "custom_ai_models")
+            .await.map_err(|e| e.to_string())?.ok_or("No custom models configured")?;
+        let custom_models: Vec<models::CustomModelConfig> = serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+        let m = custom_models.into_iter().find(|c| c.id == id).ok_or(format!("Custom model {} not found", id))?;
+        
+        println!("[Custom Model] Found model: id={}, name={}, adapter={}", id, m.model_name, m.adapter_type);
+        
+        let client = models::create_custom_genai_client(
+            m.endpoint.clone(),
+            m.api_key.clone().unwrap_or_default(),
+            m.model_name.clone(),
+            m.adapter_type.clone(),
+            None,
+            &db_manager,
+        ).await?;
+        (client, m.model_name.clone())
+    } else {
+        let config_json = db::get_setting(&conn, "ai_providers_config")
+            .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
+        let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
+        let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+        let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+        let model_name = provider_config.default_model.clone();
 
-    let api_key = provider_config.api_key.clone()
-        .ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
-    let model_name = provider_config.default_model.clone();
+        let client = models::create_genai_client(api_key, &provider_id, &db_manager).await?;
+        (client, model_name)
+    };
 
     let role_description = if let Some(ref role_id_str) = role_id {
-        if let Ok(role) = get_ai_role(role_id_str.clone(), db_manager.clone()).await {
-            role.description.unwrap_or_default()
-        } else {
-            String::new()
-        }
+        get_ai_role_internal(role_id_str.clone(), db_manager.clone()).await
+            .map(|role| role.description.unwrap_or_default())
+            .unwrap_or_default()
     } else {
         String::new()
     };
@@ -171,99 +301,334 @@ pub async fn send_ai_message_stream(
     };
 
     let mut chat_messages: Vec<ChatMessage> = Vec::new();
-    chat_messages.push(ChatMessage {
-        role: ChatRole::System,
-        content: system_content.into(),
-        options: Default::default(),
-    });
+    if !system_content.trim().is_empty() {
+        chat_messages.push(ChatMessage {
+            role: ChatRole::System,
+            content: system_content.into(),
+            options: Default::default(),
+        });
+    }
 
-    if let Some(conv_id) = conversation_id.clone() {
-        let history = conversations::list_ai_messages(conv_id, db_manager.clone()).await.unwrap_or_default();
-        let history_msgs: Vec<ChatMessage> = history
-            .into_iter()
-            .map(|m| {
-                let role = match m.role.as_str() {
-                    "user" => ChatRole::User,
-                    "assistant" => ChatRole::Assistant,
-                    "system" => ChatRole::System,
-                    _ => ChatRole::User,
-                };
-                ChatMessage {
-                    role,
-                    content: m.content.into(),
-                    options: Default::default(),
+    // 加载历史消息，确保不会重复
+    let mut seen_contents = std::collections::HashSet::new();
+    if let Some(conv_id) = conversation_id {
+        let history = list_ai_messages_internal(conv_id.clone(), db_manager.clone()).await.unwrap_or_default();
+        
+        println!("Loaded {} history messages for conversation {}", history.len(), conv_id);
+        
+        let history_msgs: Vec<ChatMessage> = history.into_iter()
+            .filter_map(|m| {
+                // 检查消息内容是否已经处理过，避免重复
+                if seen_contents.insert(m.content.clone()) {
+                    let role = match m.role.as_str() {
+                        "user" => ChatRole::User,
+                        "assistant" => ChatRole::Assistant,
+                        "system" => ChatRole::System,
+                        _ => ChatRole::User,
+                    };
+                    Some(ChatMessage { 
+                        role, 
+                        content: m.content.into(), 
+                        options: Default::default() 
+                    })
+                } else {
+                    println!("Skipping duplicate message content");
+                    None
                 }
             })
             .collect();
+        
         chat_messages.extend(history_msgs);
     }
 
-    chat_messages.push(ChatMessage {
-        role: ChatRole::User,
-        content: message.clone().into(),
-        options: Default::default(),
-    });
+    // 添加当前用户消息，确保不重复
+    if seen_contents.insert(message.clone()) {
+        chat_messages.push(ChatMessage {
+            role: ChatRole::User,
+            content: message.clone().into(),
+            options: Default::default(),
+        });
+    } else {
+        println!("Current message is a duplicate of an existing message, skipping");
+    }
 
-    println!("chat_messages: {:?}", chat_messages);
-    let emitter_stream_id = stream_id.clone();
-    let app_clone = app.clone();
-    let handle = tauri::async_runtime::spawn(async move {
-        let db_manager = app_clone.state::<UnifiedDbManager>();
-        let stream_result = models::stream_chat_with_history(
-            api_key,
-            &model_name,
-            chat_messages,
+    // 打印详细的消息列表，便于调试
+    println!("Final chat messages ({}):", chat_messages.len());
+    for (i, msg) in chat_messages.iter().enumerate() {
+        let content = match &msg.content {
+            genai::chat::MessageContent::Text(text) => {
+                let preview = if text.len() > 30 {
+                    format!("{}...", &text[..30])
+                } else {
+                    text.clone()
+                };
+                preview
+            },
+            _ => "[non-text content]".to_string(),
+        };
+        println!("  {}: {} - {}", i, msg.role, content);
+    }
+
+    // 如果没有消息，添加一个默认消息以避免空请求
+    if chat_messages.is_empty() {
+        println!("Warning: No messages to send, adding a default message");
+        chat_messages.push(ChatMessage {
+            role: ChatRole::User,
+            content: "Hello".into(),
+            options: Default::default(),
+        });
+    }
+
+    // 针对特定模型添加自定义选项
+    let mut request_options = genai::chat::ChatOptions::default();
+    if provider_id.starts_with("custom_") {
+        // 自定义模型的选项在请求中设置
+        request_options.temperature = Some(0.7);
+        request_options.max_tokens = Some(2000);
+    }
+    
+    // 启用内容捕获，确保在流式响应结束时能获取完整内容
+    request_options.capture_content = Some(true);
+    
+    println!("Request options: {:?}", request_options);
+    
+    let chat_req = ChatRequest::new(chat_messages.clone());
+    println!("Sending stream request to model: {}, adapter type: {}", model_name, if provider_id.starts_with("custom_") { "custom" } else { "standard" });
+    
+    println!("Executing stream chat request to model: {}", model_name);
+    let stream_resp = client.exec_chat_stream(&model_name, chat_req, Some(&request_options)).await.map_err(|e| {
+        println!("Stream request failed: {}", e);
+        e.to_string()
+    })?;
+    
+    let mut stream = stream_resp.stream;
+    println!("Stream connection established, waiting for events...");
+    // 打印流响应信息
+    println!("Stream response model: {:?}", stream_resp.model_iden);
+    
+    while let Some(event) = stream.next().await {
+        if should_cancel.load(Ordering::SeqCst) {
+            println!("Stream {} cancelled.", stream_id);
+            break;
+        }
+
+        match event {
+            Ok(genai::chat::ChatStreamEvent::Chunk(c)) => {
+                let txt = c.content;
+                println!("Received chunk: {}", txt);
+                app.emit(
+                    "ai-stream-chunk",
+                    serde_json::json!({ "id": stream_id, "chunk": txt, "done": false }),
+                ).ok();
+            },
+            Ok(genai::chat::ChatStreamEvent::End(end)) => {
+                println!("Received End event: {:?}", end);
+                // 处理End事件中可能包含的内容
+                if let Some(contents) = end.captured_content {
+                    for content in contents {
+                        if let genai::chat::MessageContent::Text(text) = content {
+                            if !text.is_empty() {
+                                println!("Sending captured content: {}", text);
+                                app.emit(
+                                    "ai-stream-chunk",
+                                    serde_json::json!({ "id": stream_id, "chunk": text, "done": false }),
+                                ).ok();
+                            }
+                        }
+                    }
+                }
+            },
+            Ok(other_event) => {
+                println!("Received non-chunk event: {:?}", other_event);
+            },
+            Err(e) => {
+                println!("Stream error: {}", e);
+                app.emit("ai-stream-error", serde_json::json!({ "id": stream_id, "error": e.to_string() })).ok();
+                break;
+            },
+        }
+    }
+    
+    println!("Stream completed or closed for id: {}", stream_id);
+
+    Ok(())
+}
+
+async fn handle_custom_model_as_nonstream(
+    app: AppHandle,
+    message: String,
+    stream_id: String,
+    provider_id: String,
+    role_id: Option<String>,
+    conversation_id: Option<String>,
+    db_manager: UnifiedDbManager,
+    should_cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    println!("Using non-streaming fallback for custom model");
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+
+    let id = provider_id.strip_prefix("custom_").unwrap();
+    let cfg_json = db::get_setting(&conn, "custom_ai_models")
+        .await.map_err(|e| e.to_string())?.ok_or("No custom models configured")?;
+    let custom_models: Vec<models::CustomModelConfig> = serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+    let m = custom_models.into_iter().find(|c| c.id == id).ok_or(format!("Custom model {} not found", id))?;
+    
+    println!("[Non-Stream] Using model: id={}, name={}, adapter={}", id, m.model_name, m.adapter_type);
+    
+    let role_description = if let Some(ref role_id_str) = role_id {
+        get_ai_role_internal(role_id_str.clone(), db_manager.clone()).await
+            .map(|role| role.description.unwrap_or_default())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let system_content = if role_description.is_empty() {
+        SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n{}", SYSTEM_PROMPT, role_description)
+    };
+
+    let mut chat_messages: Vec<genai::chat::ChatMessage> = Vec::new();
+    if !system_content.trim().is_empty() {
+        chat_messages.push(genai::chat::ChatMessage {
+            role: genai::chat::ChatRole::System,
+            content: system_content.into(),
+            options: Default::default(),
+        });
+    }
+
+    // 加载历史消息，确保不会重复
+    let mut seen_contents = std::collections::HashSet::new();
+    if let Some(conv_id) = conversation_id {
+        if let Ok(history) = list_ai_messages_internal(conv_id.clone(), db_manager.clone()).await {
+            println!("Loaded {} history messages for conversation {}", history.len(), conv_id);
+            let history_msgs: Vec<genai::chat::ChatMessage> = history.into_iter()
+                .filter_map(|m| {
+                    // 检查消息内容是否已经处理过，避免重复
+                    if seen_contents.insert(m.content.clone()) {
+                        let role = match m.role.as_str() {
+                            "user" => genai::chat::ChatRole::User,
+                            "assistant" => genai::chat::ChatRole::Assistant,
+                            "system" => genai::chat::ChatRole::System,
+                            _ => genai::chat::ChatRole::User,
+                        };
+                        Some(genai::chat::ChatMessage { 
+                            role, 
+                            content: m.content.into(), 
+                            options: Default::default() 
+                        })
+                    } else {
+                        println!("Skipping duplicate message content");
+                        None
+                    }
+                })
+                .collect();
+            chat_messages.extend(history_msgs);
+        }
+    }
+
+    // 添加当前用户消息，确保不重复
+    if seen_contents.insert(message.clone()) {
+        chat_messages.push(genai::chat::ChatMessage {
+            role: genai::chat::ChatRole::User,
+            content: message.clone().into(),
+            options: Default::default(),
+        });
+    } else {
+        println!("Current message is a duplicate of an existing message, skipping");
+    }
+
+    // 使用非流式API获取全部响应
+    println!("[Non-Stream] Sending request to model with {} messages", chat_messages.len());
+    
+    // 发起非流式请求
+    tokio::spawn(async move {
+        // 使用自定义API直接发送请求
+        let result = models::send_message_to_custom_ai(
+            m.endpoint,
+            m.api_key.unwrap_or_default(),
+            m.model_name,
+            m.adapter_type,
             None,
-            db_manager.inner(),
-        )
-        .await;
+            message,
+            &db_manager,
+        ).await;
 
-        match stream_result {
-            Ok(mut stream) => {
-                while let Some(chunk_result) = stream.next().await {
+        match result {
+            Ok(full_response) => {
+                println!("[Non-Stream] Received response of length: {} content:{}", full_response.len(),full_response);
+                
+                // 模拟流式输出，每次发送一小段内容
+                for (i, chunk) in full_response.chars().collect::<Vec<_>>().chunks(5).enumerate() {
                     if should_cancel.load(Ordering::SeqCst) {
                         println!("Stream {} cancelled.", stream_id);
                         break;
                     }
-                    let chunk = chunk_result.unwrap_or_else(|e| e.to_string());
-                    if tx.send(Ok(serde_json::json!({ "chunk": chunk }))).await.is_err() {
-                        break;
+                    
+                    if i % 20 == 0 {
+                        println!("Sending chunk {} of simulated stream", i);
                     }
+
+                    let chunk_str: String = chunk.iter().collect();
+                    println!("[Debug] Emitting chunk: '{}', id: {}", chunk_str, stream_id);
+                    // 确保事件名称和结构与前端预期一致
+                    if let Err(err) = app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": chunk_str, "done": false }),
+                    ) {
+                        println!("[Error] Failed to emit chunk: {}", err);
+                    }
+                    
+                    // 模拟网络延迟，使其看起来像真实的流式传输
+                    tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
                 }
-            }
-            Err(e) => {
-                let _ = tx.send(Err(e.to_string())).await;
-            }
+                
+                // 发送结束标志
+                println!("[Non-Stream] Sending stream end marker");
+                // 先添加一个明显的最终消息块，确保内容被发送
+                let final_chunk = ".";
+                if let Err(err) = app.emit(
+                    "ai-stream-chunk",
+                    serde_json::json!({ "id": stream_id, "chunk": final_chunk, "done": false }),
+                ) {
+                    println!("[Error] Failed to emit final chunk: {}", err);
+                }
+                
+                // 添加短暂延迟确保前一个消息被处理
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                
+                // 发送结束标记
+                if let Err(err) = app.emit(
+                    "ai-stream-chunk",
+                    serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
+                ) {
+                    println!("[Error] Failed to emit end marker: {}", err);
+                }
+            },
+                            Err(e) => {
+                    println!("[Non-Stream] Error: {}", e);
+                    app.emit("ai-stream-error", serde_json::json!({ "id": stream_id, "error": e.to_string() })).ok();
+                    // 确保即使出错也发送流结束标志
+                    // 先添加错误消息
+                    let error_chunk = format!("Error: {}", e);
+                    app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": error_chunk, "done": false }),
+                    ).ok();
+                    
+                    // 添加短暂延迟
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    
+                    // 发送结束标记
+                    app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
+                    ).ok();
+                }
         }
-        STREAM_CANCEL_MAP.lock().await.remove(&stream_id);
-        println!("Cleaned up stream_id: {}", stream_id);
     });
 
-    let emitter_handle = tauri::async_runtime::spawn(async move {
-        while let Some(result) = rx.recv().await {
-            match result {
-                Ok(json_val) => {
-                    let mut payload = json_val.as_object().unwrap().clone();
-                    payload.insert("id".to_string(), Value::String(emitter_stream_id.clone()));
-                    payload.insert("done".to_string(), Value::Bool(false));
-                    app.emit("ai-stream-chunk", payload).unwrap();
-                }
-                Err(e) => {
-                    app.emit("ai-stream-error", e.to_string()).unwrap();
-                    break;
-                }
-            }
-        }
-        app.emit(
-            "ai-stream-chunk",
-            serde_json::json!({
-                "id": emitter_stream_id,
-                "chunk": "",
-                "done": true
-            }),
-        )
-        .unwrap();
-    });
     Ok(())
 }
 
@@ -288,22 +653,21 @@ pub async fn send_ai_message_with_images(
     let model_name = &provider_config.default_model;
 
     let final_message = if let Some(role_id) = role_id {
-        if let Ok(role) = get_ai_role(role_id, db_manager.clone()).await {
+        if let Ok(role) = get_ai_role_internal(role_id, db_manager.inner().clone()).await {
             format!("{}\n{}", role.description.unwrap_or_default(), text_message)
         } else {
-            text_message
+            text_message.clone()
         }
     } else {
-        text_message
+        text_message.clone()
     };
-
+    
+    let client = models::create_genai_client(api_key, &provider_id, &db_manager).await?;
     let result_str = models::send_message_with_images_to_ai(
-        api_key,
+        client,
         model_name,
         final_message,
         image_files,
-        None,
-        &db_manager,
     )
     .await?;
     Ok(serde_json::json!({ "reply": result_str }))
@@ -318,32 +682,194 @@ pub async fn send_ai_message_with_images_stream(
     image_files: Vec<(String, Vec<u8>)>,
     provider_id: String,
     role_id: Option<String>,
-    _conversation_id: Option<String>,
+    _conversation_id: Option<String>, // Note: conversation_id is not used yet for image streams
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
-    let (tx, mut rx) = mpsc::channel(1);
-
     let should_cancel = Arc::new(AtomicBool::new(false));
     STREAM_CANCEL_MAP.lock().await.insert(stream_id.clone(), should_cancel.clone());
 
+    let app_clone = app.clone();
+    let db_manager_clone = db_manager.inner().clone();
+    let stream_id_clone = stream_id.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let result = handle_stream_request_with_images(
+            app_clone.clone(),
+            text_message,
+            stream_id_clone.clone(),
+            image_files,
+            provider_id,
+            role_id,
+            db_manager_clone,
+            should_cancel,
+        ).await;
+
+        if let Err(e) = result {
+            app_clone.emit("ai-stream-error", serde_json::json!({ "id": stream_id_clone, "error": e.to_string() })).ok();
+        }
+
+        app_clone.emit(
+            "ai-stream-chunk",
+            serde_json::json!({
+                "id": stream_id_clone,
+                "chunk": "",
+                "done": true
+            }),
+        ).ok();
+
+        STREAM_CANCEL_MAP.lock().await.remove(&stream_id_clone);
+        println!("Cleaned up stream_id for images: {}", stream_id_clone);
+    });
+
+    Ok(())
+}
+
+async fn handle_stream_request_with_images(
+    app: AppHandle,
+    text_message: String,
+    stream_id: String,
+    image_files: Vec<(String, Vec<u8>)>,
+    provider_id: String,
+    role_id: Option<String>,
+    db_manager: UnifiedDbManager,
+    should_cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    let config_json = db::get_setting(&conn, "ai_providers_config")
-        .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "AI configuration not found".to_string())?;
 
-    let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json)
-        .map_err(|e| format!("Failed to parse AI config: {}", e))?;
+    // 自定义模型使用非流式请求，然后模拟流式输出
+    if provider_id.starts_with("custom_") {
+        println!("Using non-streaming fallback for custom model with images");
+        
+        let id = provider_id.strip_prefix("custom_").unwrap();
+        let cfg_json = db::get_setting(&conn, "custom_ai_models")
+            .await.map_err(|e| e.to_string())?.ok_or("No custom models configured")?;
+        let custom_models: Vec<models::CustomModelConfig> = serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+        let m = custom_models.into_iter().find(|c| c.id == id).ok_or(format!("Custom model {} not found", id))?;
+        
+        // 由于自定义模型可能不支持图片，我们转换为base64格式附加到消息中
+        let mut enhanced_message = text_message.clone();
+        for (i, (filename, image_data)) in image_files.iter().enumerate() {
+            enhanced_message.push_str(&format!("\n\n[Image {}]: {}", i + 1, filename));
+        }
+        
+        let result = models::send_message_to_custom_ai(
+            m.endpoint,
+            m.api_key.unwrap_or_default(),
+            m.model_name,
+            m.adapter_type,
+            None,
+            enhanced_message,
+            &db_manager,
+        ).await;
+        
+        tokio::spawn(async move {
+            match result {
+                Ok(full_response) => {
+                    println!("[Non-Stream] Received image response of length: {}", full_response.len());
+                    
+                    // 模拟流式输出，每次发送一小段内容
+                    for (i, chunk) in full_response.chars().collect::<Vec<_>>().chunks(5).enumerate() {
+                        if should_cancel.load(Ordering::SeqCst) {
+                            println!("Image stream {} cancelled.", stream_id);
+                            break;
+                        }
+                        
+                        if i % 20 == 0 {
+                            println!("Sending chunk {} of simulated image stream", i);
+                        }
 
-    let provider_config = ai_config.providers.get(&provider_id)
-        .ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+                        let chunk_str: String = chunk.iter().collect();
+                        println!("[Debug] Emitting image chunk: '{}', id: {}", chunk_str, stream_id);
+                        // 确保事件名称和结构与前端预期一致
+                        if let Err(err) = app.emit(
+                            "ai-stream-chunk",
+                            serde_json::json!({ "id": stream_id, "chunk": chunk_str, "done": false }),
+                        ) {
+                            println!("[Error] Failed to emit image chunk: {}", err);
+                        }
+                        
+                        // 模拟网络延迟，使其看起来像真实的流式传输
+                        tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
+                    }
+                    
+                    // 发送结束标志
+                    println!("[Non-Stream] Sending image stream end marker");
+                    // 先添加一个明显的最终消息块，确保内容被发送
+                    let final_chunk = ".";
+                    if let Err(err) = app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": final_chunk, "done": false }),
+                    ) {
+                        println!("[Error] Failed to emit final image chunk: {}", err);
+                    }
+                    
+                    // 添加短暂延迟确保前一个消息被处理
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    
+                    // 发送结束标记
+                    if let Err(err) = app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
+                    ) {
+                        println!("[Error] Failed to emit image end marker: {}", err);
+                    }
+                },
+                Err(e) => {
+                    println!("[Non-Stream] Image request error: {}", e);
+                    app.emit("ai-stream-error", serde_json::json!({ "id": stream_id, "error": e.to_string() })).ok();
+                    // 确保即使出错也发送流结束标志
+                    // 先添加错误消息
+                    let error_chunk = format!("Error: {}", e);
+                    app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": error_chunk, "done": false }),
+                    ).ok();
+                    
+                    // 添加短暂延迟
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    
+                    // 发送结束标记
+                    app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
+                    ).ok();
+                }
+            }
+        });
+        
+        return Ok(());
+    }
 
-    let api_key = provider_config.api_key.clone()
-        .ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
-    let model_name = provider_config.default_model.clone();
+    let (client, model_name) = if provider_id.starts_with("custom_") {
+         let id = provider_id.strip_prefix("custom_").unwrap();
+        let cfg_json = db::get_setting(&conn, "custom_ai_models")
+            .await.map_err(|e| e.to_string())?.ok_or("No custom models configured")?;
+        let custom_models: Vec<models::CustomModelConfig> = serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+        let m = custom_models.into_iter().find(|c| c.id == id).ok_or(format!("Custom model {} not found", id))?;
+        
+        let client = models::create_custom_genai_client(
+            m.endpoint,
+            m.api_key.unwrap_or_default(),
+            m.model_name.clone(),
+            m.adapter_type,
+            None,
+            &db_manager,
+        ).await?;
+        (client, m.model_name)
+    } else {
+        let config_json = db::get_setting(&conn, "ai_providers_config")
+            .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
+        let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
+        let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+        let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+        let model_name = provider_config.default_model.clone();
+
+        let client = models::create_genai_client(api_key, &provider_id, &db_manager).await?;
+        (client, model_name)
+    };
 
     let final_message = if let Some(role_id_str) = role_id {
-        if let Ok(role) = get_ai_role(role_id_str, db_manager.clone()).await {
+        if let Ok(role) = get_ai_role_internal(role_id_str, db_manager.clone()).await {
             format!("{}\n{}", role.description.unwrap_or_default(), text_message)
         } else {
             text_message.clone()
@@ -351,69 +877,51 @@ pub async fn send_ai_message_with_images_stream(
     } else {
         text_message.clone()
     };
+    
+    let stream_result = stream_message_with_images_from_ai(
+        client,
+        &model_name,
+        final_message,
+        image_files,
+    )
+    .await;
 
-    let emitter_stream_id = stream_id.clone();
-    let app_clone = app.clone();
-    let handle = tauri::async_runtime::spawn(async move {
-        let db_manager = app_clone.state::<UnifiedDbManager>();
-        let stream_result = stream_message_with_images_from_ai(
-            api_key,
-            &model_name,
-            final_message,
-            image_files,
-            None,
-            db_manager.inner(),
-        )
-        .await;
-
-        match stream_result {
-            Ok(mut stream) => {
-                while let Some(chunk_result) = stream.next().await {
-                    if should_cancel.load(Ordering::SeqCst) {
-                        println!("Stream {} cancelled.", stream_id);
-                        break;
-                    }
-                    let chunk = chunk_result.unwrap_or_else(|e| e.to_string());
-                    if tx.send(Ok(serde_json::json!({ "chunk": chunk }))).await.is_err() {
-                        break;
-                    }
-                }
-            }
-            Err(e) => {
-                let _ = tx.send(Err(e.to_string())).await;
-            }
-        }
-        STREAM_CANCEL_MAP.lock().await.remove(&stream_id);
-        println!("Cleaned up stream_id for images: {}", stream_id);
-    });
-
-    let emitter_handle = tauri::async_runtime::spawn(async move {
-        while let Some(result) = rx.recv().await {
-            match result {
-                Ok(json_val) => {
-                    let mut payload = json_val.as_object().unwrap().clone();
-                    payload.insert("id".to_string(), Value::String(emitter_stream_id.clone()));
-                    payload.insert("done".to_string(), Value::Bool(false));
-                    app.emit("ai-stream-chunk", payload).unwrap();
-                }
-                Err(e) => {
-                    app.emit("ai-stream-error", e.to_string()).unwrap();
+    match stream_result {
+        Ok(mut stream) => {
+            while let Some(chunk_result) = stream.next().await {
+                if should_cancel.load(Ordering::SeqCst) {
+                    println!("Stream {} cancelled.", stream_id);
                     break;
                 }
+                match chunk_result {
+                    Ok(chunk) => {
+                        app.emit("ai-stream-chunk", serde_json::json!({ "id": stream_id, "chunk": chunk, "done": false })).ok();
+                    }
+                    Err(e) => {
+                        app.emit("ai-stream-error", serde_json::json!({ "id": stream_id, "error": e.to_string() })).ok();
+                        break;
+                    }
+                }
             }
+            
+            // 如果没有收到任何响应内容，尝试发送一个后备消息
+            app.emit(
+                "ai-stream-chunk",
+                serde_json::json!({ 
+                    "id": stream_id, 
+                    "chunk": "I'm processing your message. Please wait a moment or try again if no response appears.", 
+                    "done": false 
+                }),
+            ).ok();
         }
-        app.emit(
-            "ai-stream-chunk",
-            serde_json::json!({
-                "id": emitter_stream_id,
-                "chunk": "",
-                "done": true
-            }),
-        )
-        .unwrap();
-    });
+        Err(e) => {
+             app.emit("ai-stream-error", serde_json::json!({ "id": stream_id, "error": e.to_string() })).ok();
+        }
+    }
+
     Ok(())
 }
+
 
 // 迁移旧的文件配置到数据库
 #[tauri::command]
@@ -504,7 +1012,7 @@ pub async fn get_custom_model_config(
 
 // 列出所有自定义模型配置
 #[tauri::command]
-pub async fn list_custom_model_configs(
+pub async fn list_legacy_custom_model_configs(
     _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Vec<CustomModel>, String> {
     // TODO: 临时返回空列表，等实现get_settings_by_prefix函数后再启用
@@ -513,7 +1021,7 @@ pub async fn list_custom_model_configs(
 
 // 删除自定义模型配置
 #[tauri::command]
-pub async fn delete_custom_model_config(
+pub async fn delete_legacy_custom_model_config(
     _app: tauri::AppHandle,
     model_id: String,
     db_manager: State<'_, UnifiedDbManager>,

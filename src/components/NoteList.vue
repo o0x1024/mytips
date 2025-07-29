@@ -75,7 +75,7 @@
           v-for="virtualRow in virtualItems" 
           :key="filteredNotes[virtualRow.index]?.id || `index-${virtualRow.index}`"
           :data-index="virtualRow.index"
-          :ref="(el: Element) => virtualizer.measureElement(el)"
+          :ref="(el) => el && virtualizer.measureElement(el as Element)"
           :style="{
             position: 'absolute',
             top: 0,
@@ -85,11 +85,11 @@
             transform: `translateY(${virtualRow.start}px)`
           }"
           class="p-2 cursor-pointer hover:bg-base-200 transition-colors border-b border-dashed border-base-300 min-h-[60px] flex flex-col note-list-item"
-          :class="{'bg-primary/10': selectedNoteId === filteredNotes[virtualRow.index].id}"
-          @click="selectNote(filteredNotes[virtualRow.index])"
-          @contextmenu.prevent="openContextMenu($event, filteredNotes[virtualRow.index])">
+          :class="{'bg-primary/10': selectedNoteId === filteredNotes[virtualRow.index]?.id}"
+          @click="filteredNotes[virtualRow.index] && selectNote(filteredNotes[virtualRow.index])"
+          @contextmenu.prevent="filteredNotes[virtualRow.index] && openContextMenu($event, filteredNotes[virtualRow.index])">
           
-          <div class="flex items-center justify-between">
+          <div v-if="filteredNotes[virtualRow.index]" class="flex items-center justify-between">
             <h3 class="font-medium">{{ filteredNotes[virtualRow.index].title || t('noteList.untitled') }}</h3>
             <div class="flex items-center gap-2">
               <span class="text-xs text-base-content/80">{{ formatDate(filteredNotes[virtualRow.index].updated_at) }}</span>
@@ -106,7 +106,7 @@
               </span>
             </div>
           </div>
-          <p class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(filteredNotes[virtualRow.index]) }}</p>
+          <p v-if="filteredNotes[virtualRow.index]" class="line-clamp-1 text-xs text-base-content/80 mt-1">{{ getPreviewContent(filteredNotes[virtualRow.index]) }}</p>
         </div>
       </div>
 
@@ -482,74 +482,64 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousedown', () => {}, true) // 清理可能残留的监听器
 })
 
-// 使用计算属性的getter和setter来优化笔记列表的渲染
-const internalFilteredNotes = ref([] as Note[])
-
-// 笔记列表更新计算
-watch(
-  () => [props.tips, searchQuery.value, sortField.value, sortOrder.value],
-  () => {
-    // 首先去重，避免重复的笔记ID
-    const uniqueTips = new Map<string, TipSummary>()
-    for (const tip of props.tips) {
-      if (tip.id && !uniqueTips.has(tip.id)) {
-        uniqueTips.set(tip.id, tip)
-      }
+const filteredNotes = computed(() => {
+  // 首先去重，避免重复的笔记ID
+  const uniqueTips = new Map<string, TipSummary>()
+  for (const tip of props.tips) {
+    if (tip.id && !uniqueTips.has(tip.id)) {
+      uniqueTips.set(tip.id, tip)
     }
-    
-    let result: Note[] = Array.from(uniqueTips.values()).map(tip => ({ ...tip, isPinned: false }))
+  }
 
-    // 本地搜索过滤（列表内搜索）
-    if (searchQuery.value) {
-      const query = searchQuery.value.toLowerCase()
-      result = result.filter(note => {
-        return (
-          (note.title || '').toLowerCase().includes(query)
-        )
-      })
+  let result: Note[] = Array.from(uniqueTips.values()).map((tip) => ({
+    ...tip,
+    isPinned: false, // You might want to handle pinning state properly
+  }))
+
+  // 本地搜索过滤（列表内搜索）
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    result = result.filter((note) => {
+      return (note.title || '').toLowerCase().includes(query)
+    })
+  }
+
+  // 排序
+  result.sort((a, b) => {
+    let aValue: string | number, bValue: string | number
+
+    if (sortField.value === 'updated') {
+      aValue = a.updated_at || 0
+      bValue = b.updated_at || 0
+    } else if (sortField.value === 'created') {
+      aValue = a.created_at || 0
+      bValue = b.created_at || 0
+    } else {
+      aValue = a.title || ''
+      bValue = b.title || ''
     }
 
-    // 排序
-    result.sort((a, b) => {
-      let aValue: string | number, bValue: string | number
+    // 字符串比较
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortOrder.value === 'asc'
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue)
+    }
 
-      if (sortField.value === 'updated') {
-        aValue = a.updated_at || 0
-        bValue = b.updated_at || 0
-      } else if (sortField.value === 'created') {
-        aValue = a.created_at || 0
-        bValue = b.created_at || 0
-      } else {
-        aValue = a.title || ''
-        bValue = b.title || ''
-      }
+    // 数字比较 (确保aValue和bValue都是数字)
+    const aNum = typeof aValue === 'number' ? aValue : 0
+    const bNum = typeof bValue === 'number' ? bValue : 0
+    return sortOrder.value === 'asc' ? aNum - bNum : bNum - aNum
+  })
 
-      // 字符串比较
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortOrder.value === 'asc' 
-          ? aValue.localeCompare(bValue) 
-          : bValue.localeCompare(aValue)
-      }
-      
-      // 数字比较 (确保aValue和bValue都是数字)
-      const aNum = typeof aValue === 'number' ? aValue : 0
-      const bNum = typeof bValue === 'number' ? bValue : 0
-      return sortOrder.value === 'asc' ? aNum - bNum : bNum - aNum
-    })
+  // 置顶固定的笔记
+  result = [
+    ...result.filter((note) => note.isPinned),
+    ...result.filter((note) => !note.isPinned),
+  ]
 
-    // 置顶固定的笔记
-    result = [
-      ...result.filter(note => note.isPinned),
-      ...result.filter(note => !note.isPinned)
-    ]
-    
-    // 使用nextTick延迟更新，减少重渲染
-    nextTick(() => {
-      internalFilteredNotes.value = result
-    })
-  },
-  { deep: true }
-)
+  return result
+})
 
 // 监听数据库切换事件，触发列表刷新
 watch(databaseChangeCounter, (newCount, oldCount) => {
@@ -560,8 +550,19 @@ watch(databaseChangeCounter, (newCount, oldCount) => {
   }
 })
 
-// 暴露给模板的计算属性
-const filteredNotes = computed(() => internalFilteredNotes.value)
+// 监听笔记列表变化，确保虚拟列表正确更新
+watch(() => filteredNotes.value.length, (newLength, oldLength) => {
+  if (newLength !== oldLength && virtualizer.value) {
+    nextTick(() => {
+      try {
+        // 重新计算虚拟列表
+        virtualizer.value.measure()
+      } catch (error) {
+        console.error('Failed to update virtualizer after notes list change:', error)
+      }
+    })
+  }
+})
 
 // 计算是否还有更多笔记
 const hasMoreTips = computed(() => {
@@ -619,24 +620,42 @@ function sortBy(field: string, order: 'asc' | 'desc') {
 }
 
 // 打开上下文菜单
-function openContextMenu(event: MouseEvent, note: Note) {
+async function openContextMenu(event: MouseEvent, note: Note) {
   event.preventDefault()
   event.stopPropagation() // 阻止事件冒泡
   
-  // 先选中被右键点击的笔记
-  const noteToSelect = filteredNotes.value.find(n => n.id === note.id);
-  if (noteToSelect) {
-    emit('select-note', noteToSelect);
-  }
+  // 立即设置上下文笔记，用于右键菜单操作
+  contextNote.value = note
   
   // 使用页面坐标而不是客户端坐标
   let posX = event.pageX
   let posY = event.pageY
   
-  // 立即设置初始位置和上下文笔记
+  // 立即设置初始位置
   contextMenuX.value = posX
   contextMenuY.value = posY
-  contextNote.value = note
+  
+  // 先异步选中被右键点击的笔记，确保内容已加载
+  try {
+    // 如果笔记已加密且未解锁，使用特殊处理
+    if (note.is_encrypted && !encryptionStore.isItemUnlocked(note.id)) {
+      emit('select-note', { id: note.id, content: t('noteList.encryptedPreview') });
+    } else {
+      // 获取完整内容
+      const content = await tipsStore.fetchTipContent(note.id);
+      
+      if (content !== null) {
+        emit('select-note', { ...note, content });
+      } else {
+        // 处理获取内容失败的情况
+        emit('select-note', { ...note, content: t('noteList.loadContentError') });
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load note content for context menu:', error);
+    // 确保即使加载内容失败，也能安全地发送选择事件
+    emit('select-note', { ...note, content: t('noteList.loadContentError') });
+  }
   
   // 使用nextTick确保在DOM更新后再显示菜单
   nextTick(() => {
@@ -713,8 +732,25 @@ async function deleteContextNote() {
   const noteToDelete = contextNote.value
   closeContextMenu()
   
-  // 直接发送删除事件，不再显示确认对话框
+  // 在发送删除事件前，先确保虚拟列表不再引用该笔记
+  // 找到要删除笔记的索引
+  const deleteIndex = filteredNotes.value.findIndex(note => note.id === noteToDelete.id)
+  
+  // 发送删除事件
   emit('delete-note', noteToDelete.id)
+  
+  // 如果找到了索引，手动更新virtualizer以防止引用错误
+  if (deleteIndex !== -1 && virtualizer.value) {
+    // 给virtualizer一点时间来处理DOM更新
+    setTimeout(() => {
+      try {
+        // 重新计算虚拟列表
+        virtualizer.value.measure()
+      } catch (error) {
+        console.error('Failed to update virtualizer after note deletion:', error)
+      }
+    }, 0)
+  }
 }
 
 // 导出笔记

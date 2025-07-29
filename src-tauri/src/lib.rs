@@ -21,7 +21,7 @@ use api::ai::roles::{create_ai_role, delete_ai_role, get_ai_role, list_ai_roles,
 use api::ai::service::{
     get_ai_chat_models, get_ai_config, get_ai_embedding_models, get_ai_service_status,
     get_ai_usage_stats, get_default_ai_model, reload_ai_services, save_ai_config,
-    set_default_ai_model, test_ai_connection,
+    set_default_ai_model, test_ai_connection, list_custom_model_configs, add_custom_model_config, update_custom_model_config, delete_custom_model_config
 };
 use api::clipboard_api::{get_clipboard_ids_for_last_days};
 use api::audio::{
@@ -323,10 +323,10 @@ pub fn run() -> anyhow::Result<()> {
             api::encryption::encrypt_data_cmd,
             api::encryption::clear_session_unlocks,
             // Custom model config APIs
-            save_custom_model_config,
-            get_custom_model_config,
-            list_custom_model_configs,
-            delete_custom_model_config,
+            list_legacy_custom_model_configs,
+            add_custom_model_config,
+            update_custom_model_config,
+            delete_legacy_custom_model_config,
             test_custom_model_connection,
             summarize_clipboard_entries,
             // Database path management APIs
@@ -361,6 +361,10 @@ pub fn run() -> anyhow::Result<()> {
             switch_to_embedded_replica_mode,
             get_supported_database_modes,
             cleanup_local_database_files,
+            api::ai::service::list_custom_model_configs,
+            api::ai::service::add_custom_model_config,
+            api::ai::service::update_custom_model_config,
+            api::ai::service::delete_custom_model_config,
         ])
         .build(tauri::generate_context!())?
         .run(|_app_handle, event| {

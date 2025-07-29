@@ -124,7 +124,7 @@ const tip = ref({
   content: '',
   tip_type: 'markdown', // 默认都是markdown格式
   language: undefined as string | undefined, 
-  category_id: undefined as string | undefined,
+  category_id: "uncategorized", //未分类笔记本
   created_at: Date.now(),
   updated_at: Date.now(),
   tags: [] as Array<{ id: string; name: string }>
@@ -177,7 +177,7 @@ onMounted(async () => {
           content: loadedTip.content || '',
           tip_type: loadedTip.tip_type || 'markdown',
           language: loadedTip.language,
-          category_id: loadedTip.category_id,
+          category_id: loadedTip.category_id || "uncategorized",
           created_at: loadedTip.created_at || Date.now(),
           updated_at: loadedTip.updated_at || Date.now(),
           tags: loadedTip.tags || []
@@ -217,6 +217,14 @@ const handleTipUpdate = (updatedNote: any) => {
     // 完整更新
     Object.assign(tip.value, updatedNote)
   }
+
+  // 实时更新Store中的笔记列表，以便NoteList能够响应
+  tipsStore.updateTipInList({
+    id: tip.value.id,
+    title: tip.value.title,
+    updated_at: tip.value.updated_at,
+    // 如果需要，也可以更新其他摘要信息
+  });
 }
 
 // 保存笔记
