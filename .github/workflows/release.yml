@@ -73,7 +73,7 @@ jobs:
         rustup target add x86_64-linux-android
 
     - name: Install Rust dependencies for Linux
-      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04' # 兼容新旧设置
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'
       run: |
         sudo apt-get update
         sudo apt-get install -y \
@@ -255,6 +255,11 @@ jobs:
         # 查找并移动清单文件
         if [ -d "dist/update-manifests" ]; then
           find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
+        fi
+
+        # 确保上传latest.json文件
+        if [ -f "dist/update-manifests/latest.json" ]; then
+          mv "dist/update-manifests/latest.json" "$UPLOAD_DIR/latest.json"
         fi
 
         # 显示所有待上传的文件

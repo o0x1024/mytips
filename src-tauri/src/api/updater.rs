@@ -218,26 +218,23 @@ pub async fn check_for_updates_no_signature(
     println!("Checking for updates without signature verification...");
     
     // 构建更新端点URL
-    let target = if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "darwin"
-    } else {
-        "linux"
-    };
+    // let target = if cfg!(target_os = "windows") {
+    //     "windows"
+    // } else if cfg!(target_os = "macos") {
+    //     "darwin"
+    // } else {
+    //     "linux"
+    // };
     
-    let arch = if cfg!(target_arch = "x86_64") {
-        "x86_64"
-    } else if cfg!(target_arch = "aarch64") {
-        "aarch64"
-    } else {
-        "x86_64"
-    };
+    // let arch = if cfg!(target_arch = "x86_64") {
+    //     "x86_64"
+    // } else if cfg!(target_arch = "aarch64") {
+    //     "aarch64"
+    // } else {
+    //     "x86_64"
+    // };
     
-    let endpoint_url = format!(
-        "https://github.com/o0x1024/mytips/releases/latest/download/{}-{}.json",
-        target, arch
-    );
+    let endpoint_url = format!("https://github.com/o0x1024/mytips/releases/latest/download/latest.json");
     
     println!("Checking update endpoint: {}", endpoint_url);
     
