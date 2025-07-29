@@ -177,6 +177,40 @@ jobs:
         chmod +x scripts/generate-update-manifest.cjs
         # 运行脚本
         node scripts/generate-update-manifest.cjs
+        
+        # 确保dist/update-manifests目录存在
+        mkdir -p dist/update-manifests
+        
+        # 创建latest.json文件
+        cat > dist/update-manifests/latest.json << EOL
+        {
+          "version": "${{ steps.get_version.outputs.VERSION }}",
+          "notes": "See the release notes for details.",
+          "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+          "platforms": {
+            "darwin-x86_64": {
+              "signature": "",
+              "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mytips-${{ steps.get_version.outputs.VERSION }}-x86_64.dmg"
+            },
+            "darwin-aarch64": {
+              "signature": "",
+              "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mytips-${{ steps.get_version.outputs.VERSION }}-aarch64.dmg"
+            },
+            "linux-x86_64": {
+              "signature": "",
+              "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mytips-${{ steps.get_version.outputs.VERSION }}-amd64.AppImage"
+            },
+            "windows-x86_64": {
+              "signature": "",
+              "url": "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/mytips-${{ steps.get_version.outputs.VERSION }}-x64-setup.exe"
+            }
+          }
+        }
+        EOL
+        
+        # 显示生成的文件
+        echo "Generated update manifests:"
+        ls -la dist/update-manifests/
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}
         RELEASE_NOTES: "See the release notes for details."
@@ -257,9 +291,34 @@ jobs:
           find dist/update-manifests -name "*.json" -exec mv {} "$UPLOAD_DIR/" \;
         fi
 
-        # 确保上传latest.json文件
-        if [ -f "dist/update-manifests/latest.json" ]; then
-          mv "dist/update-manifests/latest.json" "$UPLOAD_DIR/latest.json"
+        # 确保latest.json存在于上传目录
+        if [ ! -f "$UPLOAD_DIR/latest.json" ]; then
+          echo "Warning: latest.json not found in update manifests. Creating a simple version."
+          cat > "$UPLOAD_DIR/latest.json" << EOL
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes for details.",
+            "pub_date": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/mytips-${VERSION}-x86_64.dmg"
+              },
+              "darwin-aarch64": {
+                "signature": "",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/mytips-${VERSION}-aarch64.dmg"
+              },
+              "linux-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/mytips-${VERSION}-amd64.AppImage"
+              },
+              "windows-x86_64": {
+                "signature": "",
+                "url": "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/mytips-${VERSION}-x64-setup.exe"
+              }
+            }
+          }
+          EOL
         fi
 
         # 显示所有待上传的文件
