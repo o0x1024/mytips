@@ -211,9 +211,9 @@ jobs:
         # 查找并移动 Linux 产物
         if [ -d "$TARGET_DIR/tauri-build-linux-x86_64" ]; then
           find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage" \;
-          find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz" \;
-          find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
+          find "$TARGET_DIR/tauri-build-linux-x86_64/appimage" -name "*.AppImage.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.AppImage.tar.gz.sig" \;
           find "$TARGET_DIR/tauri-build-linux-x86_64/deb" -name "*.deb" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.deb" \;
+          find "$TARGET_DIR/tauri-build-linux-x86_64/deb" -name "*.deb.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.deb.sig" \;
         fi
 
         # 查找并移动 macOS x64 产物
@@ -221,6 +221,7 @@ jobs:
           find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
           find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz.sig" \;
           find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
+          find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg.sig" \;
         fi
 
         # 查找并移动 macOS aarch64 产物
@@ -228,11 +229,13 @@ jobs:
           find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz" \;
           find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz.sig" \;
           find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
+          find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg.sig" \;
         fi
         
         # 查找并移动 Windows 产物 (NSIS)
         if [ -d "$TARGET_DIR/tauri-build-windows-x86_64" ]; then
           find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.exe" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.exe" \;
+          find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.exe.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.exe.sig" \;
           find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip" \;
           find "$TARGET_DIR/tauri-build-windows-x86_64/nsis" -name "*_x64-setup.nsis.zip.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x64-setup.nsis.zip.sig" \;
         fi
@@ -241,6 +244,12 @@ jobs:
         if [ -d "$TARGET_DIR/tauri-build-android" ]; then
           find "$TARGET_DIR/tauri-build-android/" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
           find "$TARGET_DIR/tauri-build-android/" -name "*.apk" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk" \;
+        fi
+
+        # 查找并移动 Linux RPM 产物
+        if [ -d "$TARGET_DIR/tauri-build-linux-x86_64" ]; then
+          find "$TARGET_DIR/tauri-build-linux-x86_64/rpm" -name "*.rpm" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.rpm" \;
+          find "$TARGET_DIR/tauri-build-linux-x86_64/rpm" -name "*.rpm.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.rpm.sig" \;
         fi
 
         # 查找并移动清单文件
