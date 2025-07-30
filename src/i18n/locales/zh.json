@@ -681,7 +681,8 @@
   },
   "aboutSettings": {
     "title": "关于",
-    "description": "一个简单的笔记管理应用，帮助你收集和整理有用的代码片段、文档和提示。"
+    "description": "一个简单的笔记管理应用，帮助你收集和整理有用的代码片段、文档和提示。",
+    "devTools": "开发者工具"
   },
   "appSettings": {
     "title": "应用设置",

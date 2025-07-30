@@ -20,7 +20,7 @@ tauri-build = { version = "2.0.0-beta.19", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2.7.0", default-features = false, features = ["wry", "tray-icon", "rustls-tls"] }
+tauri = { version = "2.7.0", default-features = false, features = ["devtools", "wry", "tray-icon", "rustls-tls"] }
 libsql = { version = "0.9.17", features = ["core", "replication", "remote"] }
 uuid = { version = "1.8.0", features = ["v4"] }
 chrono = { version = "0.4.38", features = ["serde"] }

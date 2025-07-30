@@ -47,6 +47,13 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::api::database_manager::cleanup_local_database_files;
 
+// 打开开发者工具的命令
+#[tauri::command]
+fn open_devtools(app: tauri::AppHandle) {
+    let window = app.get_webview_window("main").unwrap();
+    window.open_devtools();
+}
+
 /// 初始化日志系统
 fn init_logging() {
     use std::env;
@@ -309,6 +316,7 @@ pub fn run() -> anyhow::Result<()> {
             get_platform_info,
             show_confirm_dialog,
             open_url,
+            open_devtools,
 
             api::import::import_from_github,
             // Encryption-related APIs

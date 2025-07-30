@@ -681,7 +681,8 @@
   },
   "aboutSettings": {
     "title": "About",
-    "description": "A simple note-taking application to help you collect and organize useful code snippets, documents, and tips."
+    "description": "A simple note-taking application to help you collect and organize useful code snippets, documents, and tips.",
+    "devTools": "Developer Tools"
   },
   "appSettings": {
     "title": "App Settings",
