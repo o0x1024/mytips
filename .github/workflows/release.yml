@@ -183,6 +183,7 @@ jobs:
 
     - name: Build the application
       if: matrix.platform != 'android'
+      shell: bash
       run: |
         if [ "${{ matrix.platform }}" = "linux-aarch64" ]; then
           # ARM64 Linux 只构建 DEB 和 RPM，跳过 AppImage 避免交叉编译问题

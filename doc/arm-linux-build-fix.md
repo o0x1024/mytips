@@ -61,7 +61,32 @@ failed to bundle project: `Exec format error (os error 8)`
 
 - [x] 问题分析完成
 - [x] 解决方案实施完成
+- [x] Windows PowerShell 兼容性修复完成
 - [ ] 测试验证（需要下次 tag 发布时验证）
+
+## 补充修复
+
+### Windows PowerShell 兼容性问题
+
+**问题**: Windows 环境下运行 bash 语法的 if 语句导致 PowerShell 解析错误：
+```
+ParserError: Missing '(' after 'if' in if statement.
+```
+
+**解决方案**: 在构建步骤中添加 `shell: bash` 指令，强制所有平台使用 bash shell：
+```yaml
+- name: Build the application
+  if: matrix.platform != 'android'
+  shell: bash  # 强制使用 bash，确保跨平台兼容性
+  run: |
+    if [ "${{ matrix.platform }}" = "linux-aarch64" ]; then
+      # ARM64 Linux 只构建 DEB 和 RPM，跳过 AppImage 避免交叉编译问题
+      yarn tauri build --target ${{ matrix.rust_target }} --bundles deb,rpm
+    else
+      # 其他平台正常构建所有格式
+      yarn tauri build --target ${{ matrix.rust_target }}
+    fi
+```
 
 ## 备注
 
