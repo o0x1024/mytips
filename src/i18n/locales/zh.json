@@ -91,7 +91,7 @@
     "copy": "复制",
     "close": "关闭",
     "refresh": "刷新",
-    "appName": "MyTips",
+    "appName": "mytips",
     "create": "创建"
   },
   "editorToolbar": {
@@ -697,7 +697,7 @@
   "settings": {
     "title": "设置",
     "optionsTitle": "设置选项",
-    "footer": "MyTips 设置中心",
+    "footer": "mytips 设置中心",
     "fallbackTitle": "设置",
     "pages": {
       "appearance": "外观",
@@ -1028,7 +1028,7 @@
   },
   "aiAssistant": {
     "title": "AI 助手",
-    "description": "在MyTips内与您喜爱的AI模型对话",
+    "description": "在mytips内与您喜爱的AI模型对话",
     "buttons": {
       "roleManager": "角色管理",
       "conversationList": "对话列表",
@@ -1326,7 +1326,7 @@
     "select_ai_model": "选择AI模型",
     "select_ai_model_to_start_conversation": "选择AI模型开始对话",
     "your_conversation_is_only_saved_locally": "您的对话仅保存在本地，不会上传到服务器。",
-    "ai_assistant_description": "在MyTips内与您喜爱的AI模型对话",
+    "ai_assistant_description": "在mytips内与您喜爱的AI模型对话",
     "enter_your_question_or_instruction": "输入您的问题或指令",
     "input_hash_to_reference_notes": "输入 '#' 引用笔记",
     "send_message": "发送消息",

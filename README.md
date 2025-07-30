@@ -1,12 +1,12 @@
 <div align="center">
 
-# MyTips
+# mytips
 
 **Local-first intelligent note-taking and knowledge management platform**
 
 *A modern desktop application designed for developers and knowledge workers*
 
-<img src="src-tauri/icons/128x128.png" alt="MyTips Logo" width="120" height="120">
+<img src="src-tauri/icons/128x128.png" alt="mytips Logo" width="120" height="120">
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.0-brightgreen.svg)](https://github.com/o0x1024/mytips/releases)
@@ -21,7 +21,7 @@
 
 </div>
 
-## Why Choose MyTips?
+## Why Choose mytips?
 
 **Privacy First** - All data stored locally, no privacy concerns  
 **Lightweight & Efficient** - Built with Rust + Tauri, fast startup and low resource usage  
@@ -30,11 +30,11 @@
 **Real-time Sync** - Multi-device data synchronization, access notes anywhere  
 **Modern Interface** - Beautiful UI with multiple theme support
 
-MyTips is committed to creating a **secure, intelligent, and efficient** personal knowledge management center, perfectly integrating note-taking, AI conversations, and clipboard management to help you build your own knowledge system.
+mytips is committed to creating a **secure, intelligent, and efficient** personal knowledge management center, perfectly integrating note-taking, AI conversations, and clipboard management to help you build your own knowledge system.
 
 ## Screenshots
 
-![MyTips Main Interface](./public/placeholder-for-main-ui.png)
+![mytips Main Interface](./public/placeholder-for-main-ui.png)
 
 ## Core Features
 
@@ -181,7 +181,7 @@ This project is open source under the [GPL-3.0](LICENSE) license.
 
 ## Acknowledgments
 
-MyTips development is supported by the following excellent open source projects:
+mytips development is supported by the following excellent open source projects:
 
 - [Tauri](https://tauri.app/)
 - [Vue.js](https://vuejs.org/)
@@ -191,4 +191,4 @@ MyTips development is supported by the following excellent open source projects:
 
 ---
 
-**MyTips - Making knowledge management simpler, smarter, and more secure.**
+**mytips - Making knowledge management simpler, smarter, and more secure.**

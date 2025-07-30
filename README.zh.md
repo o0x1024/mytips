@@ -1,12 +1,12 @@
 <div align="center">
 
-# MyTips
+# mytips
 
 **本地优先的智能笔记与知识管理平台**
 
 *一款专为开发者和知识工作者打造的现代化桌面应用*
 
-<img src="src-tauri/icons/128x128.png" alt="MyTips Logo" width="120" height="120">
+<img src="src-tauri/icons/128x128.png" alt="mytips Logo" width="120" height="120">
 
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.1.0-brightgreen.svg)](https://github.com/o0x1024/mytips/releases)
@@ -21,7 +21,7 @@
 
 </div>
 
-## 为什么选择 MyTips？
+## 为什么选择 mytips？
 
 **隐私至上** - 数据完全本地存储，无需担心隐私泄露  
 **轻量高效** - 基于 Rust + Tauri 构建，启动快速，资源占用低  
@@ -30,11 +30,11 @@
 **实时同步** - 支持多设备数据同步，随时随地访问笔记  
 **现代界面** - 精美的用户界面，支持多主题切换
 
-MyTips 致力于打造一个**安全、智能、高效**的个人知识管理中心，将笔记记录、AI 对话、剪贴板管理完美融合，帮助您构建属于自己的知识体系。
+mytips 致力于打造一个**安全、智能、高效**的个人知识管理中心，将笔记记录、AI 对话、剪贴板管理完美融合，帮助您构建属于自己的知识体系。
 
 ## 应用截图
 
-![MyTips 主界面](./public/placeholder-for-main-ui.png)
+![mytips 主界面](./public/placeholder-for-main-ui.png)
 
 ## 核心功能
 
@@ -176,7 +176,7 @@ yarn tauri dev
 
 ## 致谢
 
-MyTips 的发展离不开以下优秀开源项目的支持：
+mytips 的发展离不开以下优秀开源项目的支持：
 
 - [Tauri](https://tauri.app/)
 - [Vue.js](https://vuejs.org/)
@@ -186,4 +186,4 @@ MyTips 的发展离不开以下优秀开源项目的支持：
 
 ---
 
-**MyTips - 让知识管理更简单、更智能、更安全。**
+**mytips - 让知识管理更简单、更智能、更安全。**

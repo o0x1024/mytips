@@ -2,7 +2,7 @@
   <div class="card bg-base-100 shadow-md">
     <div class="card-body">
       <h2 class="card-title text-primary mb-4">{{ $t('aboutSettings.title') }}</h2>
-      <p class="cursor-pointer hover:text-primary transition-colors" @click="openDevTools" title="点击打开开发者工具">MyTips v{{ currentVersion || '0.2.0' }}</p>
+      <p class="cursor-pointer hover:text-primary transition-colors" @click="openDevTools" title="点击打开开发者工具">mytips v{{ currentVersion || '0.2.0' }}</p>
       <p class="text-sm text-base-content/80 mt-2 cursor-pointer hover:text-primary transition-colors" @click="openDevTools" title="点击打开开发者工具">
         {{ $t('aboutSettings.description') }}
       </p>

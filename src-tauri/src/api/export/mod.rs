@@ -761,7 +761,7 @@ fn try_simple_pdf_fallback(
     use std::io::BufWriter;
 
     // 创建新的PDF文档
-    let (doc, page1, layer1) = PdfDocument::new("MyTips Export", Mm(210.0), Mm(297.0), "Layer 1");
+    let (doc, page1, layer1) = PdfDocument::new("mytips Export", Mm(210.0), Mm(297.0), "Layer 1");
     let current_layer = doc.get_page(page1).get_layer(layer1);
 
     // 使用内置字体（仅支持ASCII）

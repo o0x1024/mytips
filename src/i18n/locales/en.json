@@ -91,7 +91,7 @@
     "copy": "Copy",
     "close": "Close",
     "refresh": "Refresh",
-    "appName": "MyTips",
+    "appName": "mytips",
     "create": "Create"
   },
   "editorToolbar": {
@@ -697,7 +697,7 @@
   "settings": {
     "title": "Settings",
     "optionsTitle": "Settings Options",
-    "footer": "MyTips Settings Center",
+    "footer": "mytips Settings Center",
     "fallbackTitle": "Settings",
     "pages": {
       "appearance": "Appearance",
@@ -1028,7 +1028,7 @@
   },
   "aiAssistant": {
     "title": "AI Assistant",
-    "description": "Chat with your favorite AI models within MyTips",
+    "description": "Chat with your favorite AI models within mytips",
     "buttons": {
       "roleManager": "Role Manager",
       "conversationList": "Conversation List",
@@ -1324,7 +1324,7 @@
     "select_ai_model": "Select AI Model",
     "select_ai_model_to_start_conversation": "Select AI model to start a conversation",
     "your_conversation_is_only_saved_locally": "Your conversations are saved locally and not uploaded to any server.",
-    "ai_assistant_description": "Chat with your favorite AI models within MyTips",
+    "ai_assistant_description": "Chat with your favorite AI models within mytips",
     "enter_your_question_or_instruction": "Enter your question or instruction",
     "input_hash_to_reference_notes": "Input '#' to reference notes",
     "send_message": "Send Message",

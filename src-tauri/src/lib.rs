@@ -135,6 +135,18 @@ pub fn run() -> anyhow::Result<()> {
             let unified_manager = rt.block_on(UnifiedDbManager::new(app_handle.clone()))?;
             app.manage(unified_manager);
             
+            // Setup window close event handler
+            if let Some(window) = app.get_webview_window("main") {
+                let window_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Prevent the window from closing and hide it instead
+                        api.prevent_close();
+                        let _ = window_clone.hide();
+                    }
+                });
+            }
+            
             // Setup global shortcut handler when building the plugin
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -156,6 +168,10 @@ pub fn run() -> anyhow::Result<()> {
                 )?;
             }
 
+            // Setup system tray for desktop platforms
+            #[cfg(desktop)]
+            setup_system_tray(app)?;
+
             // Start the clipboard listener and initial shortcut setup
             #[cfg(desktop)]
             {
@@ -170,9 +186,7 @@ pub fn run() -> anyhow::Result<()> {
                 clipboard::start_clipboard_listener(app.handle().clone());
             }
 
-            // Setup system tray for desktop platforms
-            #[cfg(desktop)]
-            setup_system_tray(app)?;
+
 
             Ok(())
         })
@@ -428,10 +442,26 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                     rect: _,
                     ..
                 } => {
+                    tracing::info!("Tray icon clicked, trying to show window");
                     if let Some(app) = tray.app_handle().get_webview_window("main") {
+                        tracing::info!("Found main window, showing it");
                         let _ = app.show();
                         let _ = app.unminimize();
                         let _ = app.set_focus();
+                    } else {
+                        tracing::error!("Main window not found, cannot show it");
+                        // 如果窗口不存在，尝试创建一个新窗口
+                        let app_handle = tray.app_handle().clone();
+                        let _ = tauri::WebviewWindowBuilder::new(
+                            &app_handle,
+                            "main",
+                            tauri::WebviewUrl::App("index.html".into())
+                        )
+                        .title("mytips")
+                        .inner_size(1400.0, 800.0)
+                        .min_inner_size(1400.0, 800.0)
+                        .center()
+                        .build();
                     }
                 }
                 TrayIconEvent::DoubleClick {
@@ -439,10 +469,14 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                     rect: _,
                     ..
                 } => {
+                    tracing::info!("Tray icon double-clicked, trying to show window");
                     if let Some(app) = tray.app_handle().get_webview_window("main") {
+                        tracing::info!("Found main window, showing it");
                         let _ = app.show();
                         let _ = app.unminimize();
                         let _ = app.set_focus();
+                    } else {
+                        tracing::error!("Main window not found, cannot show it");
                     }
                 }
                 _ => {}
