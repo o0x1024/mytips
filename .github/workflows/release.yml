@@ -195,6 +195,8 @@ jobs:
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        # 对于 ARM64 Linux，跳过 AppImage 打包
+        TAURI_BUNDLE_TARGETS: ${{ matrix.platform == 'linux-aarch64' && 'deb,rpm' || '' }}
 
     - name: Build Android App Bundle (AAB)
       if: matrix.platform == 'android'
