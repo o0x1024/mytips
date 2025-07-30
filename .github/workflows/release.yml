@@ -16,9 +16,6 @@ jobs:
           - os: ubuntu-22.04
             platform: 'linux-x86_64'
             rust_target: 'x86_64-unknown-linux-gnu'
-          - os: ubuntu-22.04
-            platform: 'linux-aarch64'
-            rust_target: 'aarch64-unknown-linux-gnu'
           - os: macos-latest
             platform: 'darwin-x86_64'
             rust_target: 'x86_64-apple-darwin'
@@ -93,73 +90,7 @@ jobs:
           libpango1.0-dev \
           libsoup-3.0-dev
 
-    # ARM Linux 交叉编译设置
-    - name: Setup ARM Linux Cross-Compilation
-      if: matrix.platform == 'linux-aarch64'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          gcc-aarch64-linux-gnu \
-          g++-aarch64-linux-gnu \
-          libc6-dev-arm64-cross
-        
-        # 添加ARM64架构支持
-        sudo dpkg --add-architecture arm64
-        
-        # 备份原始源列表
-        sudo cp /etc/apt/sources.list /etc/apt/sources.list.backup
-        
-        # 添加ARM64架构的软件源
-        sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null << 'EOF'
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy universe
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates universe
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy multiverse
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates multiverse
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-backports main restricted universe multiverse
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security main restricted
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security universe
-        deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security multiverse
-        EOF
-        
-        # 禁用默认源中的 ARM64 架构，避免冲突
-        sudo sed -i 's/^deb /deb [arch=amd64,i386] /' /etc/apt/sources.list
-        sudo sed -i 's/^deb-src /deb-src [arch=amd64,i386] /' /etc/apt/sources.list
-        
-        # 清理 apt 缓存并重新更新
-        sudo apt-get clean
-        sudo apt-get autoclean
-        sudo rm -rf /var/lib/apt/lists/*
-        sudo apt-get update
-        
-        # 安装ARM64版本的依赖库
-        sudo apt-get install -y --no-install-recommends \
-          libwebkit2gtk-4.1-dev:arm64 \
-          libgtk-3-dev:arm64 \
-          libappindicator3-dev:arm64 \
-          librsvg2-dev:arm64 \
-          libglib2.0-dev:arm64 \
-          libcairo2-dev:arm64 \
-          libatk1.0-dev:arm64 \
-          libgdk-pixbuf2.0-dev:arm64 \
-          libpango1.0-dev:arm64 \
-          libsoup-3.0-dev:arm64 \
-          libssl-dev:arm64
-        
-        # 设置Rust目标
-        rustup target add aarch64-unknown-linux-gnu
-        
-        # 设置环境变量
-        echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc' >> $GITHUB_ENV
-        echo 'PKG_CONFIG_ALLOW_CROSS=1' >> $GITHUB_ENV
-        echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig' >> $GITHUB_ENV
-        echo 'PKG_CONFIG_SYSROOT_DIR=/' >> $GITHUB_ENV
-        echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C link-args=-L/usr/lib/aarch64-linux-gnu' >> $GITHUB_ENV
-        
-        # 验证关键库文件是否存在
-        ls -la /usr/lib/aarch64-linux-gnu/libappindicator3.so* || echo "libappindicator3 not found"
-        ls -la /usr/lib/aarch64-linux-gnu/libgtk-3.so* || echo "libgtk-3 not found"
+
 
     - name: Install dependencies
       run: yarn install --frozen-lockfile
@@ -185,18 +116,10 @@ jobs:
       if: matrix.platform != 'android'
       shell: bash
       run: |
-        if [ "${{ matrix.platform }}" = "linux-aarch64" ]; then
-          # ARM64 Linux 只构建 DEB 和 RPM，跳过 AppImage 避免交叉编译问题
-          yarn tauri build --target ${{ matrix.rust_target }}
-        else
-          # 其他平台正常构建所有格式
-          yarn tauri build --target ${{ matrix.rust_target }}
-        fi
+        yarn tauri build --target ${{ matrix.rust_target }}
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        # ARM64 Linux 只构建 DEB 和 RPM，跳过 AppImage
-        TAURI_BUNDLE_TARGETS: ${{ matrix.platform == 'linux-aarch64' && 'deb,rpm' || 'all' }}
 
     - name: Build Android App Bundle (AAB)
       if: matrix.platform == 'android'
@@ -299,13 +222,7 @@ jobs:
           find "$TARGET_DIR/tauri-build-linux-x86_64/rpm" -name "*.rpm.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-amd64.rpm.sig" \;
         fi
         
-        # 查找并移动 Linux ARM64 产物（只有 DEB 和 RPM）
-        if [ -d "$TARGET_DIR/tauri-build-linux-aarch64" ]; then
-          find "$TARGET_DIR/tauri-build-linux-aarch64/deb" -name "*.deb" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-arm64.deb" \;
-          find "$TARGET_DIR/tauri-build-linux-aarch64/deb" -name "*.deb.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-arm64.deb.sig" \;
-          find "$TARGET_DIR/tauri-build-linux-aarch64/rpm" -name "*.rpm" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-arm64.rpm" \;
-          find "$TARGET_DIR/tauri-build-linux-aarch64/rpm" -name "*.rpm.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-arm64.rpm.sig" \;
-        fi
+
 
         # 查找并移动 macOS x64 产物
         if [ -d "$TARGET_DIR/tauri-build-darwin-x86_64" ]; then

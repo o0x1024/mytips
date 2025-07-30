@@ -83,3 +83,4 @@ failed to bundle project: `Exec format error (os error 8)`
 ## 更新时间
 
 2024-12-19 - 初始修复方案实施
+2024-12-19 - 删除 Linux ARM 编译配置，不再支持 ARM64 Linux 构建
