@@ -142,6 +142,7 @@ pub fn run() -> anyhow::Result<()> {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         // Prevent the window from closing and hide it instead
                         api.prevent_close();
+                        #[cfg(desktop)]
                         let _ = window_clone.hide();
                     }
                 });
