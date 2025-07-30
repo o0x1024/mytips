@@ -106,7 +106,7 @@ jobs:
         # 添加ARM64架构支持
         sudo dpkg --add-architecture arm64
         
-        # 添加ARM64架构的软件源
+        # 添加ARM64架构的软件源 - 修改为更可靠的格式
         sudo tee /etc/apt/sources.list.d/arm64.list > /dev/null << 'EOF'
         deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy main restricted
         deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-updates main restricted
@@ -120,11 +120,14 @@ jobs:
         deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports jammy-security multiverse
         EOF
         
-        # 更新软件包列表
+        # 清理 apt 缓存并重新更新
+        sudo apt-get clean
+        sudo apt-get autoclean
+        sudo rm -rf /var/lib/apt/lists/
         sudo apt-get update
         
-        # 安装ARM64版本的依赖库
-        sudo apt-get install -y \
+        # 安装ARM64版本的依赖库 - 使用 --no-install-recommends 减少不必要的依赖
+        sudo apt-get install -y --no-install-recommends \
           libwebkit2gtk-4.1-dev:arm64 \
           libgtk-3-dev:arm64 \
           libappindicator3-dev:arm64 \
@@ -134,15 +137,8 @@ jobs:
           libatk1.0-dev:arm64 \
           libgdk-pixbuf2.0-dev:arm64 \
           libpango1.0-dev:arm64 \
-          libsoup-3.0-dev:arm64 || true
-        
-        # 如果上面的安装失败，尝试安装更常见的版本
-        sudo apt-get install -y \
-          libwebkit2gtk-4.0-dev:arm64 \
-          libsoup2.4-dev:arm64 || true
-        
-        # 设置OpenSSL（可选，如果遇到OpenSSL相关错误）
-        sudo apt-get install -y libssl-dev:arm64 || true
+          libsoup-3.0-dev:arm64 \
+          libssl-dev:arm64
         
         # 设置Rust目标
         rustup target add aarch64-unknown-linux-gnu
@@ -152,6 +148,8 @@ jobs:
         echo 'PKG_CONFIG_ALLOW_CROSS=1' >> $GITHUB_ENV
         echo 'PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig' >> $GITHUB_ENV
         echo 'PKG_CONFIG_SYSROOT_DIR=/usr/aarch64-linux-gnu/' >> $GITHUB_ENV
+        # 添加链接器搜索路径
+        echo 'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C link-args=-L/usr/lib/aarch64-linux-gnu' >> $GITHUB_ENV
         
 
     - name: Install dependencies
