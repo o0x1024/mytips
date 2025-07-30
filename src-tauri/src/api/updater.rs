@@ -234,6 +234,7 @@ pub async fn check_for_updates_no_signature(
     //     "x86_64"
     // };
     
+    // 使用统一的latest.json文件
     let endpoint_url = format!("https://github.com/o0x1024/mytips/releases/latest/download/latest.json");
     
     println!("Checking update endpoint: {}", endpoint_url);
