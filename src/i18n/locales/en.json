@@ -590,7 +590,8 @@
       },
       "embedded_replica": {
         "label": "Embedded Replica",
-        "description": "Recommended. Local-first with background sync to a remote database. Best of both worlds."
+        "description": "Recommended. Local-first with background sync to a remote database. Best of both worlds.",
+        "recommended": "Recommended"
       }
     },
     "actions": {
@@ -1260,6 +1261,25 @@
     },
     "statusPaused": "Recording paused..."
   },
+  "syncStatus": {
+    "online": "Online",
+    "offline": "Offline",
+    "error": "Error",
+    "syncing": "Syncing",
+    "manualSync": "Manual Sync",
+    "showDetails": "Show Details",
+    "mode": "Mode",
+    "lastSync": "Last Sync",
+    "never": "Never",
+    "justNow": "Just now",
+    "minutesAgo": "{minutes} minutes ago",
+    "hoursAgo": "{hours} hours ago",
+    "daysAgo": "{days} days ago",
+    "isSyncing": "Is Syncing",
+    "pendingChanges": "Pending Changes",
+    "nextSync": "Next Sync",
+    "lastError": "Last Error"
+  },
   "ai": {
     "send_failed":"Send failed",
     "resend": "Resend",
@@ -1344,4 +1364,4 @@
     "describe_the_characteristics_of_the_role": "Describe the characteristics of the role",
     "you_are_an_experienced_programming_mentor": "You are an experienced programming mentor"
   }
-} 
+}

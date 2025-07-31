@@ -590,7 +590,8 @@
       },
       "embedded_replica": {
         "label": "嵌入式副本",
-        "description": "推荐。本地优先，后台同步到远程数据库。两全其美。"
+        "description": "推荐。本地优先，后台同步到远程数据库。两全其美。",
+        "recommended": "推荐"
       }
     },
     "actions": {
@@ -1261,6 +1262,25 @@
     },
     "statusPaused": "录制已暂停..."
   },
+  "syncStatus": {
+    "online": "在线",
+    "offline": "离线",
+    "error": "错误",
+    "syncing": "同步中",
+    "manualSync": "手动同步",
+    "showDetails": "显示详情",
+    "mode": "模式",
+    "lastSync": "上次同步",
+    "never": "从未",
+    "justNow": "刚刚",
+    "minutesAgo": "{minutes}分钟前",
+    "hoursAgo": "{hours}小时前",
+    "daysAgo": "{days}天前",
+    "isSyncing": "正在同步",
+    "pendingChanges": "待同步更改",
+    "nextSync": "下次同步",
+    "lastError": "最后错误"
+  },
   "ai": {
     "custom":"Custom",
     "send_failed":"发送失败",
@@ -1346,4 +1366,4 @@
     "describe_the_characteristics_of_the_role": "描述角色的特点",
     "you_are_an_experienced_programming_mentor": "你是一位经验丰富的编程导师"
   }
-} 
+}

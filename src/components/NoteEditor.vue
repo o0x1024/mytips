@@ -302,11 +302,13 @@ import 'prismjs/components/prism-csharp'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
+import { useLocalStorageStore } from '../stores/localStorageStore'
 import { useI18n } from 'vue-i18n'
 import { renderMarkdown, renderInlineMarkdown } from '../services/markdownService'
 
 
 const { t } = useI18n()
+const localStorageStore = useLocalStorageStore()
 
 // Image Zoom/Pan state
 const zoomLevel = ref(0.7)
@@ -316,7 +318,7 @@ const isPanning = ref(false)
 const panStart = ref({ x: 0, y: 0 })
 const imageStart = ref({ x: 0, y: 0 })
 
-const savedMode = localStorage.getItem('mytips-editor-mode') || 'split';
+const savedMode = localStorageStore.data.editorMode || 'split';
 
 
 // 简化的语言组件初始化函数
@@ -1454,7 +1456,7 @@ function cleanupStream() {
 
 
 function setEditMode(mode: string) {
-  localStorage.setItem('mytips-editor-mode', mode);
+  localStorageStore.setEditorMode(mode);
   isWysiwygMode.value = false; 
   isEditOnly.value = false;
   isPreviewMode.value = false;
@@ -1469,9 +1471,6 @@ function setEditMode(mode: string) {
   } else if (mode === 'wysiwyg') {
     isWysiwygMode.value = true;
   }
-    
-  // Save the selected mode to localStorage
-  localStorage.setItem('mytips-editor-mode', mode);
 
   // 模式切换后重新应用代码块主题
   nextTick(() => {
@@ -1789,8 +1788,8 @@ function exportNote() {
 }
 
 // 在组件属性下添加以下状态变量
-const currentHighlightTheme = ref(localStorage.getItem('mytips-highlight-theme') || getDefaultHighlightTheme())
-const currentMarkdownTheme = ref(localStorage.getItem('mytips-markdown-theme') || 'github')
+const currentHighlightTheme = ref(localStorageStore.data.highlightTheme || getDefaultHighlightTheme())
+const currentMarkdownTheme = ref(localStorageStore.data.markdownTheme || 'github')
 
 // 添加根据系统主题自动选择代码高亮主题的函数
 function getDefaultHighlightTheme() {
@@ -1876,7 +1875,7 @@ onMounted(async () => {
   render()
 
   // 加载保存的代码高亮主题
-  const savedTheme = localStorage.getItem('mytips-highlight-theme')
+  const savedTheme = localStorageStore.data.highlightTheme
   const theme = savedTheme || getDefaultHighlightTheme()
   currentHighlightTheme.value = theme
   console.log(`初始化代码高亮主题: ${theme}`)
@@ -1890,7 +1889,7 @@ onMounted(async () => {
   }
 
   // 加载保存的Markdown主题
-  const savedMarkdownTheme = localStorage.getItem('mytips-markdown-theme')
+  const savedMarkdownTheme = localStorageStore.data.markdownTheme
   const markdownTheme = savedMarkdownTheme || 'github'
   currentMarkdownTheme.value = markdownTheme
   console.log(`初始化Markdown主题: ${markdownTheme}`)
@@ -1946,7 +1945,7 @@ onMounted(async () => {
     // 添加监听器以响应系统主题变化
     const themeChangeHandler = (event: MediaQueryListEvent) => {
       // 如果用户没有手动设置主题，则自动切换
-      if (!localStorage.getItem('mytips-highlight-theme-manual')) {
+      if (!localStorageStore.data.highlightThemeManual) {
         const newTheme = event.matches ? 'tomorrow-night' : 'default'
         setHighlightTheme(newTheme)
       }
@@ -2007,9 +2006,9 @@ async function setHighlightTheme(theme: string) {
   console.log(`切换代码高亮主题: ${theme}`);
 
   currentHighlightTheme.value = theme;
-  localStorage.setItem('mytips-highlight-theme', theme);
+  localStorageStore.setHighlightTheme(theme);
   // 标记用户已手动选择主题
-  localStorage.setItem('mytips-highlight-theme-manual', 'true');
+  localStorageStore.setHighlightThemeManual(true);
 
   // 动态获取对应主题的 CSS 资源 URL（通过 ?url 让构建工具返回文件路径而不是自动插入 style）
   const themeUrlLoaders: Record<string, () => Promise<string>> = {
@@ -2223,7 +2222,7 @@ watch(() => localNote.value.content, (newValue, oldValue) => {
       }, 200)
     }
   });
-  }, 500) as unknown as number; // 500ms 防抖
+  }, 100) as unknown as number; // 减少防抖延迟从500ms到100ms，提供更即时的预览更新
 })
 
 // 在切换模式时同步滚动位置

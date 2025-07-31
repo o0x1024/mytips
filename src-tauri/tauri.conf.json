@@ -14,8 +14,8 @@
       {
         "width": 1400,
         "height": 800,
-        "minWidth": 1400,
-        "minHeight": 800,
+        "minWidth": 900,
+        "minHeight": 600,
         "title": "mytips",
         "center": true,
         "resizable": true,

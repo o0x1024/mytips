@@ -168,6 +168,7 @@
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import { useTipsStore } from '../stores/tipsStore'
+import { useLocalStorageStore } from '../stores/localStorageStore'
 
 
 // 类型定义
@@ -190,6 +191,7 @@ const emit = defineEmits<{
 
 // Store
 const tipsStore = useTipsStore()
+const localStorageStore = useLocalStorageStore()
 
 // 标签相关状态
 const newTag = ref('')
@@ -272,7 +274,7 @@ function filterAvailableTags() {
 function loadFrequentTags() {
   try {
     // 从本地存储获取标签使用频率
-    const tagUsageStr = localStorage.getItem('mytips-tag-usage') || '{}'
+    const tagUsageStr = JSON.stringify(localStorageStore.data.tagUsage)
     const tagUsage = JSON.parse(tagUsageStr) as Record<string, number>
     
     // 获取常用标签（排除已添加的标签）
@@ -437,15 +439,8 @@ function selectExistingTag(tag: Tag) {
 // 更新标签使用频率
 function updateTagUsage(tagId: string) {
   try {
-    // 从本地存储获取标签使用频率
-    const tagUsageStr = localStorage.getItem('mytips-tag-usage') || '{}'
-    const tagUsage = JSON.parse(tagUsageStr) as Record<string, number>
-    
     // 更新使用次数
-    tagUsage[tagId] = (tagUsage[tagId] || 0) + 1
-    
-    // 保存回本地存储
-    localStorage.setItem('mytips-tag-usage', JSON.stringify(tagUsage))
+    localStorageStore.incrementTagUsage(tagId)
   } catch (error) {
     console.error('Failed to update tag usage frequency:', error)
   }
@@ -566,4 +561,4 @@ watch(() => props.titleText, () => {
   font-style: italic;
   opacity: 0.8;
 }
-</style> 
+</style>

@@ -125,15 +125,17 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useUIStore } from '../../stores/uiStore'
+import { useLocalStorageStore } from '../../stores/localStorageStore'
 
 const {  locale } = useI18n()
 const uiStore = useUIStore()
+const localStorageStore = useLocalStorageStore()
 
 // 语言设置
 const selectedLanguage = ref(locale.value)
 function changeLanguage() {
   locale.value = selectedLanguage.value
-  localStorage.setItem('user-language', selectedLanguage.value); // 持久化语言设置
+  localStorageStore.setUserLanguage(selectedLanguage.value); // 持久化语言设置
   uiStore.setLanguage(selectedLanguage.value)
 }
 
@@ -178,4 +180,4 @@ function resetUISettings() {
   locale.value = selectedLanguage.value
   uiStore.setLanguage(locale.value)
 }
-</script> 
+</script>

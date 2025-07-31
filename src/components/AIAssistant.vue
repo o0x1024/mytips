@@ -48,7 +48,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="ai-assistant-container">
+  <div class="ai-assistant-container bg-base-100">
     <h2 class="text-xl font-bold mb-4">AI 助手</h2>
     
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

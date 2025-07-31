@@ -28,7 +28,7 @@
             <div v-if="databaseStatus" class="alert mb-4">
               <div class="flex items-center gap-2">
                 <span class="text-lg">📊</span>
-                <div>
+                <div class="flex-1">
                   <div class="font-semibold">
                     {{ $t('dataSettings.currentMode') }}: {{ $t(`dataSettings.modes.${currentDatabaseMode}.label`) }}
                   </div>
@@ -49,9 +49,14 @@
               </div>
             </div>
 
+            <!-- 同步状态指示器 -->
+            <div v-if="databaseStore.supportsSync" class="mb-4">
+              <SyncStatusIndicator />
+            </div>
+
             <!-- 模式选择卡片 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              <div v-for="mode in availableModes.filter((m: any) => m.supported && m.value !== 'embedded_replica')" 
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+              <div v-for="mode in availableModes.filter((m: any) => m.supported)" 
                    :key="mode.value"
                    class="card bg-base-200 hover:bg-base-300 cursor-pointer transition-all"
                    :class="{ 'border-2 border-primary': currentDatabaseMode === mode.value }"
@@ -61,6 +66,9 @@
                     <div class="flex-1">
                       <h3 class="font-semibold">{{ $t(`dataSettings.modes.${mode.value}.label`) }}</h3>
                       <p class="text-sm opacity-70">{{ $t(`dataSettings.modes.${mode.value}.description`) }}</p>
+                      <div v-if="mode.value === 'embedded_replica'" class="mt-2">
+                        <div class="badge badge-success badge-sm">{{ $t('dataSettings.modes.embedded_replica.recommended') }}</div>
+                      </div>
                     </div>
                     <div v-if="currentDatabaseMode === mode.value" class="badge badge-primary">{{ $t('dataSettings.currentMode') }}</div>
                   </div>
@@ -70,14 +78,14 @@
 
             <!-- 快速操作按钮 -->
             <div class="flex gap-2 flex-wrap">
-              <!-- <button 
+              <button 
                 v-if="currentDatabaseMode !== 'embedded_replica' && hasRemoteConfig"
                 class="btn btn-primary btn-sm"
                 @click="switchToEmbeddedReplicaMode"
                 :disabled="isOperationInProgress">
                 <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
                 {{ $t('dataSettings.actions.switchToEmbedded') }}
-              </button> -->
+              </button>
               
               <button 
                 v-if="databaseStore.supportsSync"
@@ -327,6 +335,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { showMessage, showConfirm } from '../../services/dialog'
 import ConflictResolutionDialog from '../dialogs/ConflictResolutionDialog.vue'
 import SyncHistoryDialog from '../dialogs/SyncHistoryDialog.vue'
+import SyncStatusIndicator from '../SyncStatusIndicator.vue'
 import { useDatabaseStore } from '../../stores/databaseStore'
 import { DatabaseService } from '../../services/databaseService'
 import type { LegacySyncConfig } from '../../types/database'
@@ -385,20 +394,20 @@ const isLocalDevUrl = computed(() => {
          url.startsWith('https://localhost')
 })
 
-// const hasRemoteConfig = computed(() => {
-//   const hasUrl = syncConfig.value?.remote_url?.trim() !== ''
-//   if (!hasUrl) return false
+const hasRemoteConfig = computed(() => {
+  const hasUrl = syncConfig.value?.remote_url?.trim() !== ''
+  if (!hasUrl) return false
   
-//   const hasToken = syncConfig.value?.auth_token?.trim() !== ''
+  const hasToken = syncConfig.value?.auth_token?.trim() !== ''
   
-//   // 本地开发环境允许空token
-//   if (isLocalDevUrl.value) {
-//     return true
-//   }
+  // 本地开发环境允许空token
+  if (isLocalDevUrl.value) {
+    return true
+  }
   
-//   // 生产环境需要token
-//   return hasToken
-// })
+  // 生产环境需要token
+  return hasToken
+})
 
 // === 数据库状态管理 ===
 
@@ -472,7 +481,7 @@ async function switchDatabaseMode(mode: string, params?: any) {
 /**
  * 切换到嵌入式副本模式（推荐）
  */
-/* async function switchToEmbeddedReplicaMode() {
+async function switchToEmbeddedReplicaMode() {
   
   // 检查是否有远程配置信息
   if (!hasRemoteConfig.value) {
@@ -529,7 +538,7 @@ async function switchDatabaseMode(mode: string, params?: any) {
       showMessage(`${t('dataSettings.prompts.switchFailed')}: ${error}`, { title: t('common.error') })
     }
   }
-} */
+}
 
 /**
  * 执行数据库同步
@@ -884,4 +893,4 @@ onMounted(async () => {
 .cursor-text:hover {
   @apply shadow-sm;
 }
-</style> 
+</style>

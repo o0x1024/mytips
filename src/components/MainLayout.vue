@@ -96,7 +96,7 @@
         
         <div 
           v-if="!sidebarCollapsed"
-          class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
+          class="resize-handle sidebar-resize-handle"
           @mousedown="startResizeSidebar"
           :title="t('mainLayout.resizeSidebar')"
         ></div>
@@ -146,7 +146,7 @@
             />
             
             <div 
-              class="absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-primary/30 transition-colors duration-200 z-10"
+              class="resize-handle notelist-resize-handle"
               @mousedown="startResizeNoteList"
               :title="t('mainLayout.resizeNoteList')"
             ></div>
@@ -360,6 +360,7 @@ import { showConfirm, showAlert } from '../services/dialog'
 import { useResponsive } from '../composables/useResponsive'
 import { invoke } from '@tauri-apps/api/core'
 import { useI18n } from 'vue-i18n'
+import { useLocalStorageStore } from '../stores/localStorageStore'
 
 
 // Components
@@ -388,6 +389,7 @@ const databaseStore = useDatabaseStore()
 const { databaseChangeCounter } = storeToRefs(databaseStore)
 
 const encryptionStore = useEncryptionStore()
+const localStorageStore = useLocalStorageStore()
 
 // Router
 const router = useRouter()
@@ -660,16 +662,13 @@ async function refreshNotes() {
 // --- Lifecycle Hooks ---
 
 onMounted(async () => {
-  // 从 localStorage 恢复宽度
-  const savedSidebarWidth = localStorage.getItem('sidebarWidth');
-  if (savedSidebarWidth) sidebarWidth.value = parseFloat(savedSidebarWidth);
+  // 从 localStorageStore 恢复宽度
+  if (localStorageStore.data.sidebarWidth) sidebarWidth.value = localStorageStore.data.sidebarWidth;
   
-  const savedNoteListWidth = localStorage.getItem('noteListWidth');
-  if (savedNoteListWidth) noteListWidth.value = parseFloat(savedNoteListWidth);
+  if (localStorageStore.data.noteListWidth) noteListWidth.value = localStorageStore.data.noteListWidth;
 
-  // 从 localStorage 恢复笔记列表显示状态
-  const savedNoteListHidden = localStorage.getItem('noteListHidden');
-  if (savedNoteListHidden) noteListHidden.value = savedNoteListHidden === 'true';
+  // 从 localStorageStore 恢复笔记列表显示状态
+  noteListHidden.value = localStorageStore.data.noteListHidden;
 
   await fetchInitialData()
   tipsStore.fetchTips(true)
@@ -857,8 +856,7 @@ async function deleteNote(id: string) {
       // 调用后端API删除笔记
       await tipsStore.deleteTip(id);
       
-      // 前端直接更新当前视图中的笔记列表
-      storeTips.value = storeTips.value.filter(note => note.id !== id);
+
       
       // 如果笔记有分类，直接在前端更新笔记本树的计数
       if (categoryId) {
@@ -927,6 +925,32 @@ async function updateNote(updatedFields: Partial<Tip> & { id: string }) {
   const idx = storeTips.value.findIndex(t => t.id === savedNote.id)
   if (idx !== -1) {
     storeTips.value[idx] = tipSummary
+  }
+
+  // 如果当前在笔记本视图下，同时更新currentCategoryBrowse中的数据
+  if (selectedNotebookId.value && tipsStore.currentCategoryBrowse) {
+    const categoryBrowse = tipsStore.currentCategoryBrowse
+    
+    // 更新featured_tip（如果是特色笔记）
+    if (categoryBrowse.featured_tip && categoryBrowse.featured_tip.id === savedNote.id) {
+      // 使用Object.assign确保响应式更新
+      Object.assign(categoryBrowse.featured_tip, {
+        title: savedNote.title,
+        content: savedNote.content,
+        updated_at: savedNote.updated_at,
+        tags: savedNote.tags
+      })
+    }
+    
+    // 更新tip_summaries中的对应项
+    const summaryIdx = categoryBrowse.tip_summaries.findIndex(t => t.id === savedNote.id)
+    if (summaryIdx !== -1) {
+      // 直接替换数组元素以确保响应式更新
+      categoryBrowse.tip_summaries.splice(summaryIdx, 1, tipSummary)
+    }
+    
+    // 强制触发响应式更新（Windows兼容性）
+    tipsStore.currentCategoryBrowse = { ...categoryBrowse }
   }
 
   // 处理分类变更计数
@@ -998,56 +1022,80 @@ function createResizeHandler(
 ) {
   return function (e: MouseEvent) {
     e.preventDefault();
+    e.stopPropagation();
 
     const container = document.querySelector(containerSelector) as HTMLElement;
-    if (!container) return;
+    if (!container) {
+      console.warn(`Container not found: ${containerSelector}`);
+      return;
+    }
 
     const startX = e.clientX;
     const startWidth = widthRef.value;
-    let animationFrameId: number | null = null;
+    let isDragging = true;
 
-    // Add classes to disable transitions and set global cursor/user-select
+    // 创建一个全局覆盖层
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.cursor = 'col-resize';
+    overlay.style.zIndex = '9999'; // 确保在最上层
+    document.body.appendChild(overlay);
+
     document.body.classList.add('dragging');
     container.classList.add('resizing');
 
     const onMouseMove = (moveEvent: MouseEvent) => {
-      // If mouse button is released, stop listening
-      if (moveEvent.buttons === 0) {
-        onMouseUp();
-        return;
+      if (!isDragging) return;
+
+      moveEvent.preventDefault();
+      moveEvent.stopPropagation();
+
+      const deltaX = moveEvent.clientX - startX;
+      let newWidth = startWidth + deltaX;
+      newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
+      widthRef.value = newWidth;
+    };
+
+    const onMouseUp = (upEvent?: Event) => {
+      if (!isDragging) return;
+      isDragging = false;
+
+      if (upEvent) {
+        upEvent.preventDefault();
+        upEvent.stopPropagation();
       }
 
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      // 移除覆盖层和事件监听器
+      document.body.removeChild(overlay);
+      overlay.removeEventListener('mousemove', onMouseMove, { capture: true });
+      overlay.removeEventListener('mouseup', onMouseUp as EventListener, { capture: true });
+      overlay.removeEventListener('mouseleave', onMouseUp as EventListener, { capture: true });
+      window.removeEventListener('blur', onMouseUp as EventListener);
 
-      animationFrameId = requestAnimationFrame(() => {
-        const deltaX = moveEvent.clientX - startX;
-        let newWidth = startWidth + deltaX;
+      if (storageKey === 'sidebarWidth') {
+        localStorageStore.setSidebarWidth(widthRef.value);
+      } else if (storageKey === 'noteListWidth') {
+        localStorageStore.setNoteListWidth(widthRef.value);
+      }
 
-        // Clamp width within min/max bounds
-        newWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
-
-        container.style.width = `${newWidth}px`;
-      });
-    };
-
-    const onMouseUp = () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      
-      const finalWidth = parseFloat(container.style.width) || widthRef.value;
-      widthRef.value = finalWidth;
-      localStorage.setItem(storageKey, String(finalWidth));
-
-      // Cleanup event listeners
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-
-      // Cleanup classes
       document.body.classList.remove('dragging');
       container.classList.remove('resizing');
+
+      container.classList.add('resize-complete');
+      setTimeout(() => {
+        container.classList.remove('resize-complete');
+      }, 200);
     };
 
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
+    // 在覆盖层上监听事件
+    overlay.addEventListener('mousemove', onMouseMove, { capture: true, passive: false });
+    overlay.addEventListener('mouseup', onMouseUp as EventListener, { capture: true, passive: false });
+    overlay.addEventListener('mouseleave', onMouseUp as EventListener, { capture: true, passive: false });
+    window.addEventListener('blur', onMouseUp as EventListener, { once: true });
   };
 }
 
@@ -1056,7 +1104,7 @@ const startResizeNoteList = createResizeHandler('.note-list-container', noteList
 
 function toggleNoteList() {
   noteListHidden.value = !noteListHidden.value;
-  localStorage.setItem('noteListHidden', String(noteListHidden.value));
+  localStorageStore.setNoteListHidden(noteListHidden.value);
 }
 
 async function selectNotebook(id: string) {
@@ -1352,6 +1400,12 @@ function handlePasswordCancel() {
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 10;
   will-change: background-color;
+  /* Windows兼容性增强 */
+  touch-action: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
 .resize-handle:hover {
@@ -1362,6 +1416,30 @@ function handlePasswordCancel() {
 .resize-handle:active {
   background-color: rgba(var(--primary), 0.5);
   width: 6px;
+}
+
+/* Windows下增强拖拽手柄的可见性 */
+.sidebar-resize-handle,
+.notelist-resize-handle {
+  /* 在Windows下提供更明显的视觉提示 */
+  border-right: 1px solid transparent;
+}
+
+.sidebar-resize-handle:hover,
+.notelist-resize-handle:hover {
+  border-right-color: rgba(var(--primary), 0.4);
+  background: linear-gradient(90deg, transparent, rgba(var(--primary), 0.1));
+}
+
+/* Windows高DPI显示器优化 */
+@media (-webkit-min-device-pixel-ratio: 1.5), (min-resolution: 144dpi) {
+  .resize-handle {
+    width: 6px;
+  }
+  
+  .resize-handle:hover {
+    width: 8px;
+  }
 }
 
 /* 拖拽时的全局样式 */
@@ -1519,4 +1597,4 @@ body.dragging .resize-handle {
 .dragging .note-list-container {
   contain: layout style paint;
 }
-</style> 
+</style>

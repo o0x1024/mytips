@@ -1,5 +1,5 @@
 <template>
-  <div class="flex flex-col h-screen">
+  <div class="flex flex-col h-screen bg-base-100">
     <!-- 顶部导航 -->
     <div class="navbar bg-base-200 px-4">
       <div class="flex-1">
@@ -109,7 +109,7 @@
       </nav>
 
       <!-- 右侧内容区域 -->
-      <div class="flex-1 overflow-auto p-4 md:p-6">
+      <div class="flex-1 overflow-auto p-4 md:p-6 bg-base-100">
         <div class="max-w-3xl mx-auto">
           <!-- 动态渲染设置组件 -->
           <component :is="currentSettingComponent" />
@@ -300,4 +300,4 @@ nav h2 {
 nav .mt-auto .text-xs {
   color: hsl(var(--bc) / 0.6) !important;
 }
-</style> 
+</style>

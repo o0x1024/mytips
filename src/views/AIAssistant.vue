@@ -1,5 +1,5 @@
 <template>
-  <div class="ai-assistant-page flex flex-col h-screen" @click="hideContextMenu">
+  <div class="ai-assistant-page flex flex-col h-screen bg-base-100" @click="hideContextMenu">
     <!-- 顶部区域 -->
     <div class="page-header p-2 bg-base-200 flex items-center justify-between">
       <div class="flex items-center">
