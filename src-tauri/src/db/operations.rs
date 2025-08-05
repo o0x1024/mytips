@@ -1104,7 +1104,7 @@ pub async fn save_tip_image(
 ) -> Result<()> {
     let now = Utc::now().timestamp_millis();
     
-    // 解析图片数据获取格式和大小信息
+    // 解析媒体数据获取格式和大小信息（支持图片和视频）
     let (image_format, file_size, _width, _height) = parse_image_data(image_data)?;
     
     conn.execute(
@@ -1128,7 +1128,7 @@ pub async fn save_tip_image(
     Ok(())
 }
 
-/// 获取笔记的所有图片
+/// 获取笔记的所有媒体文件（图片和视频）
 pub async fn get_tip_images(conn: &DbConnection, tip_id: &str) -> Result<Vec<(String, String)>> {
     let mut rows = conn.query(
         "SELECT image_id, image_data FROM tip_images WHERE tip_id = ?1 ORDER BY created_at",
@@ -1144,7 +1144,7 @@ pub async fn get_tip_images(conn: &DbConnection, tip_id: &str) -> Result<Vec<(St
     Ok(images)
 }
 
-/// 分页获取笔记图片
+/// 分页获取笔记媒体文件（图片和视频）
 pub async fn get_tip_images_paginated(
     conn: &DbConnection, 
     tip_id: &str, 
@@ -1166,7 +1166,7 @@ pub async fn get_tip_images_paginated(
     Ok(images)
 }
 
-/// 获取笔记图片总数
+/// 获取笔记媒体文件总数（图片和视频）
 pub async fn get_tip_images_count(conn: &DbConnection, tip_id: &str) -> Result<i64> {
     let count: i64 = conn.query(
         "SELECT COUNT(*) FROM tip_images WHERE tip_id = ?1",
@@ -1216,9 +1216,9 @@ pub async fn get_tip_image(conn: &DbConnection, image_id: &str) -> Result<Option
     }
 }
 
-/// 解析图片数据格式和大小
+/// 解析媒体数据格式和大小（支持图片和视频）
 fn parse_image_data(base64_data: &str) -> Result<(String, i64, Option<i32>, Option<i32>)> {
-    // 简单的格式检测
+    // 格式检测 - 支持图片和视频
     let format = if base64_data.starts_with("data:image/png") {
         "png"
     } else if base64_data.starts_with("data:image/jpeg") || base64_data.starts_with("data:image/jpg") {
@@ -1227,6 +1227,16 @@ fn parse_image_data(base64_data: &str) -> Result<(String, i64, Option<i32>, Opti
         "gif"
     } else if base64_data.starts_with("data:image/webp") {
         "webp"
+    } else if base64_data.starts_with("data:video/mp4") {
+        "mp4"
+    } else if base64_data.starts_with("data:video/webm") {
+        "webm"
+    } else if base64_data.starts_with("data:video/ogg") {
+        "ogg"
+    } else if base64_data.starts_with("data:video/avi") {
+        "avi"
+    } else if base64_data.starts_with("data:video/mov") || base64_data.starts_with("data:video/quicktime") {
+        "mov"
     } else {
         "unknown"
     };

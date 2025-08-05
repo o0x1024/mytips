@@ -63,6 +63,10 @@
             ref="markdownEditor"
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
+    @drop="handleDrop"
+    @dragover="handleDragOver"
+    @dragenter="handleDragEnter"
+    @dragleave="handleDragLeave"
             @keydown="handleKeyDown"
             @preview-scroll="handlePreviewScroll"
             @close-search="showSearch = false"
@@ -1541,21 +1545,21 @@ function setupDocumentClickListener() {
   })
 }
 
-// 修改handlePaste函数
+// 修改handlePaste函数以支持多种媒体文件
 async function handlePaste(event: ClipboardEvent) {
-  // 检查是否包含图片
+  // 检查是否包含媒体文件
   const items = event.clipboardData?.items
   if (!items) return
 
-  let hasImage = false
+  let hasMediaFile = false
 
   // 检查剪贴板中的所有项
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
 
-    // 如果是图片类型
-    if (item.type.indexOf('image') !== -1) {
-      hasImage = true
+    // 检查是否为支持的媒体文件类型
+    if (isSupportedMediaType(item.type)) {
+      hasMediaFile = true
 
       // 防止默认粘贴行为
       event.preventDefault()
@@ -1568,81 +1572,13 @@ async function handlePaste(event: ClipboardEvent) {
         // 显示处理中状态
         isAIProcessing.value = true
 
-        // 将图片转换为Base64
-        const base64Image = await convertImageToBase64(file)
-        console.log(`图片转换为Base64格式成功，长度: ${base64Image.length}`)
-
-        // 生成唯一ID
-        const imageId = `img_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-        console.log(`生成图片ID: ${imageId}`)
-
-        // 确保笔记已保存（有ID）
-        if (!localNote.value.id) {
-          throw new Error('请先保存笔记再粘贴图片')
-        }
-        console.log(`笔记ID: ${localNote.value.id}，准备保存图片`)
-
-        // 保存图片到数据库
-        console.log(`调用save_tip_image API，参数: tip_id=${localNote.value.id}, image_id=${imageId}`)
-        await invoke('save_tip_image', {
-          imageData: {
-            tip_id: localNote.value.id,
-            image_id: imageId,
-            image_data: base64Image
-          }
-        })
-        console.log('图片已成功保存到数据库')
-
-        // 确保images对象存在
-        if (!localNote.value.images) {
-          localNote.value.images = {}
-        }
-
-        // 保存图片到本地状态
-        localNote.value.images[imageId] = base64Image
-
-        // 在光标位置插入Markdown图片引用
-        const textarea = editorTextarea.value
-        if (textarea) {
-          const start = textarea.selectionStart
-          const end = textarea.selectionEnd
-
-          // 构建Markdown图片引用，使用本地ID引用图片
-          const imageMarkdown = `![图片](local://${imageId})`
-
-          // 在光标位置插入
-          localNote.value.content =
-            localNote.value.content.substring(0, start) +
-            imageMarkdown +
-            localNote.value.content.substring(end)
-
-          // 更新界面 - 确保编辑器内容更新
-          nextTick(() => {
-            if (textarea) {
-              textarea.value = localNote.value.content
-              textarea.dispatchEvent(new Event('input', { bubbles: true }))
-
-              // 设置光标位置到图片引用后
-              const newCursorPosition = start + imageMarkdown.length
-              textarea.setSelectionRange(newCursorPosition, newCursorPosition)
-              textarea.focus()
-            }
-          })
-
-          // 立即更新编辑器状态以显示图片
-          autoSave()
-
-          // 确保笔记被保存到列表
-          saveNoteToList()
-        }
-
-        // 显示成功提示
-        console.log('图片已保存到数据库，ID:', imageId)
+        // 处理媒体文件
+        await handleMediaFileUpload(file)
       } catch (error) {
-        console.error('处理粘贴图片失败:', error)
+        console.error('处理粘贴媒体文件失败:', error)
 
         // 获取详细的错误信息
-        let errorMessage = '处理图片失败';
+        let errorMessage = '处理媒体文件失败';
         if (error instanceof Error) {
           errorMessage = `${errorMessage}: ${error.message}`;
           console.error('错误详情:', error.stack);
@@ -1655,19 +1591,176 @@ async function handlePaste(event: ClipboardEvent) {
         isAIProcessing.value = false
       }
 
-      // 只处理第一张图片
+      // 只处理第一个媒体文件
       break
     }
   }
 
-  // 如果没有图片，则使用默认粘贴行为
-  if (!hasImage) {
+  // 如果没有媒体文件，则使用默认粘贴行为
+  if (!hasMediaFile) {
     return true
   }
 }
 
-// 将图片文件转换为Base64，重构为更可靠的实现
-function convertImageToBase64(file: File): Promise<string> {
+// 检查是否为支持的媒体文件类型
+function isSupportedMediaType(mimeType: string): boolean {
+  const supportedTypes = [
+    // 图片格式
+    'image/png',
+    'image/jpeg',
+    'image/jpg', 
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    // 视频格式
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'video/avi',
+    'video/mov',
+    'video/quicktime'
+  ]
+  
+  return supportedTypes.some(type => mimeType.includes(type.split('/')[1]))
+}
+
+// 处理媒体文件上传的通用函数
+async function handleMediaFileUpload(file: File) {
+  // 将文件转换为Base64
+  const base64Data = await convertFileToBase64(file)
+  console.log(`媒体文件转换为Base64格式成功，类型: ${file.type}，大小: ${file.size} bytes`)
+
+  // 生成唯一ID
+  const mediaId = `media_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+  console.log(`生成媒体文件ID: ${mediaId}`)
+
+  // 确保笔记已保存（有ID）
+  if (!localNote.value.id) {
+    throw new Error('请先保存笔记再上传媒体文件')
+  }
+  console.log(`笔记ID: ${localNote.value.id}，准备保存媒体文件`)
+
+  // 保存媒体文件到数据库
+  console.log(`调用save_tip_image API，参数: tip_id=${localNote.value.id}, image_id=${mediaId}`)
+  await invoke('save_tip_image', {
+    imageData: {
+      tip_id: localNote.value.id,
+      image_id: mediaId,
+      image_data: base64Data
+    }
+  })
+  console.log('媒体文件已成功保存到数据库')
+
+  // 确保images对象存在
+  if (!localNote.value.images) {
+    localNote.value.images = {}
+  }
+
+  // 保存媒体文件到本地状态
+  localNote.value.images[mediaId] = base64Data
+
+  // 在光标位置插入相应的Markdown引用
+  const textarea = editorTextarea.value
+  if (textarea) {
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+
+    // 根据文件类型生成不同的Markdown
+    let mediaMarkdown = ''
+    if (file.type.startsWith('image/')) {
+      mediaMarkdown = `![${file.name || '图片'}](local://${mediaId})`
+    } else if (file.type.startsWith('video/')) {
+      mediaMarkdown = `\n\n🎬 **视频文件: ${file.name || '视频'}**\n<video controls style="max-width: 100%; height: auto;">\n  <source src="local://${mediaId}" type="${file.type}">\n  您的浏览器不支持视频播放。\n</video>\n\n`
+    }
+
+    // 在光标位置插入
+    localNote.value.content =
+      localNote.value.content.substring(0, start) +
+      mediaMarkdown +
+      localNote.value.content.substring(end)
+
+    // 更新界面 - 确保编辑器内容更新
+    nextTick(() => {
+      if (textarea) {
+        textarea.value = localNote.value.content
+        textarea.dispatchEvent(new Event('input', { bubbles: true }))
+
+        // 设置光标位置到媒体引用后
+        const newCursorPosition = start + mediaMarkdown.length
+        textarea.setSelectionRange(newCursorPosition, newCursorPosition)
+        textarea.focus()
+      }
+    })
+
+    // 立即更新编辑器状态以显示媒体文件
+    autoSave()
+
+    // 确保笔记被保存到列表
+    saveNoteToList()
+  }
+
+  // 显示成功提示
+  console.log('媒体文件已保存到数据库，ID:', mediaId)
+}
+
+// 拖拽上传相关事件处理
+function handleDragOver(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function handleDragEnter(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function handleDragLeave(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+async function handleDrop(event: DragEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  // 处理拖拽的文件
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    
+    // 检查是否为支持的媒体文件类型
+    if (isSupportedMediaType(file.type)) {
+      try {
+        // 显示处理中状态
+        isAIProcessing.value = true
+        
+        // 处理媒体文件
+        await handleMediaFileUpload(file)
+        
+        // 只处理第一个支持的文件
+        break
+      } catch (error) {
+        console.error('处理拖拽媒体文件失败:', error)
+        
+        let errorMessage = '处理拖拽文件失败';
+        if (error instanceof Error) {
+          errorMessage = `${errorMessage}: ${error.message}`;
+        } else {
+          errorMessage = `${errorMessage}: ${String(error)}`;
+        }
+        
+        await showAlert(errorMessage, { title: '错误' })
+      } finally {
+        isAIProcessing.value = false
+      }
+    }
+  }
+}
+
+// 将文件转换为Base64，支持各种文件类型
+function convertFileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
 
@@ -1678,10 +1771,10 @@ function convertImageToBase64(file: File): Promise<string> {
         if (typeof result === 'string' && result.startsWith('data:')) {
           resolve(result)
         } else {
-          reject(new Error('转换图片格式失败'))
+          reject(new Error('转换文件格式失败'))
         }
       } else {
-        reject(new Error('读取图片失败'))
+        reject(new Error('读取文件失败'))
       }
     }
 
@@ -3307,6 +3400,7 @@ function closeTipResultBox() {
 const render = async () => {
   if (localNote.value && localNote.value.content !== undefined) {
     try {
+      console.log('Rendering markdown with images:', Object.keys(localNote.value.images || {}))
       const { html, toc } = await renderMarkdown(
         localNote.value.content || '',
         localNote.value.images || {}

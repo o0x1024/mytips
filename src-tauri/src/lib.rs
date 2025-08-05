@@ -135,15 +135,28 @@ pub fn run() -> anyhow::Result<()> {
             let unified_manager = rt.block_on(UnifiedDbManager::new(app_handle.clone()))?;
             app.manage(unified_manager);
             
-            // Setup window close event handler
+            // Setup window close and minimize event handler
             if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        // Prevent the window from closing and hide it instead
-                        api.prevent_close();
-                        #[cfg(desktop)]
-                        let _ = window_clone.hide();
+                    match event {
+                        tauri::WindowEvent::CloseRequested { api, .. } => {
+                            // Prevent the window from closing and hide it instead
+                            api.prevent_close();
+                            #[cfg(desktop)]
+                            let _ = window_clone.hide();
+                        }
+                        tauri::WindowEvent::Focused(false) => {
+                            // Check if window is minimized by checking if it's visible
+                            #[cfg(desktop)]
+                            if let Ok(is_minimized) = window_clone.is_minimized() {
+                                if is_minimized {
+                                    // Hide the window when minimized to remove from taskbar/dock
+                                    let _ = window_clone.hide();
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 });
             }

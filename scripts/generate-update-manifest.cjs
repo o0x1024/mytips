@@ -19,26 +19,168 @@ const releaseDir = path.resolve(__dirname, '../src-tauri/target/release');
 const updaterDir = path.resolve(releaseDir, 'bundle/updater');
 
 if (!fs.existsSync(updaterDir)) {
-    console.log('Updater bundle directory not found. Creating empty manifest.');
+    console.log('Updater bundle directory not found. Creating manifest from existing bundles.');
     
     // 获取版本信息
     const tauriConfPath = path.resolve(__dirname, '../src-tauri/tauri.conf.json');
     const tauriConf = JSON.parse(fs.readFileSync(tauriConfPath, 'utf-8'));
-    const version = process.env.npm_package_version || tauriConf.package.version;
+    const version = process.env.npm_package_version || tauriConf.version || '1.1.4';
     
-    // 创建空的清单文件
-    const emptyManifest = {
-        version,
-        notes: `Release version ${version}`,
-        pub_date: new Date().toISOString(),
-        platforms: {}
+    // 读取GitHub仓库信息
+    const repoName = process.env.GITHUB_REPOSITORY || 'o0x1024/mytips';
+    const releaseNotes = process.env.RELEASE_NOTES || 'See the release notes for details.';
+    
+    // 根据截图中的文件列表创建平台清单
+    const platforms = {
+        'darwin-aarch64': {
+            signature: 'placeholder-signature',
+            url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-aarch64.app.tar.gz`
+        },
+        'darwin-x86_64': {
+            signature: 'placeholder-signature', 
+            url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-x86_64.dmg`
+        },
+        'linux-x86_64': {
+            signature: 'placeholder-signature',
+            url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-amd64.AppImage`
+        },
+        'windows-x86_64': {
+            signature: 'placeholder-signature',
+            url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-x64-setup.exe`
+        }
     };
     
-    // 写入空的清单文件
-    const latestJsonPath = path.join(updateManifestsDir, 'latest.json');
-    fs.writeFileSync(latestJsonPath, JSON.stringify(emptyManifest, null, 2));
+    // 检查本地构建文件以更新实际存在的平台
+    const bundleDir = path.resolve(releaseDir, 'bundle');
+    const localPlatforms = {};
     
-    console.log(`Empty update manifest generated at: ${latestJsonPath}`);
+    // 平台映射表
+    const platformMapping = {
+        'aarch64': 'darwin-aarch64',
+        'amd64': 'linux-x86_64', 
+        'x86_64': 'windows-x86_64',
+        'x86_64.AppImage': 'linux-x86_64',
+        'android': 'android-arm64'
+    };
+    
+    // 检查 macOS 构建文件
+    const macosDir = path.join(bundleDir, 'macos');
+    if (fs.existsSync(macosDir)) {
+        const tarGzFile = path.join(macosDir, 'MyTips.app.tar.gz');
+        if (fs.existsSync(tarGzFile)) {
+            localPlatforms['darwin-aarch64'] = {
+                signature: 'placeholder-signature',
+                url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-aarch64.app.tar.gz`
+            };
+        }
+    }
+    
+    // 检查 DMG 文件
+    const dmgDir = path.join(bundleDir, 'dmg');
+    if (fs.existsSync(dmgDir)) {
+        const dmgFiles = fs.readdirSync(dmgDir).filter(f => f.endsWith('.dmg'));
+        dmgFiles.forEach(dmgFile => {
+            if (dmgFile.includes('aarch64')) {
+                localPlatforms['darwin-aarch64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
+                };
+            } else if (dmgFile.includes('x86_64')) {
+                localPlatforms['darwin-x86_64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
+                };
+            }
+        });
+    }
+    
+    // 检查 AppImage 文件
+    const appimageDir = path.join(bundleDir, 'appimage');
+    if (fs.existsSync(appimageDir)) {
+        const appimageFiles = fs.readdirSync(appimageDir).filter(f => f.endsWith('.AppImage'));
+        appimageFiles.forEach(appimageFile => {
+            if (appimageFile.includes('amd64')) {
+                localPlatforms['linux-x86_64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${appimageFile}`
+                };
+            }
+        });
+    }
+    
+    // 检查 DEB 文件
+    const debDir = path.join(bundleDir, 'deb');
+    if (fs.existsSync(debDir)) {
+        const debFiles = fs.readdirSync(debDir).filter(f => f.endsWith('.deb'));
+        debFiles.forEach(debFile => {
+            if (debFile.includes('amd64')) {
+                localPlatforms['linux-x86_64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${debFile}`
+                };
+            }
+        });
+    }
+    
+    // 检查 RPM 文件
+    const rpmDir = path.join(bundleDir, 'rpm');
+    if (fs.existsSync(rpmDir)) {
+        const rpmFiles = fs.readdirSync(rpmDir).filter(f => f.endsWith('.rpm'));
+        rpmFiles.forEach(rpmFile => {
+            if (rpmFile.includes('x86_64')) {
+                localPlatforms['linux-x86_64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${rpmFile}`
+                };
+            }
+        });
+    }
+    
+    // 检查 Windows 安装包
+    const nsis = path.join(bundleDir, 'nsis');
+    if (fs.existsSync(nsis)) {
+        const exeFiles = fs.readdirSync(nsis).filter(f => f.endsWith('.exe'));
+        exeFiles.forEach(exeFile => {
+            if (exeFile.includes('x64')) {
+                localPlatforms['windows-x86_64'] = {
+                    signature: 'placeholder-signature',
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${exeFile}`
+                };
+            }
+        });
+    }
+    
+    // 检查 Android APK
+    const androidDir = path.join(bundleDir, 'android');
+    if (fs.existsSync(androidDir)) {
+        const apkFiles = fs.readdirSync(androidDir).filter(f => f.endsWith('.apk'));
+        apkFiles.forEach(apkFile => {
+            localPlatforms['android-arm64'] = {
+                signature: 'placeholder-signature',
+                url: `https://github.com/${repoName}/releases/download/v${version}/${apkFile}`
+            };
+        });
+    }
+    
+    // 合并默认平台和本地平台配置（本地文件优先）
+    const finalPlatforms = { ...platforms, ...localPlatforms };
+    
+    // 创建清单文件
+    const manifest = {
+        version,
+        notes: releaseNotes,
+        pub_date: new Date().toISOString(),
+        platforms: finalPlatforms
+    };
+    
+    // 写入清单文件
+    const latestJsonPath = path.join(updateManifestsDir, 'latest.json');
+    fs.writeFileSync(latestJsonPath, JSON.stringify(manifest, null, 2));
+    
+    console.log(`Update manifest generated at: ${latestJsonPath}`);
+    console.log('Platforms found:', Object.keys(finalPlatforms));
+    console.log('Local platforms detected:', Object.keys(localPlatforms));
+    console.log('Default platforms included:', Object.keys(platforms).filter(p => !localPlatforms[p]));
     process.exit(0);
 }
 
@@ -97,4 +239,4 @@ const manifest = {
 const latestJsonPath = path.join(updateManifestsDir, 'latest.json');
 fs.writeFileSync(latestJsonPath, JSON.stringify(manifest, null, 2));
 
-console.log(`Combined update manifest generated at: ${latestJsonPath}`); 
+console.log(`Combined update manifest generated at: ${latestJsonPath}`);

@@ -839,20 +839,74 @@ async function deleteNote(id: string) {
       const noteToDelete = storeTips.value.find(note => note.id === id);
       const categoryId = noteToDelete?.category_id;
       
+      // 如果删除的是当前选中的笔记，需要找到下一个要选中的笔记
+      let nextNoteToSelect: string | null = null;
+      if (selectedNoteId.value === id) {
+        const currentIndex = storeTips.value.findIndex(note => note.id === id);
+        if (currentIndex !== -1) {
+          // 优先选择下一个笔记，如果没有下一个则选择上一个
+          if (currentIndex < storeTips.value.length - 1) {
+            nextNoteToSelect = storeTips.value[currentIndex + 1].id;
+          } else if (currentIndex > 0) {
+            nextNoteToSelect = storeTips.value[currentIndex - 1].id;
+          }
+        }
+      }
+      
       // 调用后端API删除笔记
       await tipsStore.deleteTip(id);
       
-
+      // 删除操作成功后，tipsStore.deleteTip应该已经更新了storeTips
+      // 但为了确保UI立即更新，我们手动检查并移除
+      const noteIndex = storeTips.value.findIndex(note => note.id === id);
+      if (noteIndex !== -1) {
+        storeTips.value.splice(noteIndex, 1);
+      }
+      
+      // 如果当前在分类浏览模式，也需要更新分类浏览数据
+      if (selectedNotebookId.value && tipsStore.currentCategoryBrowse) {
+        const categoryData = tipsStore.currentCategoryBrowse;
+        
+        // 从featured_tip中移除（如果是特色笔记）
+        if (categoryData.featured_tip && categoryData.featured_tip.id === id) {
+          categoryData.featured_tip = undefined;
+        }
+        
+        // 从tip_summaries中移除
+        const summaryIndex = categoryData.tip_summaries.findIndex(tip => tip.id === id);
+        if (summaryIndex !== -1) {
+          categoryData.tip_summaries.splice(summaryIndex, 1);
+        }
+        
+        // 更新总数
+        if (categoryData.total_tips_count > 0) {
+          categoryData.total_tips_count -= 1;
+        }
+      }
       
       // 如果笔记有分类，直接在前端更新笔记本树的计数
       if (categoryId) {
         updateNotebookTreeCount(categoryId, -1); // 减少计数
       }
       
-      // 如果删除的是当前选中的笔记，则清除选中状态
+      // 如果删除的是当前选中的笔记，选择下一个笔记或清除选中状态
       if (selectedNoteId.value === id) {
-        selectedNoteId.value = null;
-        selectedNote.value = null;
+        if (nextNoteToSelect) {
+          // 找到下一个要选择的笔记对象
+          const nextNote = storeTips.value.find(note => note.id === nextNoteToSelect);
+          if (nextNote) {
+            // 自动选择下一个笔记
+            selectNote(nextNote as Tip);
+          } else {
+            // 没有找到笔记对象，清除选中状态
+            selectedNoteId.value = null;
+            selectedNote.value = null;
+          }
+        } else {
+          // 没有其他笔记可选择，清除选中状态
+          selectedNoteId.value = null;
+          selectedNote.value = null;
+        }
       }
     } catch (error) {
       console.error('删除笔记失败:', error);

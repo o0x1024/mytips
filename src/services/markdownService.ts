@@ -50,12 +50,13 @@ function rehypeToc(toc: TocItem[]) {
 }
 
 /**
- * 自定义Rehype插件，用于处理 local:// 协议的图片
- * @param images - 笔记中的图片数据
+ * 自定义Rehype插件，用于处理 local:// 协议的媒体文件（图片和视频）
+ * @param images - 笔记中的媒体文件数据
  */
 function rehypeLocalImages(images: Record<string, string>) {
   return (tree: HastRoot) => {
     visit(tree, 'element', (node: Element) => {
+      // 处理图片
       if (node.tagName === 'img' && typeof node.properties?.src === 'string' && node.properties.src.startsWith('local://')) {
         const imageId = node.properties.src.replace('local://', '')
         if (images[imageId]) {
@@ -63,6 +64,20 @@ function rehypeLocalImages(images: Record<string, string>) {
         } else {
           console.warn(`Image with id "${imageId}" not found in provided images map.`)
           // 可选：设置一个占位符图片或移除该图片
+          node.properties.src = ''
+        }
+      }
+      
+      // 处理视频源
+      if (node.tagName === 'source' && typeof node.properties?.src === 'string' && node.properties.src.startsWith('local://')) {
+        const mediaId = node.properties.src.replace('local://', '')
+        console.log(`Processing video source with mediaId: ${mediaId}`, { availableImages: Object.keys(images) })
+        if (images[mediaId]) {
+          node.properties.src = images[mediaId]
+          console.log(`Successfully replaced video source for ${mediaId}`)
+        } else {
+          console.warn(`Media file with id "${mediaId}" not found in provided images map.`, { availableImages: Object.keys(images) })
+          // 设置空源
           node.properties.src = ''
         }
       }
@@ -149,6 +164,7 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
         code: [...(defaultSchema.attributes?.code || []), 'className'],
         source: ['src', 'type'],
         audio: ['controls', 'src'],
+        video: ['controls', 'src', 'width', 'height', 'style', 'autoplay', 'loop', 'muted', 'poster'],
         img: [...(defaultSchema.attributes?.img || []), 'loading'],
       },
       protocols: {
@@ -157,14 +173,15 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
       },
       tagNames: [
         ...(defaultSchema.tagNames || []),
-        'audio', 'source',
+        'audio', 'source', 'video',
         // KaTeX / MathML tags
         'span', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext'
       ],
     })
     // rehypeKatex produces already sanitized HTML, keep after sanitize to avoid stripping classes
     .use(rehypePrism, { 
-        showLineNumbers: true
+        showLineNumbers: true,
+        ignoreMissing: true
      })
     .use(rehypeStringify, { allowDangerousHtml: true })
     .process(markdown)
@@ -200,4 +217,4 @@ export async function renderInlineMarkdown(markdown: string): Promise<string> {
       .process(markdown);
   
     return String(file);
-} 
+}
