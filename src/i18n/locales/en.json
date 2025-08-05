@@ -234,7 +234,17 @@
     "readFileErrorTitle": "Read Failed"
   },
   "markdownEditor": {
-    "placeholder": "Start typing..."
+    "placeholder": "Start typing...",
+    "searchPlaceholder": "Search text...",
+    "replacePlaceholder": "Replace with...",
+    "searchResults": "{{current}}/{{total}}",
+    "noResults": "No results",
+    "findNext": "Next",
+    "findPrevious": "Previous",
+    "replaceNext": "Replace",
+    "replaceAll": "Replace All",
+    "toggleReplace": "Toggle Replace",
+    "closeSearch": "Close search"
   },
   "noteEditor": {
     "encryptedNoteTitle": "Note Encrypted: {title}",
@@ -255,6 +265,7 @@
     "editModeTooltip": "Edit Mode",
     "splitModeTooltip": "Split Mode",
     "previewModeTooltip": "Preview Mode",
+    "headingTooltip": "Heading",
     "boldTooltip": "Bold",
     "italicTooltip": "Italic",
     "strikethroughTooltip": "Strikethrough",
@@ -269,7 +280,9 @@
     "themeTooltip": "Toggle Theme",
     "codeTheme": "Code Block Theme",
     "enterFullscreenTooltip": "Enter Fullscreen",
-    "exitFullscreenTooltip": "Exit Fullscreen"
+    "exitFullscreenTooltip": "Exit Fullscreen",
+    "noNoteSelected": "No Note Selected",
+    "selectNoteToEdit": "Please select a note from the left panel to edit"
   },
   "noteList": {
     "notes": "Notes",
@@ -382,7 +395,9 @@
     "exportToWord": "To Word",
     "delete": "Delete",
     "exportSuccess": "Notebook has been successfully exported.",
-    "exportFailure": "Export failed: {error}"
+    "exportFailure": "Export failed: {error}",
+    "cannotDeleteUncategorized": "The Uncategorized notebook cannot be deleted",
+    "cannotRenameUncategorized": "The Uncategorized notebook cannot be renamed"
   },
   "conflictResolutionDialog": {
     "title": "Sync Conflict Resolution",

@@ -212,7 +212,15 @@ function selectThis() {
   emit('select', props.notebook.id)
 }
 
-function startEditing() {
+function editNotebook(event: Event) {
+  event.stopPropagation()
+  
+  // 检查是否为未分类笔记本，如果是则不允许重命名
+  if (props.notebook.name === t('mainLayout.uncategorized')) {
+    notificationStore.addToast(t('notebookItem.cannotRenameUncategorized'), 'warning')
+    return
+  }
+  
   isEditing.value = true
   newName.value = props.notebook.name
   nextTick(() => {
@@ -228,11 +236,6 @@ function finishEditing() {
   isEditing.value = false
 }
 
-function editNotebook(event: Event) {
-  event.stopPropagation()
-  startEditing()
-}
-
 function addChildNotebook(event: Event) {
   event.stopPropagation()
   emit('add-child', props.notebook.id)
@@ -240,6 +243,13 @@ function addChildNotebook(event: Event) {
 
 function deleteNotebook(event: Event) {
   event.stopPropagation()
+  
+  // 检查是否为未分类笔记本，如果是则不允许删除
+  if (props.notebook.name === t('mainLayout.uncategorized')) {
+    notificationStore.addToast(t('notebookItem.cannotDeleteUncategorized'), 'warning')
+    return
+  }
+  
   emit('delete', props.notebook.id)
 }
 
@@ -377,4 +387,4 @@ onBeforeUnmount(() => {
   word-break: normal;
   max-width: 100px;
 }
-</style> 
+</style>

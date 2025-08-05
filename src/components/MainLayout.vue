@@ -198,8 +198,8 @@
         
         <!-- Mobile Layout -->
         <template v-else>
-          <!-- Note Editor is shown only if a note is selected -->
-          <div v-if="selectedNoteId && selectedNote" class="h-full w-full">
+          <!-- Note Editor is shown when a note is selected -->
+          <div v-if="selectedNote" class="h-full w-full">
             <NoteEditor 
               :note="selectedNote"
               @update="updateNote"
@@ -212,28 +212,14 @@
               @decrypt-note="handleNoteDecryption"
             />
           </div>
-
-          <!-- Note List is shown otherwise -->
-          <div v-else class="h-full w-full">
-            <NoteList 
-              :title="listTitle"
-              :loading="storeIsLoading"
-              :selected-note-id="selectedNoteId || undefined"
-              :notebooks="notebooks"
-              :selected-notebook-id="selectedNotebookId || undefined"
-              :tips="displayTips"
-              :total-count="displayTotalCount"
-              @select-note="handleNoteSelection"
-              @search="handleListSearch"
-              @new-note="createNewNote"
-              @delete-note="deleteNote"
-              @export-note="exportNote"
-              @move-to-category="moveNoteToCategory"
-              @refresh="refreshNotes"
-              @encrypt-note="handleNoteEncryption"
-              @decrypt-note="handleNoteDecryption"
-              :key="selectedNotebookId || undefined"
-            />
+          
+          <!-- Empty state when no note is selected -->
+          <div v-else class="h-full w-full flex items-center justify-center bg-base-100">
+            <div class="text-center">
+              <div class="text-6xl mb-4 opacity-20">📝</div>
+              <h3 class="text-lg font-medium text-base-content/60 mb-2">{{ t('editor.noNoteSelected') }}</h3>
+              <p class="text-sm text-base-content/40">{{ t('editor.selectNoteToEdit') }}</p>
+            </div>
           </div>
         </template>
       </div>

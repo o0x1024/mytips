@@ -1,7 +1,7 @@
 <template>
-  <div class="h-full flex flex-col" v-if="note">
+  <div class="h-full flex flex-col">
     <!-- 加密内容视图 -->
-    <div v-if="isNoteEncrypted && !isNoteUnlocked" class="h-full">
+    <div v-if="note && isNoteEncrypted && !isNoteUnlocked" class="h-full">
       <EncryptedContent 
         :title="t('noteEditor.encryptedNoteTitle', { title: note.title })"
         :description="t('noteEditor.encryptedNoteDescription')"
@@ -24,11 +24,17 @@
         
         <!-- 顶部栏 -->
         <EditorTopBar
+          v-if="note"
           v-model:title="localNote.title"
           :is-fullscreen="isFullscreen"
           @input="autoSave"
           @command="handleTopBarCommand"
         />
+        
+        <!-- 空状态顶部栏 -->
+        <div v-else class="p-4 border-b border-base-300 bg-base-100 flex items-center justify-center">
+          <span class="text-base-content/60">{{ t('noteEditor.noNoteSelected') }}</span>
+        </div>
 
         <!-- 工具栏 -->
         <EditorToolbar 
@@ -36,8 +42,8 @@
           :is-edit-only="isEditOnly"
           :is-preview-mode="isPreviewMode"
           :is-split-mode="isSplitMode"
-          :is-wysiwyg-mode="isWysiwygMode"
           :show-toc="showToc"
+          :show-search="showSearch"
           :current-highlight-theme="currentHighlightTheme"
           :current-markdown-theme="currentMarkdownTheme"
           @command="handleToolbarCommand"
@@ -47,28 +53,41 @@
         <div class="flex-1 flex overflow-hidden relative">
           <!-- Markdown 编辑器核心组件 -->
           <MarkdownEditor
-            v-if="!isWysiwygMode"
+            v-if="note"
             :key="note.id"
             v-model="localNote.content"
             :rendered-content="renderedContent"
             :is-split-mode="isSplitMode"
             :is-preview-mode="isPreviewMode"
+            :show-search="showSearch"
             ref="markdownEditor"
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
             @keydown="handleKeyDown"
             @preview-scroll="handlePreviewScroll"
+            @close-search="showSearch = false"
           />
+          
+          <!-- 空状态编辑区域 -->
+          <div v-else class="flex-1 flex items-center justify-center bg-base-50">
+            <div class="text-center">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto text-base-content/30 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h3 class="text-lg font-medium text-base-content/60 mb-2">{{ t('noteEditor.noNoteSelected') }}</h3>
+              <p class="text-base-content/40">{{ t('noteEditor.selectNoteToEdit') }}</p>
+            </div>
+          </div>
 
-          <!-- ProseMirror Editor -->
-          <ProseMirrorEditor
+          <!-- ProseMirror Editor - WYSIWYG模式已注释 -->
+          <!-- <ProseMirrorEditor
             v-if="isWysiwygMode"
             ref="proseMirrorEditor"
             :key="note.id + '-wysiwyg'"
             :model-value="localNote.content"
             :images="localNote.images"  
             @update:model-value="handleProseMirrorUpdate"
-          />
+          /> -->
 
           <!-- 右键菜单 -->
           <div v-if="showContextMenu"
@@ -150,6 +169,7 @@
 
         <!-- 底部元数据区域 -->
         <EditorFooter
+          v-if="note"
           class="editor-footer"
           v-model:tags="localNote.tags"
           :content-text="localNote.content"
@@ -266,7 +286,8 @@ import EditorToolbar from './EditorToolbar.vue'
 import EditorTopBar from './EditorTopBar.vue'
 import EditorFooter from './EditorFooter.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
-import ProseMirrorEditor from './ProseMirrorEditor.vue'
+// WYSIWYG模式已注释
+// import ProseMirrorEditor from './ProseMirrorEditor.vue'
 import AIExplanationDialog from './dialogs/AIExplanationDialog.vue'
 import AITranslationDialog from './dialogs/AITranslationDialog.vue'
 import TipInputDialog from './dialogs/TipInputDialog.vue'
@@ -375,7 +396,8 @@ const encryptionStore = useEncryptionStore()
 const localNote = ref<Note>({ ...props.note })
 const isPreviewMode = ref(savedMode === 'preview')
 const markdownEditor = ref<{ editorTextarea: HTMLTextAreaElement | null; previewDiv: HTMLDivElement | null; } | null>(null);
-const proseMirrorEditor = ref<{ executeCommand: (command: string) => void } | null>(null);
+// WYSIWYG模式已注释
+// const proseMirrorEditor = ref<{ executeCommand: (command: string) => void } | null>(null);
 const editorTextarea = computed(() => markdownEditor.value?.editorTextarea || null);
 const previewDiv = computed(() => markdownEditor.value?.previewDiv || null);
 const autoSaveTimeout = ref<number | null>(null)
@@ -387,7 +409,7 @@ const contextMenuY = ref(0)
 const isAIProcessing = ref(false)
 const isEditOnly = ref(savedMode === 'editOnly')
 const isSplitMode = ref(savedMode === 'split')
-const isWysiwygMode = ref(savedMode === 'wysiwyg')
+// const isWysiwygMode = ref(savedMode === 'wysiwyg') // WYSIWYG模式已注释
 const isSwitchingNote = ref(false)
 const streamingContent = ref('')  // 用于存储流式输出的内容
 const isStreaming = ref(false)    // 是否正在流式输出
@@ -443,6 +465,7 @@ const hiddenItems = ref<any[]>([])
 
 // 目录相关状态
 const showToc = ref(false)
+const showSearch = ref(false)
 const tocItems = ref<{ id: string; level: number; text: string }[]>([]);
 const activeHeadingId = ref('');
 const tocPosition = ref({ x: window.innerWidth - 320, y: 200 })
@@ -933,6 +956,13 @@ function handleKeyDown(event: KeyboardEvent) {
     return
   }
 
+  // 搜索: Ctrl+F
+  if (isCtrlOrCmd && event.key === 'f') {
+    event.preventDefault()
+    showSearch.value = true
+    return
+  }
+
   // 对于其他内容修改按键，添加到撤销堆栈
   // 避免在每次按键都保存，仅在内容实际变化时
   setTimeout(() => {
@@ -964,14 +994,15 @@ function undo() {
   if (undoStack.value.length === 0) return
 
   const patch = undoStack.value.pop()
+  const currentContent = lastSavedContent.value
 
   // 应用补丁回到上一个状态
-  const [previousContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
+  const [previousContent, results] = dmp.patch_apply(patch, currentContent)
 
   // 检查应用是否成功
   if (results.every((r: boolean) => r)) {
-    // 将当前内容（撤销前）的逆向补丁保存到重做堆栈
-    const redoDiff = dmp.diff_main(previousContent, lastSavedContent.value, true)
+    // 将当前内容到撤销后内容的正向补丁保存到重做堆栈
+    const redoDiff = dmp.diff_main(previousContent, currentContent, true)
     const redoPatch = dmp.patch_make(previousContent, redoDiff)
     redoStack.value.push(redoPatch as any)
 
@@ -1000,14 +1031,15 @@ function redo() {
 
   // 获取下一个状态的补丁
   const patch = redoStack.value.pop()
+  const currentContent = lastSavedContent.value
 
   // 应用补丁
-  const [nextContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
+  const [nextContent, results] = dmp.patch_apply(patch, currentContent)
   
   if (results.every((r: boolean) => r)) {
-    // 将当前内容（重做前）的逆向补丁保存到撤销堆栈
-    const undoDiff = dmp.diff_main(nextContent, lastSavedContent.value, true)
-    const undoPatch = dmp.patch_make(nextContent, undoDiff)
+    // 将当前内容到重做后内容的逆向补丁保存到撤销堆栈
+    const undoDiff = dmp.diff_main(currentContent, nextContent, true)
+    const undoPatch = dmp.patch_make(currentContent, undoDiff)
     undoStack.value.push(undoPatch as any)
 
     // 更新编辑器内容
@@ -1457,7 +1489,7 @@ function cleanupStream() {
 
 function setEditMode(mode: string) {
   localStorageStore.setEditorMode(mode);
-  isWysiwygMode.value = false; 
+  // isWysiwygMode.value = false; // WYSIWYG模式已注释
   isEditOnly.value = false;
   isPreviewMode.value = false;
   isSplitMode.value = false;
@@ -1468,9 +1500,11 @@ function setEditMode(mode: string) {
     isPreviewMode.value = true
   } else if (mode === 'split') {
     isSplitMode.value = true
-  } else if (mode === 'wysiwyg') {
-    isWysiwygMode.value = true;
-  }
+  } 
+  // WYSIWYG模式已注释
+  // else if (mode === 'wysiwyg') {
+  //   isWysiwygMode.value = true;
+  // }
 
   // 模式切换后重新应用代码块主题
   nextTick(() => {
@@ -2892,6 +2926,9 @@ function handleToolbarCommand(command: string, ...args: any[]) {
     case 'toggle-toc':
       toggleToc()
       break
+    case 'toggle-search':
+      showSearch.value = !showSearch.value
+      break
     case 'toggle-audio-recording':
       toggleAudioRecording()
       break
@@ -2907,11 +2944,12 @@ function handleToolbarCommand(command: string, ...args: any[]) {
     case 'toggle-fullscreen':
       toggleFullscreen()
       break
-    case 'prosemirror-command':
-      if (proseMirrorEditor.value) {
-        proseMirrorEditor.value.executeCommand(args[0]);
-      }
-      break
+    // WYSIWYG模式相关命令已注释
+    // case 'prosemirror-command':
+    //   if (proseMirrorEditor.value) {
+    //     proseMirrorEditor.value.executeCommand(args[0]);
+    //   }
+    //   break
     default:
       console.warn('Unknown toolbar command:', command)
   }
@@ -3267,10 +3305,10 @@ function closeTipResultBox() {
 
 // 渲染Markdown内容
 const render = async () => {
-  if (localNote.value) {
+  if (localNote.value && localNote.value.content !== undefined) {
     try {
       const { html, toc } = await renderMarkdown(
-        localNote.value.content,
+        localNote.value.content || '',
         localNote.value.images || {}
       )
       renderedContent.value = html
@@ -3286,6 +3324,10 @@ const render = async () => {
       console.error('Markdown rendering error:', error)
       renderedContent.value = `<div class="text-error">${t('noteEditor.markdownRenderError', { error: String(error) })}</div>`
     }
+  } else {
+    // 如果没有内容，清空渲染结果
+    renderedContent.value = ''
+    tocItems.value = []
   }
 }
 const updateActiveHeading = () => {
@@ -3396,14 +3438,15 @@ function endPan(event: MouseEvent) {
 }
 // --- End: Image Zoom & Pan Functions ---
 
-function handleProseMirrorUpdate(markdownContent: string) {
-  // ProseMirror editor now directly emits markdown
-  if (localNote.value.content !== markdownContent) {
-    console.log("markdownContent:",markdownContent)
-    localNote.value.content = markdownContent;
-    // The existing watcher on localNote.content will handle auto-saving and re-rendering.
-  }
-}
+// WYSIWYG模式已注释
+// function handleProseMirrorUpdate(markdownContent: string) {
+//   // ProseMirror editor now directly emits markdown
+//   if (localNote.value.content !== markdownContent) {
+//     console.log("markdownContent:",markdownContent)
+//     localNote.value.content = markdownContent;
+//     // The existing watcher on localNote.content will handle auto-saving and re-rendering.
+//   }
+// }
 
 </script>
 

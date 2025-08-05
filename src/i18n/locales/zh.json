@@ -234,7 +234,17 @@
     "readFileErrorTitle": "读取失败"
   },
   "markdownEditor": {
-    "placeholder": "开始输入内容..."
+    "placeholder": "开始输入内容...",
+    "searchPlaceholder": "搜索文本...",
+    "replacePlaceholder": "替换为...",
+    "searchResults": "{{current}}/{{total}}",
+    "noResults": "无结果",
+    "findNext": "下一个",
+    "findPrevious": "上一个",
+    "replaceNext": "替换",
+    "replaceAll": "全部替换",
+    "toggleReplace": "切换替换",
+    "closeSearch": "关闭搜索"
   },
   "noteEditor": {
     "encryptedNoteTitle": "笔记 “{title}” 已加密",
@@ -255,6 +265,7 @@
     "editModeTooltip": "编辑模式",
     "splitModeTooltip": "分屏模式",
     "previewModeTooltip": "预览模式",
+    "headingTooltip": "标题",
     "boldTooltip": "粗体",
     "italicTooltip": "斜体",
     "strikethroughTooltip": "删除线",
@@ -269,7 +280,9 @@
     "themeTooltip": "切换主题",
     "codeTheme": "代码块主题",
     "enterFullscreenTooltip": "进入全屏",
-    "exitFullscreenTooltip": "退出全屏"
+    "exitFullscreenTooltip": "退出全屏",
+    "noNoteSelected": "未选择笔记",
+    "selectNoteToEdit": "请从左侧列表中选择一个笔记进行编辑"
   },
   "noteList": {
     "notes": "笔记",
@@ -382,7 +395,9 @@
     "exportToWord": "为 Word",
     "delete": "删除",
     "exportSuccess": "笔记本已成功导出。",
-    "exportFailure": "导出失败: {error}"
+    "exportFailure": "导出失败: {error}",
+    "cannotDeleteUncategorized": "未分类笔记本不能被删除",
+    "cannotRenameUncategorized": "未分类笔记本不能被重命名"
   },
   "conflictResolutionDialog": {
     "title": "同步冲突处理",
