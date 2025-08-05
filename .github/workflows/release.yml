@@ -147,6 +147,7 @@ jobs:
         path: |
           src-tauri/gen/android/app/build/outputs/bundle/universalRelease/release/
           src-tauri/gen/android/app/build/outputs/apk/universal/release/
+          src-tauri/gen/android/app/build/outputs/**/*.sig
 
   release:
     needs: build
@@ -251,7 +252,9 @@ jobs:
         # 查找并移动 Android 产物 (AAB 和 APK)
         if [ -d "$TARGET_DIR/tauri-build-android" ]; then
           find "$TARGET_DIR/tauri-build-android/" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.aab.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab.sig" \;
           find "$TARGET_DIR/tauri-build-android/" -name "*.apk" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.apk.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk.sig" \;
         fi
 
         # 查找并移动清单文件

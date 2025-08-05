@@ -50,9 +50,80 @@ if (!fs.existsSync(updaterDir)) {
         }
     };
     
+    // 读取签名文件的辅助函数
+    function readSignatureFile(sigPath) {
+        try {
+            if (fs.existsSync(sigPath)) {
+                return fs.readFileSync(sigPath, 'utf-8').trim();
+            }
+        } catch (error) {
+            console.warn(`Failed to read signature file ${sigPath}:`, error.message);
+        }
+        return 'placeholder-signature';
+    }
+    
     // 检查本地构建文件以更新实际存在的平台
-    const bundleDir = path.resolve(releaseDir, 'bundle');
+    const targetDir = path.resolve(__dirname, '../src-tauri/target');
     const localPlatforms = {};
+    
+    // 查找所有可能的目标架构目录
+    const targetTriples = [
+        'aarch64-apple-darwin',
+        'x86_64-apple-darwin', 
+        'x86_64-unknown-linux-gnu',
+        'x86_64-pc-windows-msvc',
+        'aarch64-linux-android'
+    ];
+    
+    // 为每个目标架构检查构建文件
+    const allBundleDirs = [];
+    targetTriples.forEach(triple => {
+        const bundleDir = path.join(targetDir, triple, 'release', 'bundle');
+        if (fs.existsSync(bundleDir)) {
+            allBundleDirs.push(bundleDir);
+        }
+    });
+    
+    // 检查 GitHub Actions 下载的构建产物目录
+    const actionArtifactDirs = [
+        'tauri-build-darwin-aarch64',
+        'tauri-build-darwin-x86_64',
+        'tauri-build-linux-x86_64', 
+        'tauri-build-windows-x86_64',
+        'tauri-build-android'
+    ];
+    
+    actionArtifactDirs.forEach(artifactDir => {
+        const artifactPath = path.join(targetDir, artifactDir);
+        if (fs.existsSync(artifactPath)) {
+            // 查找 bundle 目录
+            const findBundleDir = (dir) => {
+                const items = fs.readdirSync(dir);
+                for (const item of items) {
+                    const itemPath = path.join(dir, item);
+                    if (fs.statSync(itemPath).isDirectory()) {
+                        if (item === 'bundle') {
+                            return itemPath;
+                        }
+                        const subBundle = findBundleDir(itemPath);
+                        if (subBundle) return subBundle;
+                    }
+                }
+                return null;
+            };
+            
+            const bundleDir = findBundleDir(artifactPath);
+            if (bundleDir) {
+                allBundleDirs.push(bundleDir);
+            }
+        }
+    });
+    
+    // 如果没有找到特定架构的目录，回退到通用目录
+    const fallbackBundleDir = path.resolve(releaseDir, 'bundle');
+    if (allBundleDirs.length === 0 && fs.existsSync(fallbackBundleDir)) {
+        allBundleDirs.push(fallbackBundleDir);
+    }
     
     // 平台映射表
     const platformMapping = {
@@ -63,103 +134,152 @@ if (!fs.existsSync(updaterDir)) {
         'android': 'android-arm64'
     };
     
-    // 检查 macOS 构建文件
-    const macosDir = path.join(bundleDir, 'macos');
-    if (fs.existsSync(macosDir)) {
-        const tarGzFile = path.join(macosDir, 'MyTips.app.tar.gz');
-        if (fs.existsSync(tarGzFile)) {
-            localPlatforms['darwin-aarch64'] = {
-                signature: 'placeholder-signature',
-                url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-aarch64.app.tar.gz`
-            };
-        }
-    }
-    
-    // 检查 DMG 文件
-    const dmgDir = path.join(bundleDir, 'dmg');
-    if (fs.existsSync(dmgDir)) {
-        const dmgFiles = fs.readdirSync(dmgDir).filter(f => f.endsWith('.dmg'));
-        dmgFiles.forEach(dmgFile => {
-            if (dmgFile.includes('aarch64')) {
+    // 遍历所有找到的 bundle 目录
+    allBundleDirs.forEach(bundleDir => {
+        console.log(`Checking bundle directory: ${bundleDir}`);
+        
+        // 检查 macOS 构建文件
+        const macosDir = path.join(bundleDir, 'macos');
+        if (fs.existsSync(macosDir)) {
+            const tarGzFile = path.join(macosDir, 'MyTips.app.tar.gz');
+            if (fs.existsSync(tarGzFile)) {
+                const sigFile = tarGzFile + '.sig';
                 localPlatforms['darwin-aarch64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
-                };
-            } else if (dmgFile.includes('x86_64')) {
-                localPlatforms['darwin-x86_64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
+                    signature: readSignatureFile(sigFile),
+                    url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-aarch64.app.tar.gz`
                 };
             }
-        });
-    }
-    
-    // 检查 AppImage 文件
-    const appimageDir = path.join(bundleDir, 'appimage');
-    if (fs.existsSync(appimageDir)) {
-        const appimageFiles = fs.readdirSync(appimageDir).filter(f => f.endsWith('.AppImage'));
-        appimageFiles.forEach(appimageFile => {
-            if (appimageFile.includes('amd64')) {
-                localPlatforms['linux-x86_64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${appimageFile}`
+        }
+        
+        // 检查 DMG 文件
+        const dmgDir = path.join(bundleDir, 'dmg');
+        if (fs.existsSync(dmgDir)) {
+            const dmgFiles = fs.readdirSync(dmgDir).filter(f => f.endsWith('.dmg'));
+            dmgFiles.forEach(dmgFile => {
+                const dmgPath = path.join(dmgDir, dmgFile);
+                const sigFile = dmgPath + '.sig';
+                if (dmgFile.includes('aarch64')) {
+                    localPlatforms['darwin-aarch64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
+                    };
+                } else if (dmgFile.includes('x86_64')) {
+                    localPlatforms['darwin-x86_64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${dmgFile}`
+                    };
+                }
+            });
+        }
+        
+        // 检查 AppImage 文件
+        const appimageDir = path.join(bundleDir, 'appimage');
+        if (fs.existsSync(appimageDir)) {
+            const appimageFiles = fs.readdirSync(appimageDir).filter(f => f.endsWith('.AppImage'));
+            appimageFiles.forEach(appimageFile => {
+                if (appimageFile.includes('amd64')) {
+                    const appImagePath = path.join(appimageDir, appimageFile);
+                    const sigFile = appImagePath + '.sig';
+                    localPlatforms['linux-x86_64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${appimageFile}`
+                    };
+                }
+            });
+        }
+        
+        // 检查 DEB 文件
+        const debDir = path.join(bundleDir, 'deb');
+        if (fs.existsSync(debDir)) {
+            const debFiles = fs.readdirSync(debDir).filter(f => f.endsWith('.deb'));
+            debFiles.forEach(debFile => {
+                if (debFile.includes('amd64')) {
+                    const debPath = path.join(debDir, debFile);
+                    const sigFile = debPath + '.sig';
+                    localPlatforms['linux-x86_64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${debFile}`
+                    };
+                }
+            });
+        }
+        
+        // 检查 RPM 文件
+        const rpmDir = path.join(bundleDir, 'rpm');
+        if (fs.existsSync(rpmDir)) {
+            const rpmFiles = fs.readdirSync(rpmDir).filter(f => f.endsWith('.rpm'));
+            rpmFiles.forEach(rpmFile => {
+                if (rpmFile.includes('x86_64')) {
+                    const rpmPath = path.join(rpmDir, rpmFile);
+                    const sigFile = rpmPath + '.sig';
+                    localPlatforms['linux-x86_64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${rpmFile}`
+                    };
+                }
+            });
+        }
+        
+        // 检查 Windows 安装包
+        const nsisDir = path.join(bundleDir, 'nsis');
+        if (fs.existsSync(nsisDir)) {
+            const exeFiles = fs.readdirSync(nsisDir).filter(f => f.endsWith('.exe'));
+            exeFiles.forEach(exeFile => {
+                if (exeFile.includes('x64')) {
+                    const exePath = path.join(nsisDir, exeFile);
+                    const sigFile = exePath + '.sig';
+                    console.log(`Found Windows exe: ${exeFile}, checking sig: ${sigFile}`);
+                    localPlatforms['windows-x86_64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${exeFile}`
+                    };
+                }
+            });
+        }
+        
+        // 检查 Android APK
+        const androidDir = path.join(bundleDir, 'android');
+        if (fs.existsSync(androidDir)) {
+            const apkFiles = fs.readdirSync(androidDir).filter(f => f.endsWith('.apk'));
+            apkFiles.forEach(apkFile => {
+                const apkPath = path.join(androidDir, apkFile);
+                const sigFile = apkPath + '.sig';
+                localPlatforms['android-arm64'] = {
+                    signature: readSignatureFile(sigFile),
+                    url: `https://github.com/${repoName}/releases/download/v${version}/${apkFile}`
                 };
-            }
-        });
-    }
+            });
+        }
+    });
     
-    // 检查 DEB 文件
-    const debDir = path.join(bundleDir, 'deb');
-    if (fs.existsSync(debDir)) {
-        const debFiles = fs.readdirSync(debDir).filter(f => f.endsWith('.deb'));
-        debFiles.forEach(debFile => {
-            if (debFile.includes('amd64')) {
-                localPlatforms['linux-x86_64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${debFile}`
-                };
+    // 特殊处理 Android 构建产物（因为路径结构不同）
+    const androidArtifactDir = path.join(targetDir, 'tauri-build-android');
+    if (fs.existsSync(androidArtifactDir)) {
+        console.log(`Checking Android artifact directory: ${androidArtifactDir}`);
+        
+        // 递归查找 APK 和 AAB 文件
+        const findAndroidFiles = (dir) => {
+            const items = fs.readdirSync(dir);
+            for (const item of items) {
+                const itemPath = path.join(dir, item);
+                if (fs.statSync(itemPath).isDirectory()) {
+                    findAndroidFiles(itemPath);
+                } else if (item.endsWith('.apk')) {
+                    const sigFile = itemPath + '.sig';
+                    console.log(`Found Android APK: ${item}, checking sig: ${sigFile}`);
+                    localPlatforms['android-arm64'] = {
+                        signature: readSignatureFile(sigFile),
+                        url: `https://github.com/${repoName}/releases/download/v${version}/mytips-${version}-android-release.apk`
+                    };
+                } else if (item.endsWith('.aab')) {
+                    const sigFile = itemPath + '.sig';
+                    console.log(`Found Android AAB: ${item}, checking sig: ${sigFile}`);
+                    // AAB 文件通常用于 Google Play Store，这里可以根据需要添加处理逻辑
+                }
             }
-        });
-    }
-    
-    // 检查 RPM 文件
-    const rpmDir = path.join(bundleDir, 'rpm');
-    if (fs.existsSync(rpmDir)) {
-        const rpmFiles = fs.readdirSync(rpmDir).filter(f => f.endsWith('.rpm'));
-        rpmFiles.forEach(rpmFile => {
-            if (rpmFile.includes('x86_64')) {
-                localPlatforms['linux-x86_64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${rpmFile}`
-                };
-            }
-        });
-    }
-    
-    // 检查 Windows 安装包
-    const nsis = path.join(bundleDir, 'nsis');
-    if (fs.existsSync(nsis)) {
-        const exeFiles = fs.readdirSync(nsis).filter(f => f.endsWith('.exe'));
-        exeFiles.forEach(exeFile => {
-            if (exeFile.includes('x64')) {
-                localPlatforms['windows-x86_64'] = {
-                    signature: 'placeholder-signature',
-                    url: `https://github.com/${repoName}/releases/download/v${version}/${exeFile}`
-                };
-            }
-        });
-    }
-    
-    // 检查 Android APK
-    const androidDir = path.join(bundleDir, 'android');
-    if (fs.existsSync(androidDir)) {
-        const apkFiles = fs.readdirSync(androidDir).filter(f => f.endsWith('.apk'));
-        apkFiles.forEach(apkFile => {
-            localPlatforms['android-arm64'] = {
-                signature: 'placeholder-signature',
-                url: `https://github.com/${repoName}/releases/download/v${version}/${apkFile}`
-            };
-        });
+        };
+        
+        findAndroidFiles(androidArtifactDir);
     }
     
     // 合并默认平台和本地平台配置（本地文件优先）

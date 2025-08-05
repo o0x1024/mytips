@@ -22,7 +22,7 @@ dist-ssr
 *.njsproj   
 *.sln
 *.sw?
-
+doc
 docs
 .cursorrules
 .cursor*
