@@ -322,13 +322,22 @@ if (!fs.existsSync(updaterDir)) {
         // 检查各平台的签名文件
         const platformFiles = {
             'darwin-aarch64': `mytips-${version}-aarch64.app.tar.gz`,
-            'darwin-x86_64': `mytips-${version}-x86_64.dmg`,
+            'darwin-x86_64': `mytips-${version}-x86_64.app.tar.gz`,
             'linux-x86_64': `mytips-${version}-amd64.AppImage`,
             'windows-x86_64': `mytips-${version}-x64-setup.exe`,
             'android-arm64': `mytips-${version}-android-release.apk`
         };
         
-        Object.entries(platformFiles).forEach(([platform, fileName]) => {
+        // 额外检查 DMG 文件（macOS 平台可能有多种格式）
+        const additionalPlatformFiles = {
+            'darwin-aarch64-dmg': `mytips-${version}-aarch64.dmg`,
+            'darwin-x86_64-dmg': `mytips-${version}-x86_64.dmg`
+        };
+        
+        // 合并所有平台文件
+        const allPlatformFiles = { ...platformFiles, ...additionalPlatformFiles };
+        
+        Object.entries(allPlatformFiles).forEach(([platform, fileName]) => {
             const sigFile = path.join(uploadDir, fileName + '.sig');
             console.log(`Looking for signature file: ${sigFile}`);
             
@@ -336,7 +345,15 @@ if (!fs.existsSync(updaterDir)) {
                 try {
                     const signature = fs.readFileSync(sigFile, 'utf-8').trim();
                     console.log(`✓ Found moved signature for ${platform}: ${signature.substring(0, 50)}...`);
-                    localPlatforms[platform] = {
+                    
+                    // 处理 DMG 文件的平台映射
+                    let targetPlatform = platform;
+                    if (platform.endsWith('-dmg')) {
+                        targetPlatform = platform.replace('-dmg', '');
+                        console.log(`Mapping DMG platform ${platform} to ${targetPlatform}`);
+                    }
+                    
+                    localPlatforms[targetPlatform] = {
                         signature: signature,
                         url: `https://github.com/${repoName}/releases/download/v${version}/${fileName}`
                     };

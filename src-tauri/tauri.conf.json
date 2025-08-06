@@ -57,7 +57,9 @@
       "files": {},
       "hardenedRuntime": true,
       "minimumSystemVersion": "10.13",
-      "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)"
+      "signingIdentity": "Apple Development: o0x1024@gmail.com (5AGZ74SY29)",
+      "entitlements": null,
+      "exceptionDomain": null
     },
     "windows": {
       "webviewInstallMode": {
