@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid 测试页面</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .mermaid-diagram {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 1rem 0;
+            overflow: auto;
+        }
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+        .test-section {
+            margin: 2rem 0;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mermaid 渲染测试</h1>
+    
+    <div class="test-section">
+        <h2>测试 1: 基本流程图</h2>
+        <div id="test1"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试 2: 序列图</h2>
+        <div id="test2"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>测试 3: 甘特图</h2>
+        <div id="test3"></div>
+    </div>
+
+    <script type="module">
+        async function testMermaidRendering() {
+            try {
+                console.log('开始测试 Mermaid 渲染...');
+                
+                // 动态导入 markdownService
+                const { renderMarkdown } = await import('./src/services/markdownService.js');
+                
+                // 测试 1: 基本流程图
+                const test1Markdown = `\`\`\`mermaid
+graph TD
+    A[开始] --> B{是否登录?}
+    B -->|是| C[显示主页]
+    B -->|否| D[显示登录页]
+    C --> E[结束]
+    D --> E
+\`\`\``;
+                
+                const result1 = await renderMarkdown(test1Markdown);
+                document.getElementById('test1').innerHTML = result1.html;
+                
+                // 测试 2: 序列图
+                const test2Markdown = `\`\`\`mermaid
+sequenceDiagram
+    participant A as 用户
+    participant B as 系统
+    participant C as 数据库
+    
+    A->>B: 发送请求
+    B->>C: 查询数据
+    C-->>B: 返回结果
+    B-->>A: 响应数据
+\`\`\``;
+                
+                const result2 = await renderMarkdown(test2Markdown);
+                document.getElementById('test2').innerHTML = result2.html;
+                
+                // 测试 3: 甘特图
+                const test3Markdown = `\`\`\`mermaid
+gantt
+    title 项目进度
+    dateFormat  YYYY-MM-DD
+    section 设计阶段
+    需求分析    :done,    des1, 2024-01-01,2024-01-05
+    UI设计      :active,  des2, 2024-01-06, 3d
+    section 开发阶段
+    前端开发    :         dev1, after des2, 5d
+    后端开发    :         dev2, after des2, 5d
+\`\`\``;
+                
+                const result3 = await renderMarkdown(test3Markdown);
+                document.getElementById('test3').innerHTML = result3.html;
+                
+                console.log('Mermaid 渲染测试完成');
+            } catch (error) {
+                console.error('Mermaid 渲染测试失败:', error);
+                document.body.innerHTML += `<div style="color: red; padding: 20px;">错误: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载完成后执行测试
+        window.addEventListener('load', testMermaidRendering);
+    </script>
+</body>
+</html>

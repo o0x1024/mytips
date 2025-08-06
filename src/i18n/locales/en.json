@@ -638,6 +638,24 @@
       "lastModified": "Last Modified",
       "copyPath": "Copy Path"
     },
+    "mediaManagement": {
+      "title": "Media File Management",
+      "totalImages": "Total Images",
+      "orphanedImages": "Orphaned Images",
+      "totalAudio": "Total Audio Files",
+      "orphanedAudio": "Orphaned Audio Files",
+      "totalOrphaned": "Total Orphaned Files",
+      "getStatistics": "Get Statistics",
+      "cleanupOrphaned": "Cleanup Orphaned Files",
+      "statisticsLoaded": "Media file statistics loaded",
+      "statisticsFailed": "Failed to get media file statistics",
+      "noOrphanedFiles": "No orphaned media files found",
+      "cleanupConfirmTitle": "Confirm Cleanup Orphaned Media Files",
+      "cleanupConfirmMessage": "Are you sure you want to cleanup {count} orphaned media files?\n\nThese files are no longer referenced by any notes and cannot be recovered after deletion.",
+      "confirmCleanup": "Confirm Cleanup",
+      "cleanupSuccess": "Successfully cleaned up {count} orphaned media files, freed {size} of storage space",
+      "cleanupFailed": "Failed to cleanup orphaned media files"
+    },
     "backupAndRestore": {
       "title": "Backup & Restore",
       "localBackup": "Local Backup",

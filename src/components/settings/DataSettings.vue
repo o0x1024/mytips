@@ -257,6 +257,62 @@
         </div>
       </div>
 
+      <!-- 媒体文件管理卡片 -->
+      <div class="card bg-base-100 shadow-lg">
+        <div class="card-body">
+          <h2 class="card-title text-primary mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {{ $t('dataSettings.mediaManagement.title') }}
+          </h2>
+
+          <!-- 媒体文件统计信息 -->
+          <div v-if="mediaStatistics" class="stats shadow bg-base-200 mb-4">
+            <div class="stat">
+              <div class="stat-title">{{ $t('dataSettings.mediaManagement.totalImages') }}</div>
+              <div class="stat-value text-sm">{{ mediaStatistics.total_images }}</div>
+              <div class="stat-desc">{{ $t('dataSettings.mediaManagement.orphanedImages') }}: {{ mediaStatistics.orphaned_images }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">{{ $t('dataSettings.mediaManagement.totalAudio') }}</div>
+              <div class="stat-value text-sm">{{ mediaStatistics.total_audio_files }}</div>
+              <div class="stat-desc">{{ $t('dataSettings.mediaManagement.orphanedAudio') }}: {{ mediaStatistics.orphaned_audio_files }}</div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">{{ $t('dataSettings.mediaManagement.totalOrphaned') }}</div>
+              <div class="stat-value text-sm text-warning">{{ mediaStatistics.orphaned_images + mediaStatistics.orphaned_audio_files }}</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <button 
+              class="btn btn-outline btn-info" 
+              @click="getMediaStatistics"
+              :disabled="isOperationInProgress"
+            >
+              <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              {{ $t('dataSettings.mediaManagement.getStatistics') }}
+            </button>
+            
+            <button 
+              class="btn btn-outline btn-warning" 
+              @click="cleanupOrphanedMedia"
+              :disabled="isOperationInProgress || !mediaStatistics || (mediaStatistics.orphaned_images + mediaStatistics.orphaned_audio_files) === 0"
+            >
+              <span v-if="isOperationInProgress" class="loading loading-spinner loading-sm mr-2"></span>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {{ $t('dataSettings.mediaManagement.cleanupOrphaned') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 数据备份与恢复卡片 -->
       <div class="card bg-base-100 shadow-lg">
         <div class="card-body">
@@ -369,6 +425,14 @@ const databaseInfo = ref<{
   mode_description?: string
   isRemote?: boolean
   isOnline?: boolean
+} | null>(null)
+
+// 媒体文件统计信息
+const mediaStatistics = ref<{
+  total_images: number
+  orphaned_images: number
+  total_audio_files: number
+  orphaned_audio_files: number
 } | null>(null)
 
 // 同步配置
@@ -712,9 +776,83 @@ async function loadSyncConfig() {
   }
 }
 
+// === 媒体文件管理函数 ===
+
+/**
+ * 获取媒体文件统计信息
+ */
+async function getMediaStatistics() {
+  if (isOperationInProgress.value) return
+  
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('get_media_statistics') as {
+      total_images: number
+      orphaned_images: number
+      total_audio_files: number
+      orphaned_audio_files: number
+    }
+    mediaStatistics.value = result
+    showMessage(t('dataSettings.mediaManagement.statisticsLoaded'), { title: t('common.success') })
+  } catch (error) {
+    console.error('Failed to get media statistics:', error)
+    showMessage(`${t('dataSettings.mediaManagement.statisticsFailed')}: ${error}`, { title: t('common.error') })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
+/**
+ * 清理孤儿媒体文件
+ */
+async function cleanupOrphanedMedia() {
+  if (isOperationInProgress.value) return
+  
+  if (!mediaStatistics.value || (mediaStatistics.value.orphaned_images + mediaStatistics.value.orphaned_audio_files) === 0) {
+    showMessage(t('dataSettings.mediaManagement.noOrphanedFiles'), { title: t('common.tip') })
+    return
+  }
+  
+  const confirmed = await showConfirm(
+    t('dataSettings.mediaManagement.cleanupConfirmMessage', {
+      images: mediaStatistics.value.orphaned_images,
+      audio: mediaStatistics.value.orphaned_audio_files
+    }),
+    {
+      title: t('dataSettings.mediaManagement.cleanupConfirmTitle'),
+      confirmText: t('dataSettings.mediaManagement.confirmCleanup'),
+      cancelText: t('dataSettings.prompts.cancel')
+    }
+  )
+  
+  if (!confirmed) return
+  
+  isOperationInProgress.value = true
+  try {
+    const result = await invoke('cleanup_orphaned_media') as {
+      deleted_images: number
+      deleted_audio_files: number
+    }
+    
+    showMessage(
+      t('dataSettings.mediaManagement.cleanupSuccess', {
+        images: result.deleted_images,
+        audio: result.deleted_audio_files
+      }),
+      { title: t('common.success') }
+    )
+    
+    // 重新获取统计信息
+    await getMediaStatistics()
+  } catch (error) {
+    console.error('Failed to cleanup orphaned media:', error)
+    showMessage(`${t('dataSettings.mediaManagement.cleanupFailed')}: ${error}`, { title: t('common.error') })
+  } finally {
+    isOperationInProgress.value = false
+  }
+}
+
 // === 辅助函数 ===
-
-
 
 /**
  * 复制数据库路径到剪贴板

@@ -274,7 +274,16 @@ const loadAudioFiles = async () => {
   try {
     isLoading.value = true
     const files = await invoke('get_tip_audio_files', { tipId: props.tipId })
-    audioFiles.value = files as any[]
+    
+    // 过滤掉视频文件，只保留音频文件
+    const audioOnlyFiles = (files as any[]).filter(file => {
+      const format = file.file_format?.toLowerCase()
+      // 排除常见的视频格式
+      const videoFormats = ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm']
+      return !videoFormats.includes(format)
+    })
+    
+    audioFiles.value = audioOnlyFiles
     
     // 如果有音频文件且没有当前音频，加载第一个
     if (audioFiles.value.length > 0 && !currentAudio.value) {
@@ -322,8 +331,12 @@ const loadAudio = async (audio: any) => {
       const byteArray = new Uint8Array(byteNumbers)
       audioBuffer.value = byteArray.buffer
 
-      // 创建 Blob URL
-      const blob = new Blob([audioBuffer.value], { type: `audio/${audioData.file_format || 'webm'}` })
+      // 创建 Blob URL - 根据文件格式设置正确的 MIME 类型
+      let mimeType = `audio/${audioData.file_format || 'webm'}`
+      if (audioData.file_format === 'mp4') {
+        mimeType = 'video/mp4'
+      }
+      const blob = new Blob([audioBuffer.value], { type: mimeType })
       const url = URL.createObjectURL(blob)
       
       if (audioElement.value) {
@@ -344,10 +357,19 @@ const loadAudio = async (audio: any) => {
   }
 }
 
-const playAudio = () => {
+const playAudio = async () => {
   if (audioElement.value && currentAudio.value) {
-    audioElement.value.play()
-    isPlaying.value = true
+    try {
+      await audioElement.value.play()
+      isPlaying.value = true
+    } catch (error) {
+      console.error('Error playing audio:', error)
+      isPlaying.value = false
+      // 如果是 NotSupportedError，可能是因为文件格式不支持
+      if (error instanceof DOMException && error.name === 'NotSupportedError') {
+        console.warn('Audio format not supported for playback')
+      }
+    }
   }
 }
 
@@ -423,6 +445,27 @@ const generateWaveform = async () => {
   if (!audioBuffer.value || !waveformCanvas.value) return
   
   try {
+    // 检查是否为视频文件
+    if (currentAudio.value?.file_format === 'mp4') {
+      // 对于视频文件，生成简单的占位波形
+      const canvas = waveformCanvas.value
+      const ctx = canvas.getContext('2d')!
+      const width = canvas.width = canvas.offsetWidth * 2
+      canvas.height = canvas.offsetHeight * 2
+      
+      ctx.scale(2, 2)
+      
+      // 生成简单的波形数据
+      const waveform: number[] = []
+      for (let i = 0; i < width / 4; i++) {
+        waveform.push(Math.random() * 0.5 + 0.1) // 随机高度的简单波形
+      }
+      
+      waveformData.value = waveform
+      drawWaveform()
+      return
+    }
+    
     const audioContext = new AudioContext()
     const audioData = await audioContext.decodeAudioData(audioBuffer.value.slice(0))
     
@@ -455,6 +498,23 @@ const generateWaveform = async () => {
     
   } catch (error) {
     console.error('Error generating waveform:', error)
+    // 如果解码失败，生成简单的占位波形
+    const canvas = waveformCanvas.value
+    if (canvas) {
+      const ctx = canvas.getContext('2d')!
+      const width = canvas.width = canvas.offsetWidth * 2
+      canvas.height = canvas.offsetHeight * 2
+      
+      ctx.scale(2, 2)
+      
+      const waveform: number[] = []
+      for (let i = 0; i < width / 4; i++) {
+        waveform.push(Math.random() * 0.3 + 0.1)
+      }
+      
+      waveformData.value = waveform
+      drawWaveform()
+    }
   }
 }
 
@@ -556,6 +616,35 @@ const onAudioError = (error: Event) => {
   console.error('Audio error:', error)
   isPlaying.value = false
   isLoading.value = false
+  
+  // 获取错误详情
+  const audioElement = error.target as HTMLAudioElement
+  if (audioElement && audioElement.error) {
+    const mediaError = audioElement.error
+    let errorMessage = 'Unknown audio error'
+    
+    switch (mediaError.code) {
+      case MediaError.MEDIA_ERR_ABORTED:
+        errorMessage = 'Audio playback was aborted'
+        break
+      case MediaError.MEDIA_ERR_NETWORK:
+        errorMessage = 'Network error occurred while loading audio'
+        break
+      case MediaError.MEDIA_ERR_DECODE:
+        errorMessage = 'Audio decoding failed - file may be corrupted or unsupported format'
+        break
+      case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+        errorMessage = 'Audio format not supported'
+        break
+    }
+    
+    console.warn(`Audio playback error: ${errorMessage}`, mediaError)
+    
+    // 对于视频文件，这是预期的行为
+    if (currentAudio.value?.file_format === 'mp4') {
+      console.info('MP4 video file detected - audio playback not supported in audio player')
+    }
+  }
 }
 
 // 生命周期
@@ -650,4 +739,4 @@ watch(() => props.tipId, (newTipId: string) => {
 .overflow-y-auto::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--bc) / 0.5);
 }
-</style> 
+</style>

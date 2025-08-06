@@ -23,6 +23,7 @@ use api::ai::service::{
     get_ai_usage_stats, get_default_ai_model, reload_ai_services, save_ai_config,
     set_default_ai_model, test_ai_connection, list_custom_model_configs, add_custom_model_config, update_custom_model_config, delete_custom_model_config
 };
+use api::media::{cleanup_orphaned_media, get_media_statistics};
 use api::clipboard_api::{get_clipboard_ids_for_last_days};
 use api::audio::{
     save_audio_file, get_audio_file, get_tip_audio_files, delete_audio_file,
@@ -397,6 +398,9 @@ pub fn run() -> anyhow::Result<()> {
             switch_to_embedded_replica_mode,
             get_supported_database_modes,
             cleanup_local_database_files,
+            // 媒体文件管理 APIs
+            cleanup_orphaned_media,
+            get_media_statistics,
             api::ai::service::list_custom_model_configs,
             api::ai::service::add_custom_model_config,
             api::ai::service::update_custom_model_config,

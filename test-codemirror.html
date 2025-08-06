@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeMirror Editor Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            padding: 20px;
+            background: #2563eb;
+            color: white;
+        }
+        .editor-container {
+            height: 600px;
+            display: flex;
+        }
+        .controls {
+            padding: 10px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        button {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #f3f4f6;
+        }
+        button.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+        .test-editor {
+            width: 50%;
+            border-right: 1px solid #e2e8f0;
+        }
+        .test-preview {
+            width: 50%;
+            padding: 20px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+        .test-preview h1 { font-size: 2em; margin: 0.5em 0; }
+        .test-preview h2 { font-size: 1.5em; margin: 0.5em 0; }
+        .test-preview h3 { font-size: 1.2em; margin: 0.5em 0; }
+        .test-preview code { background: #f1f5f9; padding: 2px 4px; border-radius: 3px; }
+        .test-preview blockquote { border-left: 4px solid #e2e8f0; padding-left: 16px; margin: 16px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CodeMirror Editor 测试</h1>
+            <p>测试新的基于CodeMirror的Markdown编辑器组件</p>
+        </div>
+        
+        <div class="controls">
+            <button onclick="testCodeMirror()">测试 CodeMirror</button>
+            <button onclick="toggleTheme()">切换主题</button>
+            <span id="status">准备就绪</span>
+        </div>
+        
+        <div class="editor-container">
+            <div class="test-editor">
+                <div id="editor" style="height: 100%; border: none;"></div>
+            </div>
+            <div class="test-preview">
+                <div id="preview">
+                    <h2>预览区域</h2>
+                    <p>在左侧编辑器中输入 Markdown 内容，这里会显示预览。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { EditorView, keymap, drawSelection, lineNumbers, highlightActiveLine } from '@codemirror/view';
+        import { EditorState } from '@codemirror/state';
+        import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+        import { markdown } from '@codemirror/lang-markdown';
+        import { oneDark } from '@codemirror/theme-one-dark';
+        import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+        
+        let editorView = null;
+         let isDark = false;
+        
+        const initialContent = `# CodeMirror Editor 测试
+
+这是一个基于 **CodeMirror 6** 的 Markdown 编辑器组件。
+
+## 功能特性
+
+- ✅ 语法高亮
+- ✅ 行号显示
+- ✅ 实时预览
+- ✅ 主题切换
+
+## 代码示例
+
+\`\`\`javascript
+const editor = new EditorView({
+  doc: 'Hello World',
+  extensions: [
+    lineNumbers(),
+    highlightActiveLine(),
+    markdown()
+  ]
+})
+\`\`\`
+
+## 列表测试
+
+1. 第一项
+2. 第二项
+   - 子项 A
+   - 子项 B
+3. 第三项
+
+**粗体文本** 和 *斜体文本* 以及 \`行内代码\`。
+
+> 这是一个引用块，用来测试样式渲染。
+
+---
+
+测试完成！🎉`;
+        
+        function updatePreview(content) {
+            let html = content
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
+                .replace(/^- (.*$)/gim, '<li>$1</li>')
+                .replace(/^\d+\. (.*$)/gim, '<li>$1</li>')
+                .replace(/\n/g, '<br>');
+            
+            document.getElementById('preview').innerHTML = html;
+        }
+        
+        function initEditor() {
+            try {
+                const state = EditorState.create({
+                    doc: initialContent,
+                    extensions: [
+                        lineNumbers(),
+                        markdown(),
+                        EditorView.updateListener.of((update) => {
+                            if (update.docChanged) {
+                                const newValue = update.state.doc.toString();
+                                updatePreview(newValue);
+                            }
+                        }),
+                    ],
+                });
+                
+                editorView = new EditorView({
+                    state,
+                    parent: document.getElementById('editor'),
+                });
+                
+                // 初始化预览
+                updatePreview(initialContent);
+                document.getElementById('status').textContent = 'CodeMirror 编辑器已初始化';
+                console.log('CodeMirror editor initialized successfully');
+            } catch (error) {
+                console.error('Error creating editor:', error);
+                document.getElementById('status').textContent = '编辑器初始化失败: ' + error.message;
+                return;
+            }
+        }
+        
+        window.testCodeMirror = function() {
+            if (editorView) {
+                editorView.destroy();
+            }
+            initEditor();
+        }
+        
+        window.toggleTheme = function() {
+             isDark = !isDark;
+             // 重新创建编辑器以应用主题
+             if (editorView) {
+                 const currentContent = editorView.state.doc.toString();
+                 editorView.destroy();
+                 initEditor();
+                 // 恢复内容
+                 editorView.dispatch({
+                     changes: { from: 0, to: editorView.state.doc.length, insert: currentContent }
+                 });
+             }
+             document.body.style.background = isDark ? '#1a1a1a' : '#f5f5f5';
+             document.querySelector('.container').style.background = isDark ? '#2a2a2a' : 'white';
+             document.querySelector('.container').style.color = isDark ? 'white' : 'black';
+         }
+        
+        // 自动初始化
+        initEditor();
+    </script>
+</body>
+</html>

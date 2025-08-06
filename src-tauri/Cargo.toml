@@ -77,7 +77,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
-git2 = { version = "0.20.2", default-features = false }
+git2 = { version = "0.20.2", default-features = false, features = ["https"] }
 tauri-plugin-global-shortcut = "2"
 
 [target.'cfg(target_os = "windows")'.dependencies]

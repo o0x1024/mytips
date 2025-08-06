@@ -1,5 +1,5 @@
 git add .
-git commit -m "udpate:build linux"
+git commit -m "udpate:fix bug"
 git push 
 git tag -d v1.1.4
 git push origin -d v1.1.4

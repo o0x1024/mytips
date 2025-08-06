@@ -110,10 +110,6 @@
     </div>
 
     <div class="flex items-center gap-2" ref="toolbarRight">
-      <!-- 搜索 -->
-      <button @click="emitCommand('toggle-search')" class="btn btn-xs btn-ghost" :class="{ 'btn-active': showSearch }" :title="t('noteEditor.searchTooltip')" data-priority="9">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.35-4.35"></path></svg>
-      </button>
 
       <!-- 目录 -->
       <button @click="emitCommand('toggle-toc')" class="btn btn-xs btn-ghost" :class="{ 'btn-active': showToc }" :title="t('noteEditor.toggleTocTooltip')" data-priority="10">
@@ -169,7 +165,7 @@ defineProps({
   isSplitMode: Boolean,
   // isWysiwygMode: Boolean, // WYSIWYG模式已注释
   showToc: Boolean,
-  showSearch: Boolean,
+
   currentHighlightTheme: String,
   currentMarkdownTheme: String,
 });

@@ -152,8 +152,129 @@
   word-break: break-word;
 }
 
+/* Mermaid 图表样式 - 兼容 rehype-mermaid 插件 */
+.mermaid-diagram,
+.mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 1rem 0;
+  overflow: visible;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.mermaid-diagram svg,
+.mermaid svg,
+.mermaid img {
+  max-width: 100%;
+  width: 100%;
+  height: auto;
+  display: block;
+  background-color: transparent;
+  box-sizing: border-box;
+}
+
+/* 确保在深色模式下也有合适的背景 */
+[data-theme="dark"] .mermaid-diagram,
+[data-theme="dark"] .mermaid {
+  background-color: #ffffff;
+  border-color: #374151;
+}
+
+/* 修复 Mermaid 图表中的文本颜色和样式 */
+.mermaid-diagram text,
+.mermaid text {
+  fill: #000000 !important;
+  font-family: inherit !important;
+}
+
+.mermaid-diagram .node rect,
+.mermaid-diagram .node circle,
+.mermaid-diagram .node ellipse,
+.mermaid-diagram .node polygon,
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node ellipse,
+.mermaid .node polygon {
+  stroke: #333333 !important;
+  fill: #ffffff !important;
+}
+
+.mermaid-diagram .edgePath path,
+.mermaid .edgePath path {
+  stroke: #333333 !important;
+  stroke-width: 2px !important;
+}
+
+/* 修复流程图节点样式 */
+.mermaid-diagram .flowchart-link {
+  stroke: #333333 !important;
+  stroke-width: 2px !important;
+}
+
+.mermaid-diagram .marker {
+  fill: #333333 !important;
+  stroke: #333333 !important;
+}
+
+/* 修复序列图样式 */
+.mermaid-diagram .actor {
+  fill: #ffffff !important;
+  stroke: #333333 !important;
+}
+
+.mermaid-diagram .messageLine0,
+.mermaid-diagram .messageLine1 {
+  stroke: #333333 !important;
+}
+
+/* 修复甘特图样式 */
+.mermaid-diagram .section0,
+.mermaid-diagram .section1,
+.mermaid-diagram .section2,
+.mermaid-diagram .section3 {
+  fill: #f8f9fa !important;
+}
+
+.mermaid-diagram .task0,
+.mermaid-diagram .task1,
+.mermaid-diagram .task2,
+.mermaid-diagram .task3 {
+  fill: #e3f2fd !important;
+  stroke: #333333 !important;
+}
+
+/* 修复类图样式 */
+.mermaid-diagram .classBox {
+  fill: #ffffff !important;
+  stroke: #333333 !important;
+}
+
+/* 修复状态图样式 */
+.mermaid-diagram .state-start,
+.mermaid-diagram .state-end,
+.mermaid-diagram .statediagram-state {
+  fill: #ffffff !important;
+  stroke: #333333 !important;
+}
+
+/* 修复饼图样式 */
+.mermaid-diagram .pieCircle {
+  stroke: #333333 !important;
+}
+
+/* 确保所有图表元素可见 */
+.mermaid-diagram * {
+  visibility: visible !important;
+}
+
 @media (max-width: 768px) {
   .toolbar-right-group {
     display: none;
   }
-} 
+}

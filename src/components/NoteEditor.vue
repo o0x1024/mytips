@@ -43,7 +43,7 @@
           :is-preview-mode="isPreviewMode"
           :is-split-mode="isSplitMode"
           :show-toc="showToc"
-          :show-search="showSearch"
+  
           :current-highlight-theme="currentHighlightTheme"
           :current-markdown-theme="currentMarkdownTheme"
           @command="handleToolbarCommand"
@@ -59,7 +59,7 @@
             :rendered-content="renderedContent"
             :is-split-mode="isSplitMode"
             :is-preview-mode="isPreviewMode"
-            :show-search="showSearch"
+    
             ref="markdownEditor"
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
@@ -69,7 +69,7 @@
     @dragleave="handleDragLeave"
             @keydown="handleKeyDown"
             @preview-scroll="handlePreviewScroll"
-            @close-search="showSearch = false"
+    
           />
           
           <!-- 空状态编辑区域 -->
@@ -469,7 +469,7 @@ const hiddenItems = ref<any[]>([])
 
 // 目录相关状态
 const showToc = ref(false)
-const showSearch = ref(false)
+
 const tocItems = ref<{ id: string; level: number; text: string }[]>([]);
 const activeHeadingId = ref('');
 const tocPosition = ref({ x: window.innerWidth - 320, y: 200 })
@@ -960,12 +960,8 @@ function handleKeyDown(event: KeyboardEvent) {
     return
   }
 
-  // 搜索: Ctrl+F
-  if (isCtrlOrCmd && event.key === 'f') {
-    event.preventDefault()
-    showSearch.value = true
-    return
-  }
+  // 搜索功能现在由CodeMirror内置搜索处理
+  // Ctrl+F 会自动触发CodeMirror的搜索功能
 
   // 对于其他内容修改按键，添加到撤销堆栈
   // 避免在每次按键都保存，仅在内容实际变化时
@@ -1627,12 +1623,10 @@ function isSupportedMediaType(mimeType: string): boolean {
 // 处理媒体文件上传的通用函数
 async function handleMediaFileUpload(file: File) {
   // 将文件转换为Base64
-  const base64Data = await convertFileToBase64(file)
+  const dataUrl = await convertFileToBase64(file)
+  // 提取纯base64数据（去掉data:前缀）
+  const base64Data = dataUrl.split(',')[1]
   console.log(`媒体文件转换为Base64格式成功，类型: ${file.type}，大小: ${file.size} bytes`)
-
-  // 生成唯一ID
-  const mediaId = `media_${Date.now()}_${Math.floor(Math.random() * 1000)}`
-  console.log(`生成媒体文件ID: ${mediaId}`)
 
   // 确保笔记已保存（有ID）
   if (!localNote.value.id) {
@@ -1640,24 +1634,45 @@ async function handleMediaFileUpload(file: File) {
   }
   console.log(`笔记ID: ${localNote.value.id}，准备保存媒体文件`)
 
-  // 保存媒体文件到数据库
-  console.log(`调用save_tip_image API，参数: tip_id=${localNote.value.id}, image_id=${mediaId}`)
-  await invoke('save_tip_image', {
-    imageData: {
-      tip_id: localNote.value.id,
-      image_id: mediaId,
-      image_data: base64Data
+  // 先保存文件到数据库，获取实际的ID
+  let actualMediaId: string
+  
+  if (file.type.startsWith('video/') || file.type.startsWith('audio/')) {
+    // 保存视频/音频文件到音频表
+    console.log(`调用save_audio_file API，参数: tip_id=${localNote.value.id}`)
+    actualMediaId = await invoke('save_audio_file', {
+      audioData: {
+        tip_id: localNote.value.id,
+        audio_data: base64Data,
+        file_format: file.type.split('/')[1], // 例如: mp4, webm
+        duration: null,
+        file_name: file.name
+      }
+    }) as string
+    console.log('视频/音频文件已成功保存到数据库，实际ID:', actualMediaId)
+  } else {
+    // 生成图片ID
+    actualMediaId = `media_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+    
+    // 保存图片文件到图片表
+    console.log(`调用save_tip_image API，参数: tip_id=${localNote.value.id}, image_id=${actualMediaId}`)
+    await invoke('save_tip_image', {
+      imageData: {
+        tip_id: localNote.value.id,
+        image_id: actualMediaId,
+        image_data: base64Data
+      }
+    })
+    console.log('图片文件已成功保存到数据库')
+
+    // 确保images对象存在
+    if (!localNote.value.images) {
+      localNote.value.images = {}
     }
-  })
-  console.log('媒体文件已成功保存到数据库')
 
-  // 确保images对象存在
-  if (!localNote.value.images) {
-    localNote.value.images = {}
+    // 保存图片文件到本地状态（需要完整的data URL）
+    localNote.value.images[actualMediaId] = dataUrl
   }
-
-  // 保存媒体文件到本地状态
-  localNote.value.images[mediaId] = base64Data
 
   // 在光标位置插入相应的Markdown引用
   const textarea = editorTextarea.value
@@ -1668,9 +1683,9 @@ async function handleMediaFileUpload(file: File) {
     // 根据文件类型生成不同的Markdown
     let mediaMarkdown = ''
     if (file.type.startsWith('image/')) {
-      mediaMarkdown = `![${file.name || '图片'}](local://${mediaId})`
+      mediaMarkdown = `![${file.name || '图片'}](local://${actualMediaId})`
     } else if (file.type.startsWith('video/')) {
-      mediaMarkdown = `\n\n🎬 **视频文件: ${file.name || '视频'}**\n<video controls style="max-width: 100%; height: auto;">\n  <source src="local://${mediaId}" type="${file.type}">\n  您的浏览器不支持视频播放。\n</video>\n\n`
+      mediaMarkdown = `\n\n🎬 **视频文件: ${file.name || '视频'}**\n<video controls style="max-width: 100%; height: auto;">\n  <source src="local://${actualMediaId}" type="${file.type}">\n  您的浏览器不支持视频播放。\n</video>\n\n`
     }
 
     // 在光标位置插入
@@ -1700,7 +1715,7 @@ async function handleMediaFileUpload(file: File) {
   }
 
   // 显示成功提示
-  console.log('媒体文件已保存到数据库，ID:', mediaId)
+  console.log('媒体文件已保存到数据库，实际ID:', actualMediaId)
 }
 
 // 拖拽上传相关事件处理
@@ -2318,16 +2333,20 @@ function handlePreviewScroll(event: Event) {
 watch(() => localNote.value.content, (newValue, oldValue) => {
   if (newValue === oldValue) return;
   
-  // 如果是切换笔记导致的内容变化，则跳过此监视器
-  if (isSwitchingNote.value) {
-    return;
-  }
+  // 如果是切换笔记导致的内容变化，延迟处理而不是跳过
+  // 这样可以确保新建笔记时的初始渲染不会被跳过
+  const shouldDelay = isSwitchingNote.value;
 
   if (renderTimeout.value) {
     clearTimeout(renderTimeout.value);
   }
 
-  autoSave();
+  // 只有在非切换笔记状态下才自动保存，避免在笔记切换过程中触发不必要的保存
+  if (!shouldDelay) {
+    autoSave();
+  }
+  
+  const renderDelay = shouldDelay ? 200 : 100; // 切换笔记时延迟更长，确保切换完成
   
   renderTimeout.value = setTimeout(() => {
     render();
@@ -2349,7 +2368,7 @@ watch(() => localNote.value.content, (newValue, oldValue) => {
       }, 200)
     }
   });
-  }, 100) as unknown as number; // 减少防抖延迟从500ms到100ms，提供更即时的预览更新
+  }, renderDelay) as unknown as number;
 })
 
 // 在切换模式时同步滚动位置
@@ -3020,7 +3039,7 @@ function handleToolbarCommand(command: string, ...args: any[]) {
       toggleToc()
       break
     case 'toggle-search':
-      showSearch.value = !showSearch.value
+      // 搜索功能现在由CodeMirror内置搜索处理，无需额外操作
       break
     case 'toggle-audio-recording':
       toggleAudioRecording()
@@ -3401,6 +3420,20 @@ const render = async () => {
   if (localNote.value && localNote.value.content !== undefined) {
     try {
       console.log('Rendering markdown with images:', Object.keys(localNote.value.images || {}))
+      
+      // 获取笔记的音频/视频文件列表
+      try {
+        const audioFiles = await invoke<any[]>('get_tip_audio_files', { tipId: localNote.value.id })
+        console.log('Audio/video files for note:', audioFiles)
+        if (audioFiles && audioFiles.length > 0) {
+          console.log('Found audio/video files:', audioFiles.map((f: any) => ({ id: f.audio_id, format: f.file_format, name: f.file_name })))
+        } else {
+          console.log('No audio/video files found for this note')
+        }
+      } catch (audioError) {
+        console.error('Failed to get audio files:', audioError)
+      }
+      
       const { html, toc } = await renderMarkdown(
         localNote.value.content || '',
         localNote.value.images || {}

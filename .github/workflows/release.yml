@@ -13,21 +13,21 @@ jobs:
       max-parallel: 6 # 一次最多并行运行 2 个构建任务
       matrix:
         include:
-          - os: ubuntu-22.04
-            platform: 'linux-x86_64'
-            rust_target: 'x86_64-unknown-linux-gnu'
-          - os: macos-latest
-            platform: 'darwin-x86_64'
-            rust_target: 'x86_64-apple-darwin'
+          # - os: ubuntu-22.04
+          #   platform: 'linux-x86_64'
+          #   rust_target: 'x86_64-unknown-linux-gnu'
+          # - os: macos-latest
+          #   platform: 'darwin-x86_64'
+          #   rust_target: 'x86_64-apple-darwin'
           - os: macos-14
             platform: 'darwin-aarch64'
             rust_target: 'aarch64-apple-darwin'
-          - os: windows-latest
-            platform: 'windows-x86_64'
-            rust_target: 'x86_64-pc-windows-msvc'
-          - os: ubuntu-latest
-            platform: 'android'
-            rust_target: 'aarch64-linux-android' 
+          # - os: windows-latest
+          #   platform: 'windows-x86_64'
+          #   rust_target: 'x86_64-pc-windows-msvc'
+          # - os: ubuntu-latest
+          #   platform: 'android'
+          #   rust_target: 'aarch64-linux-android' 
 
     steps:
     - name: Checkout repository
@@ -212,6 +212,7 @@ jobs:
 
         # 创建一个临时目录来整理所有待上传的文件
         UPLOAD_DIR=$(mktemp -d)
+        echo "UPLOAD_DIR=$UPLOAD_DIR" >> $GITHUB_ENV
         
         # 查找并移动 Linux x86_64 产物
         if [ -d "$TARGET_DIR/tauri-build-linux-x86_64" ]; then
@@ -257,6 +258,10 @@ jobs:
           find "$TARGET_DIR/tauri-build-android/" -name "*.apk.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk.sig" \;
         fi
 
+        # 重新生成清单文件，现在签名文件已经移动到正确位置
+        echo "Regenerating update manifest with actual signature files..."
+        UPLOAD_DIR="$UPLOAD_DIR" node scripts/generate-update-manifest.cjs
+        
         # 查找并移动清单文件
         if [ -d "dist/update-manifests" ]; then
           # 复制latest.json到根目录，确保它可以通过固定URL访问

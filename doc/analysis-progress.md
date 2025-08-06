@@ -109,6 +109,131 @@
 **修改文件**:
 - ✅ `src/components/MainLayout.vue` - 拖拽功能核心优化
 
+### ✅ Markdown流程图渲染功能实现
+
+**完成时间**: 2024年当前会话
+
+**实现范围**:
+
+1. **Mermaid集成**
+   - ✅ 添加 `mermaid` 依赖包
+   - ✅ 添加 `rehype-raw` 依赖包处理原始 HTML
+   - ✅ 在 `markdownService.ts` 中集成 Mermaid 渲染引擎
+   - ✅ 初始化 Mermaid 配置（主题、安全级别等）
+   - ✅ 创建 `rehypeMermaid` 插件处理流程图代码块
+
+2. **渲染管道优化**
+   - ✅ 检测 `language-mermaid` 代码块
+   - ✅ 异步渲染 Mermaid 图表为 SVG
+   - ✅ 使用 `type: 'raw'` 节点插入 SVG 内容
+   - ✅ 添加 `rehypeRaw` 插件处理原始 HTML 内容
+   - ✅ 添加错误处理和降级机制
+
+3. **安全配置更新**
+   - ✅ 扩展 `rehypeSanitize` 配置支持 SVG 标签
+   - ✅ 允许 Mermaid 生成的所有 SVG 元素和属性
+   - ✅ 保持安全性的同时支持完整的图表渲染
+
+4. **问题修复过程**
+   - ✅ 识别 Mermaid 图表未能正确渲染的问题
+   - ✅ 分析根因：`type: 'raw'` 节点需要 `rehype-raw` 插件支持
+   - ✅ 安装 `rehype-raw` 插件并正确配置
+   - ✅ 修复插件执行顺序：将 `rehypeRaw` 移到 `rehypeMermaid` 之后
+   - ✅ 修复主题配置：从 'default' 改为 'neutral' 主题
+   - ✅ 添加详细的主题变量配置，确保浅色背景显示
+   - ✅ 优化 CSS 样式：白色背景、边框、内边距等
+   - ✅ 添加深色模式兼容性
+   - ✅ 修复文本和线条颜色问题
+   - ✅ 更新测试文件，包含多种图表类型验证
+   - ✅ 创建独立测试页面验证功能
+   - ✅ 修复黑色矩形块显示问题：调整插件顺序和配置
+   - ✅ 添加针对各种图表类型的详细 CSS 样式修复
+   - ✅ 确保所有图表元素可见性和正确的颜色配置
+   - ✅ 确认功能完全正常工作
+
+### Mermaid 图表自适应修复 (2024-01-XX)
+
+**问题**: Mermaid 流程图显示不正确，部分图表超出显示区域，没有自适应窗口大小。
+
+**修复措施**:
+
+1. **CSS 样式优化**:
+   - ✅ 修改 `.mermaid-diagram` 容器样式，将 `overflow: auto` 改为 `overflow: visible`
+   - ✅ 添加 `width: 100%` 和 `box-sizing: border-box` 确保容器自适应
+   - ✅ 为 SVG 元素添加 `width: 100%` 和 `box-sizing: border-box`
+
+2. **Mermaid 配置增强**:
+   - ✅ 为所有图表类型启用 `useMaxWidth: true` 配置
+   - ✅ 添加 `class`、`state`、`pie`、`journey`、`gitGraph` 等图表类型的自适应配置
+   - ✅ 优化流程图配置，添加 `curve: 'basis'` 改善线条样式
+
+3. **SVG 渲染优化**:
+   - ✅ 在 `rehypeMermaid` 函数中动态修改生成的 SVG
+   - ✅ 为 SVG 添加自适应样式：`max-width: 100%; height: auto; width: 100%; display: block;`
+   - ✅ 优化容器样式：`width: 100%; overflow: visible;`
+
+**修改文件**:
+- ✅ `src/services/markdownService.ts` - Mermaid 配置和 SVG 渲染优化
+- ✅ `src/assets/main.css` - 容器和 SVG 样式优化
+
+**最终确认**: Mermaid 图表现在能够完全自适应容器大小，不再出现超出显示区域的问题，所有图表类型都能正确响应式显示。
+
+5. **支持的图表类型**
+   - ✅ 流程图 (Flowchart) - `graph TD`
+   - ✅ 序列图 (Sequence Diagram)
+   - ✅ 甘特图 (Gantt Chart)
+   - ✅ 类图 (Class Diagram)
+   - ✅ 状态图 (State Diagram)
+   - ✅ 饼图 (Pie Chart)
+   - ✅ 其他 Mermaid 支持的图表类型
+
+**关键特性**:
+
+1. **异步渲染**:
+   - 使用异步 rehype 插件处理 Mermaid 渲染
+   - 避免阻塞主渲染流程
+   - 支持复杂图表的渲染
+
+2. **错误处理**:
+   - 渲染失败时保留原始代码块
+   - 添加错误提示信息
+   - 不影响其他内容的正常渲染
+
+3. **样式集成**:
+   - 继承应用主题样式
+   - 居中显示图表
+   - 适当的边距和间距
+
+4. **安全性**:
+   - 通过 rehypeSanitize 确保 SVG 安全
+   - 防止 XSS 攻击
+   - 保持内容安全策略
+
+5. **原始 HTML 支持**:
+   - 通过 rehype-raw 正确处理 SVG 内容
+   - 确保 Mermaid 生成的 SVG 能够正确显示
+
+**使用方法**:
+```markdown
+```mermaid
+graph TD
+    A[开始] --> B{条件判断}
+    B -->|是| C[操作A]
+    B -->|否| D[操作B]
+    C --> E[结束]
+    D --> E
+```
+```
+
+**修改文件**:
+- ✅ `src/services/markdownService.ts` - 核心渲染逻辑和插件执行顺序修复
+- ✅ `src/assets/main.css` - 添加 Mermaid 图表样式
+- ✅ `package.json` - 添加 mermaid 和 rehype-raw 依赖
+- ✅ `test-mermaid.md` - 测试文件
+- ✅ `mermaid-test.html` - 独立测试页面
+- ✅ `test-mermaid-debug.html` - 调试测试页面
+- ✅ `doc/mermaid-implementation.md` - 实现文档
+
 ## 技术栈总结
 
 **后端 (Rust + Tauri)**:
@@ -122,6 +247,10 @@
 - `pinia` - 状态管理
 - `@tauri-apps/api` - Tauri API 调用
 - `tailwindcss` - UI 样式
+- `unified` - Markdown 处理管道
+- `mermaid` - 流程图和图表渲染
+- `rehype-*` - HTML 转换插件生态
+- `rehype-raw` - 原始 HTML 处理插件
 
 **数据库**:
 - `SQLite` - 本地数据库

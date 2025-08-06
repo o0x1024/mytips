@@ -118,11 +118,17 @@ pub async fn save_audio_file_to_db(
     audio_data: super::AudioData,
 ) -> Result<String, String> {
     let conn = db_manager.get_conn().await.map_err(|e| format!("Database connection failed: {}", e))?;
+    
+    // 安全地解码 base64 数据
+    let decoded_data = base64::engine::general_purpose::STANDARD
+        .decode(&audio_data.audio_data)
+        .map_err(|e| format!("Failed to decode base64 audio data: {}", e))?;
+    
     let audio_file = AudioFile::new(
         audio_data.tip_id,
         audio_data.file_name.unwrap_or_default(),
         audio_data.file_format,
-        base64::engine::general_purpose::STANDARD.decode(audio_data.audio_data).unwrap(),
+        decoded_data,
         audio_data.duration,
     );
     let audio_id = audio_file.audio_id.clone();
@@ -168,4 +174,4 @@ pub async fn update_audio_transcription(
         params![transcription, confidence, chrono::Utc::now().timestamp_millis(), audio_id],
     ).await.map_err(|e| format!("Failed to update transcription: {}", e))?;
     Ok(())
-} 
+}

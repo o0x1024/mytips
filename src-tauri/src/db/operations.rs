@@ -583,7 +583,7 @@ pub async fn delete_tip(conn: &DbConnection, tip_id: &str) -> Result<()> {
 
 /// 删除笔记及其依赖关系的内部函数
 async fn delete_tip_with_dependencies(conn: &DbConnection, tip_id: &str) -> Result<()> {
-    // 1. 先查询并记录要删除的图片数量
+    // 1. 先查询并记录要删除的媒体文件数量
     let image_count: i64 = conn.query(
         "SELECT COUNT(*) FROM tip_images WHERE tip_id = ?1",
         params![tip_id]
@@ -592,8 +592,16 @@ async fn delete_tip_with_dependencies(conn: &DbConnection, tip_id: &str) -> Resu
     .unwrap()
     .get(0)?;
     
-    println!("Deleting tip {} with {} images", tip_id, image_count);
-    tracing::info!("Deleting tip {} with {} images", tip_id, image_count);
+    let audio_count: i64 = conn.query(
+        "SELECT COUNT(*) FROM tip_audio_files WHERE tip_id = ?1",
+        params![tip_id]
+    ).await?
+    .next().await?
+    .unwrap()
+    .get(0)?;
+    
+    println!("Deleting tip {} with {} images and {} audio files", tip_id, image_count, audio_count);
+    tracing::info!("Deleting tip {} with {} images and {} audio files", tip_id, image_count, audio_count);
     
     // 2. 删除相关的图片
     let deleted_images = conn.execute(
@@ -604,7 +612,16 @@ async fn delete_tip_with_dependencies(conn: &DbConnection, tip_id: &str) -> Resu
     println!("Deleted {} images for tip {}", deleted_images, tip_id);
     tracing::info!("Deleted {} images for tip {}", deleted_images, tip_id);
     
-    // 3. 删除相关的标签关联
+    // 3. 删除相关的音频文件
+    let deleted_audio = conn.execute(
+        "DELETE FROM tip_audio_files WHERE tip_id = ?1",
+        params![tip_id]
+    ).await?;
+    
+    println!("Deleted {} audio files for tip {}", deleted_audio, tip_id);
+    tracing::info!("Deleted {} audio files for tip {}", deleted_audio, tip_id);
+    
+    // 4. 删除相关的标签关联
     let deleted_tags = conn.execute(
         "DELETE FROM tip_tags WHERE tip_id = ?1", 
         params![tip_id]
@@ -612,7 +629,7 @@ async fn delete_tip_with_dependencies(conn: &DbConnection, tip_id: &str) -> Resu
     
     tracing::info!("Deleted {} tag associations for tip {}", deleted_tags, tip_id);
     
-    // 4. 删除笔记本身
+    // 5. 删除笔记本身
     let rows_affected = conn.execute(
         "DELETE FROM tips WHERE id = ?1", 
         params![tip_id]
@@ -622,8 +639,10 @@ async fn delete_tip_with_dependencies(conn: &DbConnection, tip_id: &str) -> Resu
         return Err(anyhow!("Tip not found or already deleted: {}", tip_id));
     }
     
-    println!("Successfully deleted tip {} and all its dependencies", tip_id);
-    tracing::info!("Successfully deleted tip {} and all its dependencies", tip_id);
+    println!("Successfully deleted tip {} with {} images, {} audio files, and {} tag associations", 
+             tip_id, deleted_images, deleted_audio, deleted_tags);
+    tracing::info!("Successfully deleted tip {} with {} images, {} audio files, and {} tag associations", 
+                   tip_id, deleted_images, deleted_audio, deleted_tags);
     
     Ok(())
 }
@@ -1507,6 +1526,134 @@ pub async fn delete_clipboard_entry(conn: &DbConnection, entry_id: i64) -> Resul
 pub async fn clear_clipboard_history(conn: &DbConnection) -> Result<()> {
     conn.execute("DELETE FROM clipboard_history", ()).await?;
     Ok(())
+}
+
+// ===============================================
+// 媒体文件清理相关函数
+// ===============================================
+
+/// 媒体文件统计信息
+#[derive(Debug, serde::Serialize)]
+pub struct MediaStatistics {
+    pub total_images: u64,
+    pub total_audio: u64,
+    pub orphaned_images: u64,
+    pub orphaned_audio: u64,
+}
+
+/// 检测并清理孤儿图片文件
+pub async fn cleanup_orphaned_images(conn: &DbConnection) -> Result<u64> {
+    // 查找在tip_images表中但不在任何笔记内容中被引用的图片
+    let mut rows = conn.query(
+        "SELECT ti.image_id, ti.tip_id 
+         FROM tip_images ti 
+         JOIN tips t ON ti.tip_id = t.id 
+         WHERE t.content NOT LIKE '%' || ti.image_id || '%'",
+        ()
+    ).await?;
+    
+    let mut orphaned_count = 0;
+    while let Some(row) = rows.next().await? {
+        let image_id: String = row.get(0)?;
+        let tip_id: String = row.get(1)?;
+        
+        // 删除孤儿图片
+        conn.execute(
+            "DELETE FROM tip_images WHERE image_id = ?1",
+            params![image_id.clone()]
+        ).await?;
+        
+        orphaned_count += 1;
+        tracing::info!("Cleaned up orphaned image {} from tip {}", image_id, tip_id);
+    }
+    
+    Ok(orphaned_count)
+}
+
+/// 检测并清理孤儿音频文件
+pub async fn cleanup_orphaned_audio_files(conn: &DbConnection) -> Result<u64> {
+    // 查找在tip_audio_files表中但不在任何笔记内容中被引用的音频文件
+    let mut rows = conn.query(
+        "SELECT taf.audio_id, taf.tip_id 
+         FROM tip_audio_files taf 
+         JOIN tips t ON taf.tip_id = t.id 
+         WHERE t.content NOT LIKE '%' || taf.audio_id || '%'",
+        ()
+    ).await?;
+    
+    let mut orphaned_count = 0;
+    while let Some(row) = rows.next().await? {
+        let audio_id: String = row.get(0)?;
+        let tip_id: String = row.get(1)?;
+        
+        // 删除孤儿音频文件
+        conn.execute(
+            "DELETE FROM tip_audio_files WHERE audio_id = ?1",
+            params![audio_id.clone()]
+        ).await?;
+        
+        orphaned_count += 1;
+        tracing::info!("Cleaned up orphaned audio file {} from tip {}", audio_id, tip_id);
+    }
+    
+    Ok(orphaned_count)
+}
+
+/// 综合清理孤儿媒体文件
+pub async fn cleanup_orphaned_media_files(conn: &DbConnection) -> Result<(u64, u64)> {
+    let orphaned_images = cleanup_orphaned_images(conn).await?;
+    let orphaned_audio = cleanup_orphaned_audio_files(conn).await?;
+    
+    println!("Media cleanup completed: {} orphaned images, {} orphaned audio files removed", 
+             orphaned_images, orphaned_audio);
+    tracing::info!("Media cleanup completed: {} orphaned images, {} orphaned audio files removed", 
+                   orphaned_images, orphaned_audio);
+    
+    Ok((orphaned_images, orphaned_audio))
+}
+
+/// 获取媒体文件统计信息
+pub async fn get_media_statistics(conn: &DbConnection) -> Result<MediaStatistics> {
+    // 统计总的媒体文件数量
+    let total_images: i64 = conn.query(
+        "SELECT COUNT(*) FROM tip_images", ()
+    ).await?
+    .next().await?
+    .unwrap()
+    .get(0)?;
+    
+    let total_audio: i64 = conn.query(
+        "SELECT COUNT(*) FROM tip_audio_files", ()
+    ).await?
+    .next().await?
+    .unwrap()
+    .get(0)?;
+    
+    // 计算可能的孤儿文件数量
+    let orphaned_images: i64 = conn.query(
+        "SELECT COUNT(*) FROM tip_images ti 
+         JOIN tips t ON ti.tip_id = t.id 
+         WHERE t.content NOT LIKE '%' || ti.image_id || '%'", ()
+    ).await?
+    .next().await?
+    .unwrap()
+    .get(0)?;
+    
+    let orphaned_audio: i64 = conn.query(
+        "SELECT COUNT(*) FROM tip_audio_files taf 
+         JOIN tips t ON taf.tip_id = t.id 
+         WHERE t.content NOT LIKE '%' || taf.audio_id || '%'", ()
+    ).await?
+    .next().await?
+    .unwrap()
+    .get(0)?;
+    
+    Ok(MediaStatistics {
+        total_images: total_images as u64,
+        total_audio: total_audio as u64,
+        orphaned_images: orphaned_images as u64,
+        orphaned_audio: orphaned_audio as u64,
+    })
 }
 
  

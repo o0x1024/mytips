@@ -28,7 +28,7 @@ if (!fs.existsSync(updaterDir)) {
     
     // 读取GitHub仓库信息
     const repoName = process.env.GITHUB_REPOSITORY || 'o0x1024/mytips';
-    const releaseNotes = process.env.RELEASE_NOTES || 'See the release notes for details.';
+    const releaseNotes = process.env.RELEASE_NOTES || 'editor instead use codemirror and fix bug';
     
     // 根据截图中的文件列表创建平台清单
     const platforms = {
@@ -54,11 +54,40 @@ if (!fs.existsSync(updaterDir)) {
     function readSignatureFile(sigPath) {
         try {
             if (fs.existsSync(sigPath)) {
-                return fs.readFileSync(sigPath, 'utf-8').trim();
+                const signature = fs.readFileSync(sigPath, 'utf-8').trim();
+                console.log(`Successfully read signature from ${sigPath}: ${signature.substring(0, 50)}...`);
+                return signature;
+            } else {
+                console.warn(`Signature file not found: ${sigPath}`);
             }
         } catch (error) {
             console.warn(`Failed to read signature file ${sigPath}:`, error.message);
         }
+        return 'placeholder-signature';
+    }
+    
+    // 从已移动的文件中读取签名的辅助函数
+    function readSignatureFromMovedFiles(targetDir, fileName) {
+        const sigFileName = fileName + '.sig';
+        const possiblePaths = [
+            path.join(targetDir, sigFileName),
+            path.join(targetDir, '..', sigFileName),
+            path.join(targetDir, '..', '..', sigFileName)
+        ];
+        
+        for (const sigPath of possiblePaths) {
+            if (fs.existsSync(sigPath)) {
+                try {
+                    const signature = fs.readFileSync(sigPath, 'utf-8').trim();
+                    console.log(`Found signature file at ${sigPath}: ${signature.substring(0, 50)}...`);
+                    return signature;
+                } catch (error) {
+                    console.warn(`Failed to read signature file ${sigPath}:`, error.message);
+                }
+            }
+        }
+        
+        console.warn(`No signature file found for ${fileName}`);
         return 'placeholder-signature';
     }
     
@@ -280,6 +309,46 @@ if (!fs.existsSync(updaterDir)) {
         };
         
         findAndroidFiles(androidArtifactDir);
+    }
+    
+    // 检查是否有已移动的签名文件（在 GitHub Actions 环境中）
+    const uploadDir = process.env.UPLOAD_DIR;
+    console.log(`Environment UPLOAD_DIR: ${uploadDir}`);
+    
+    if (uploadDir && fs.existsSync(uploadDir)) {
+        console.log(`Checking for moved signature files in: ${uploadDir}`);
+        console.log(`Directory contents:`, fs.readdirSync(uploadDir));
+        
+        // 检查各平台的签名文件
+        const platformFiles = {
+            'darwin-aarch64': `mytips-${version}-aarch64.app.tar.gz`,
+            'darwin-x86_64': `mytips-${version}-x86_64.dmg`,
+            'linux-x86_64': `mytips-${version}-amd64.AppImage`,
+            'windows-x86_64': `mytips-${version}-x64-setup.exe`,
+            'android-arm64': `mytips-${version}-android-release.apk`
+        };
+        
+        Object.entries(platformFiles).forEach(([platform, fileName]) => {
+            const sigFile = path.join(uploadDir, fileName + '.sig');
+            console.log(`Looking for signature file: ${sigFile}`);
+            
+            if (fs.existsSync(sigFile)) {
+                try {
+                    const signature = fs.readFileSync(sigFile, 'utf-8').trim();
+                    console.log(`✓ Found moved signature for ${platform}: ${signature.substring(0, 50)}...`);
+                    localPlatforms[platform] = {
+                        signature: signature,
+                        url: `https://github.com/${repoName}/releases/download/v${version}/${fileName}`
+                    };
+                } catch (error) {
+                    console.warn(`Failed to read moved signature file ${sigFile}:`, error.message);
+                }
+            } else {
+                console.warn(`✗ Signature file not found: ${sigFile}`);
+            }
+        });
+    } else {
+        console.log(`UPLOAD_DIR not set or doesn't exist, using original signature detection method`);
     }
     
     // 合并默认平台和本地平台配置（本地文件优先）

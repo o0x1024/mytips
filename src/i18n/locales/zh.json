@@ -638,6 +638,24 @@
       "lastModified": "最后修改",
       "copyPath": "复制路径"
     },
+    "mediaManagement": {
+      "title": "媒体文件管理",
+      "totalImages": "图片总数",
+      "orphanedImages": "孤儿图片",
+      "totalAudio": "音频文件总数",
+      "orphanedAudio": "孤儿音频文件",
+      "totalOrphaned": "孤儿文件总数",
+      "getStatistics": "获取统计信息",
+      "cleanupOrphaned": "清理孤儿文件",
+      "statisticsLoaded": "媒体文件统计信息已加载",
+      "statisticsFailed": "获取媒体文件统计信息失败",
+      "noOrphanedFiles": "没有发现孤儿媒体文件",
+      "cleanupConfirmTitle": "确认清理孤儿媒体文件",
+      "cleanupConfirmMessage": "确定要清理 {count} 个孤儿媒体文件吗？\n\n这些文件不再被任何笔记引用，删除后无法恢复。",
+      "confirmCleanup": "确认清理",
+      "cleanupSuccess": "成功清理了 {count} 个孤儿媒体文件，释放了 {size} 的存储空间",
+      "cleanupFailed": "清理孤儿媒体文件失败"
+    },
     "backupAndRestore": {
       "title": "数据备份与恢复",
       "localBackup": "本地备份",
@@ -648,8 +666,8 @@
       "restoring": "恢复中...",
       "exporting": "导出中...",
       "migrating": "迁移中..."
-    },
-    "prompts": {
+     },
+     "prompts": {
       "switchToMode": "确定要切换到{modeLabel}吗？",
       "switchToModeDesc": "{description}",
       "switchTo": "切换",

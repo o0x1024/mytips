@@ -6,6 +6,8 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import rehypeStringify from 'rehype-stringify'
 import rehypeSlug from 'rehype-slug'
 import rehypePrism from 'rehype-prism-plus'
+import rehypeRaw from 'rehype-raw'
+import rehypeMermaid from 'rehype-mermaid'
 import { visit } from 'unist-util-visit'
 import type { Element, Root as HastRoot } from 'hast'
 import { invoke } from '@tauri-apps/api/core'
@@ -15,6 +17,8 @@ import rehypeKatex from 'rehype-katex'
 import emoji from 'remark-emoji';
 // 移除 remarkMarkmap 导入
 // import remarkMarkmap from 'remark-markmap'
+
+// rehype-mermaid 插件会自动处理 Mermaid 图表渲染
 
 // 定义TOC条目类型
 export interface TocItem {
@@ -87,43 +91,127 @@ function rehypeLocalImages(images: Record<string, string>) {
 
 
 /**
- * 异步自定义Rehype插件，用于处理 audio:// 协议的音频
+ * 异步自定义Rehype插件，用于处理 audio:// 和 local:// 协议的音频/视频
  */
 function rehypeLocalAudio() {
   return async (tree: HastRoot) => {
     const nodesToProcess: { node: Element, audioId: string }[] = []
+         console.log('11111111')
 
     visit(tree, 'element', (node: Element) => {
       if (
-        node.tagName === 'source' &&
-        typeof node.properties?.src === 'string' &&
-        node.properties.src.startsWith('audio://')
+        (node.tagName === 'source' || node.tagName === 'video' || node.tagName === 'audio') &&
+        typeof node.properties?.src === 'string'
       ) {
-        const audioId = node.properties.src.replace('audio://', '')
-        nodesToProcess.push({ node, audioId })
+        let audioId = ''
+        
+        // 处理带协议前缀的URL
+        if ( node.properties.src.startsWith('local://')) {
+          audioId = node.properties.src.replace(/^local:\/\//, '')
+        }
+        // 处理直接的audio_id或media_id格式（没有协议前缀）
+        else if (node.properties.src.match(/^(audio_[a-f0-9]{32})/)) {
+          audioId = node.properties.src
+        }
+        
+        if (audioId) {
+          console.log(`[rehypeLocalAudio] Found ${node.tagName} tag with audioId: ${audioId}`)
+          nodesToProcess.push({ node, audioId })
+        }
       }
     })
 
     for (const { node, audioId } of nodesToProcess) {
       let objectUrl = getCachedAudioUrl(audioId)
-
+      console.log(`[rehypeLocalAudio] Cached URL for ${audioId}: ${objectUrl}`)
       if (!objectUrl) {
         try {
+          console.log(`[rehypeLocalAudio] Processing audio/video ID: ${audioId}`)
           const audioData: { audio_data: string; file_format: string } = await invoke('get_audio_file', { audioId })
           if (audioData && audioData.audio_data) {
             const format = audioData.file_format || 'webm'
-            const byteCharacters = atob(audioData.audio_data)
-            const byteNumbers = new Array(byteCharacters.length)
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i)
+            console.log(`[rehypeLocalAudio] File format: ${format}, data length: ${audioData.audio_data.length}`)
+            
+            // 验证base64数据
+            try {
+              const byteCharacters = atob(audioData.audio_data)
+              const byteNumbers = new Array(byteCharacters.length)
+              for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i)
+              }
+              const byteArray = new Uint8Array(byteNumbers)
+              console.log(`[rehypeLocalAudio] Decoded byte array length: ${byteArray.length}`)
+              
+              // 根据格式确定MIME类型
+                let mimeType = `audio/${format}`
+                if (['mp4', 'webm', 'ogg', 'avi', 'mov'].includes(format)) {
+                  // 对于视频格式，先尝试不带编解码器的基本MIME类型
+                  if (format === 'mp4') {
+                    mimeType = 'video/mp4'
+                  } else if (format === 'webm') {
+                    mimeType = 'video/webm'
+                  } else if (format === 'ogg') {
+                    mimeType = 'video/ogg'
+                  } else if (format === 'mov') {
+                    mimeType = 'video/quicktime'
+                  } else {
+                    mimeType = `video/${format}`
+                  }
+                }
+              console.log(`[rehypeLocalAudio] Creating blob with MIME type: ${mimeType}`)
+              
+              // 检查浏览器是否支持该MIME类型
+               const testVideo = document.createElement('video')
+               const canPlay = testVideo.canPlayType(mimeType)
+               console.log(`[rehypeLocalAudio] Browser support for ${mimeType}: ${canPlay}`)
+               
+               // 如果不支持，尝试备选MIME类型
+               if (!canPlay && format === 'mp4') {
+                 mimeType = 'video/mp4; codecs="avc1.42E01E"'
+                 console.log(`[rehypeLocalAudio] Trying fallback MIME type: ${mimeType}`)
+                 const canPlayFallback = testVideo.canPlayType(mimeType)
+                 console.log(`[rehypeLocalAudio] Browser support for fallback: ${canPlayFallback}`)
+                 if (!canPlayFallback) {
+                   mimeType = 'video/mp4'
+                   console.log(`[rehypeLocalAudio] Using basic MP4 MIME type`)
+                 }
+               }
+               
+               const blob = new Blob([byteArray], { type: mimeType })
+               console.log(`[rehypeLocalAudio] Blob created - size: ${blob.size}, type: ${blob.type}`)
+               
+               objectUrl = URL.createObjectURL(blob)
+               console.log(`[rehypeLocalAudio] Created object URL: ${objectUrl}`)
+               
+               // 验证blob URL是否有效
+               testVideo.src = objectUrl
+               testVideo.addEventListener('loadedmetadata', () => {
+                 console.log(`[rehypeLocalAudio] Video metadata loaded - duration: ${testVideo.duration}s, dimensions: ${testVideo.videoWidth}x${testVideo.videoHeight}`)
+               })
+               testVideo.addEventListener('error', (e) => {
+                 console.error(`[rehypeLocalAudio] Video load error:`, e)
+                 if (testVideo.error) {
+                   const errorCodes: { [key: number]: string } = {
+                      1: 'MEDIA_ERR_ABORTED - 播放被中止',
+                      2: 'MEDIA_ERR_NETWORK - 网络错误',
+                      3: 'MEDIA_ERR_DECODE - 解码错误',
+                      4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - 格式不支持'
+                    }
+                   console.error(`[rehypeLocalAudio] Error code: ${testVideo.error.code} - ${errorCodes[testVideo.error.code] || '未知错误'}`)
+                   console.error(`[rehypeLocalAudio] Error message: ${testVideo.error.message}`)
+                 }
+               })
+              
+              setCachedAudioUrl(audioId, objectUrl)
+            } catch (decodeError) {
+              console.error(`[rehypeLocalAudio] Failed to decode base64 data:`, decodeError)
+              objectUrl = ''
             }
-            const byteArray = new Uint8Array(byteNumbers)
-            const blob = new Blob([byteArray], { type: `audio/${format}` })
-            objectUrl = URL.createObjectURL(blob)
-            setCachedAudioUrl(audioId, objectUrl)
+          } else {
+            console.warn(`[rehypeLocalAudio] No audio data found for ID: ${audioId}`)
           }
         } catch (error) {
-          console.error(`Failed to load audio data for ID ${audioId}:`, error)
+          console.error(`[rehypeLocalAudio] Failed to load audio/video data for ID ${audioId}:`, error)
           objectUrl = '' // or a placeholder URL
         }
       }
@@ -134,6 +222,8 @@ function rehypeLocalAudio() {
     }
   }
 }
+
+// 使用标准的 rehype-mermaid 插件替代自定义实现
 
 
 /**
@@ -152,6 +242,39 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
     .use(remarkRehype, { allowDangerousHtml: true, math: true })
     .use(rehypeLocalImages, images)
     .use(rehypeLocalAudio)
+    .use(rehypeMermaid, {
+      strategy: 'img-svg',
+      mermaidConfig: {
+        theme: 'base',
+        themeVariables: {
+          primaryColor: '#ffffff',
+          primaryTextColor: '#000000',
+          primaryBorderColor: '#333333',
+          lineColor: '#333333',
+          sectionBkgColor: '#ffffff',
+          altSectionBkgColor: '#f8f9fa',
+          gridColor: '#e0e0e0',
+          secondaryColor: '#f0f0f0',
+          tertiaryColor: '#ffffff',
+          background: '#ffffff',
+          mainBkg: '#ffffff',
+          secondBkg: '#f8f9fa',
+          tertiaryBkg: '#ffffff'
+        },
+        flowchart: {
+          useMaxWidth: true,
+          htmlLabels: true
+        },
+        sequence: {
+          useMaxWidth: true,
+          wrap: true
+        },
+        gantt: {
+          useMaxWidth: true
+        }
+      }
+    })
+    .use(rehypeRaw)
     .use(rehypeSlug)
     .use(emoji)
     .use(rehypeToc, toc)
@@ -160,12 +283,27 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
       ...defaultSchema,
       attributes: {
         ...defaultSchema.attributes,
-        '*': [...(defaultSchema.attributes?.['*'] || []), 'class', 'style', 'data-enhanced', 'data-highlighted', 'loading'],
-        code: [...(defaultSchema.attributes?.code || []), 'className'],
+        '*': [...(defaultSchema.attributes?.['*'] || []), 'class', 'style', 'data-enhanced', 'data-highlighted', 'loading', 'id', 'xmlns', 'viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin', 'transform', 'd', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'points', 'text-anchor', 'dominant-baseline', 'font-family', 'font-size', 'font-weight', 'title'],
+        code: [...(defaultSchema.attributes?.code || []), 'className', 'title'],
         source: ['src', 'type'],
         audio: ['controls', 'src'],
         video: ['controls', 'src', 'width', 'height', 'style', 'autoplay', 'loop', 'muted', 'poster'],
         img: [...(defaultSchema.attributes?.img || []), 'loading'],
+        div: [...(defaultSchema.attributes?.div || []), 'className', 'style'],
+        svg: ['xmlns', 'viewBox', 'width', 'height', 'style', 'class', 'id'],
+        g: ['transform', 'class', 'id'],
+        path: ['d', 'fill', 'stroke', 'stroke-width', 'class'],
+        rect: ['x', 'y', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'rx', 'ry', 'class'],
+        circle: ['cx', 'cy', 'r', 'fill', 'stroke', 'stroke-width', 'class'],
+        ellipse: ['cx', 'cy', 'rx', 'ry', 'fill', 'stroke', 'stroke-width', 'class'],
+        line: ['x1', 'y1', 'x2', 'y2', 'stroke', 'stroke-width', 'class'],
+        polyline: ['points', 'fill', 'stroke', 'stroke-width', 'class'],
+        polygon: ['points', 'fill', 'stroke', 'stroke-width', 'class'],
+        text: ['x', 'y', 'text-anchor', 'dominant-baseline', 'font-family', 'font-size', 'font-weight', 'fill', 'class'],
+        tspan: ['x', 'y', 'dx', 'dy', 'text-anchor', 'class'],
+        marker: ['id', 'markerWidth', 'markerHeight', 'refX', 'refY', 'orient', 'markerUnits'],
+        defs: [],
+        style: ['type']
       },
       protocols: {
         ...defaultSchema.protocols,
@@ -175,7 +313,9 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
         ...(defaultSchema.tagNames || []),
         'audio', 'source', 'video',
         // KaTeX / MathML tags
-        'span', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext'
+        'span', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext',
+        // Mermaid / SVG tags
+        'svg', 'g', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon', 'text', 'tspan', 'marker', 'defs', 'style'
       ],
     })
     // rehypeKatex produces already sanitized HTML, keep after sanitize to avoid stripping classes
@@ -217,4 +357,4 @@ export async function renderInlineMarkdown(markdown: string): Promise<string> {
       .process(markdown);
   
     return String(file);
-}
+}// Force HMR update

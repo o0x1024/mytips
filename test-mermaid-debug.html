@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid Debug Test</title>
+    <script type="module">
+        // 测试 Mermaid 渲染
+        async function testMermaidRendering() {
+            try {
+                console.log('开始测试 Mermaid 渲染...');
+                
+                // 动态导入 markdownService
+                const module = await import('/src/services/markdownService.js');
+                console.log('markdownService 模块加载成功:', module);
+                
+                const testMarkdown = `# Mermaid 测试
+
+这是一个 Mermaid 流程图测试：
+
+\`\`\`mermaid
+graph TD
+    A[开始] --> B[处理]
+    B --> C[结束]
+\`\`\``;
+                
+                console.log('测试 Markdown 内容:', testMarkdown);
+                
+                const result = await module.renderMarkdown(testMarkdown);
+                console.log('渲染结果:', result);
+                
+                // 显示渲染结果
+                document.getElementById('result').innerHTML = result.html;
+                
+                console.log('Mermaid 渲染测试完成');
+            } catch (error) {
+                console.error('Mermaid 渲染测试失败:', error);
+                document.getElementById('result').innerHTML = `<div style="color: red;">错误: ${error.message}</div>`;
+            }
+        }
+        
+        // 页面加载完成后执行测试
+        window.addEventListener('load', testMermaidRendering);
+    </script>
+</head>
+<body>
+    <h1>Mermaid Debug Test</h1>
+    <p>检查浏览器控制台查看详细日志</p>
+    <div id="result" style="border: 1px solid #ccc; padding: 20px; margin: 20px 0;">等待渲染...</div>
+</body>
+</html>
