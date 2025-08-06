@@ -104,16 +104,24 @@ jobs:
       run: |
         # 根据目标架构安装正确的 OpenSSL
         if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
-          # 对于 x86_64 构建，强制使用 x86_64 架构
+          # 对于 x86_64 构建，确保使用正确的 Homebrew 路径
           # 首先卸载可能存在的 arm64 版本
           brew uninstall --ignore-dependencies openssl@3 || true
           
-          # 强制使用 x86_64 架构安装 OpenSSL
-          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
-          arch -x86_64 brew install openssl@3
+          # 检查并安装 x86_64 版本的 Homebrew 到 /usr/local
+          if [ ! -f "/usr/local/bin/brew" ]; then
+            # 安装 x86_64 版本的 Homebrew 到 /usr/local
+            arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          
+          # 使用 /usr/local/bin/brew 安装 OpenSSL
+          arch -x86_64 /usr/local/bin/brew install openssl@3
+          
+          # 确保 PATH 包含 /usr/local/bin
+          echo "/usr/local/bin" >> $GITHUB_PATH
           
           # 设置环境变量指向 x86_64 版本
-          OPENSSL_PREFIX=$(arch -x86_64 brew --prefix openssl@3)
+          OPENSSL_PREFIX=$(arch -x86_64 /usr/local/bin/brew --prefix openssl@3)
           echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
           echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
           echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
