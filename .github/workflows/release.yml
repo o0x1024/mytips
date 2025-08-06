@@ -92,6 +92,13 @@ jobs:
           libssl-dev \
           openssl
 
+    - name: Setup OpenSSL for Linux
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'
+      run: |
+        echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=/usr/include/openssl" >> $GITHUB_ENV
+
     - name: Install OpenSSL for macOS
       if: runner.os == 'macOS'
       run: |
