@@ -27,6 +27,9 @@ interface LocalStorageData {
   noteListWidth: number
   noteListHidden: boolean
   
+  // 应用状态
+  lastOpenedNoteId: string | null
+  
   // UI设置
   uiSettings: Record<string, any>
 }
@@ -47,6 +50,7 @@ const defaultData: LocalStorageData = {
   sidebarWidth: 280,
   noteListWidth: 320,
   noteListHidden: false,
+  lastOpenedNoteId: null,
   uiSettings: {}
 }
 
@@ -110,6 +114,10 @@ export const useLocalStorageStore = defineStore('localStorage', () => {
       const noteListHidden = localStorage.getItem('noteListHidden')
       if (noteListHidden) data.value.noteListHidden = noteListHidden === 'true'
       
+      // 应用状态
+      const lastOpenedNoteId = localStorage.getItem('mytips-last-opened-note-id')
+      if (lastOpenedNoteId) data.value.lastOpenedNoteId = lastOpenedNoteId
+      
       // UI设置
       const uiSettings = localStorage.getItem('mytips-ui-settings')
       if (uiSettings) {
@@ -141,6 +149,11 @@ export const useLocalStorageStore = defineStore('localStorage', () => {
       localStorage.setItem('sidebarWidth', data.value.sidebarWidth.toString())
       localStorage.setItem('noteListWidth', data.value.noteListWidth.toString())
       localStorage.setItem('noteListHidden', data.value.noteListHidden.toString())
+      if (data.value.lastOpenedNoteId) {
+        localStorage.setItem('mytips-last-opened-note-id', data.value.lastOpenedNoteId)
+      } else {
+        localStorage.removeItem('mytips-last-opened-note-id')
+      }
       localStorage.setItem('mytips-ui-settings', JSON.stringify(data.value.uiSettings))
     } catch (error) {
       console.error('Failed to save data to localStorage:', error)
@@ -218,6 +231,10 @@ export const useLocalStorageStore = defineStore('localStorage', () => {
     data.value.uiSettings = { ...settings }
   }
   
+  function setLastOpenedNoteId(noteId: string | null) {
+    data.value.lastOpenedNoteId = noteId
+  }
+  
   return {
     // 状态
     data,
@@ -239,6 +256,7 @@ export const useLocalStorageStore = defineStore('localStorage', () => {
     setNoteListWidth,
     setNoteListHidden,
     setUiSettings,
+    setLastOpenedNoteId,
     
     // 工具方法
     loadFromLocalStorage,

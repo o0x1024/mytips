@@ -275,6 +275,7 @@
     "codeBlockTooltip": "Code Block",
     "tableTooltip": "Insert Table",
     "toggleTocTooltip": "Toggle Table of Contents",
+    "tocDisabledTooltip": "Table of Contents is only available in preview mode",
     "audioRecordingTooltip": "Record Audio",
     "audioPlayerTooltip": "Audio Playlist",
     "themeTooltip": "Toggle Theme",

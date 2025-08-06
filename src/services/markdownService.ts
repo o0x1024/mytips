@@ -96,7 +96,6 @@ function rehypeLocalImages(images: Record<string, string>) {
 function rehypeLocalAudio() {
   return async (tree: HastRoot) => {
     const nodesToProcess: { node: Element, audioId: string }[] = []
-         console.log('11111111')
 
     visit(tree, 'element', (node: Element) => {
       if (

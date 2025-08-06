@@ -61,6 +61,7 @@
             :is-preview-mode="isPreviewMode"
     
             ref="markdownEditor"
+            @ready="onMarkdownEditorReady"
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
     @drop="handleDrop"
@@ -68,6 +69,7 @@
     @dragenter="handleDragEnter"
     @dragleave="handleDragLeave"
             @keydown="handleKeyDown"
+            @editor-scroll="handleEditorScroll"
             @preview-scroll="handlePreviewScroll"
     
           />
@@ -343,7 +345,8 @@ const isPanning = ref(false)
 const panStart = ref({ x: 0, y: 0 })
 const imageStart = ref({ x: 0, y: 0 })
 
-const savedMode = localStorageStore.data.editorMode || 'split';
+// 获取保存的编辑器模式的函数
+const getSavedMode = () => localStorageStore.data.editorMode || 'split'
 
 
 // 简化的语言组件初始化函数
@@ -398,11 +401,18 @@ const encryptionStore = useEncryptionStore()
 
 // 状态
 const localNote = ref<Note>({ ...props.note })
-const isPreviewMode = ref(savedMode === 'preview')
-const markdownEditor = ref<{ editorTextarea: HTMLTextAreaElement | null; previewDiv: HTMLDivElement | null; } | null>(null);
+const isPreviewMode = ref(getSavedMode() === 'preview')
+const markdownEditor = ref<{ editorTextarea: any; previewDiv: HTMLDivElement | null; } | null>(null);
+
+const onMarkdownEditorReady = () => {
+  console.log('onMarkdownEditorReady triggered. markdownEditor.value is:', markdownEditor.value);
+  // 滚动监听器的绑定已移至onMounted钩子中，避免重复绑定
+};
 // WYSIWYG模式已注释
 // const proseMirrorEditor = ref<{ executeCommand: (command: string) => void } | null>(null);
-const editorTextarea = computed(() => markdownEditor.value?.editorTextarea || null);
+const editorTextarea = computed(() => {
+  return markdownEditor.value?.editorTextarea;
+});
 const previewDiv = computed(() => markdownEditor.value?.previewDiv || null);
 const autoSaveTimeout = ref<number | null>(null)
 const renderTimeout = ref<number | null>(null)
@@ -411,9 +421,9 @@ const showContextMenu = ref(false)
 const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const isAIProcessing = ref(false)
-const isEditOnly = ref(savedMode === 'editOnly')
-const isSplitMode = ref(savedMode === 'split')
-// const isWysiwygMode = ref(savedMode === 'wysiwyg') // WYSIWYG模式已注释
+const isEditOnly = ref(getSavedMode() === 'editOnly')
+const isSplitMode = ref(getSavedMode() === 'split')
+// const isWysiwygMode = ref(getSavedMode() === 'wysiwyg') // WYSIWYG模式已注释
 const isSwitchingNote = ref(false)
 const streamingContent = ref('')  // 用于存储流式输出的内容
 const isStreaming = ref(false)    // 是否正在流式输出
@@ -663,14 +673,18 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  // The worker has been removed, so no termination logic is needed.
-})
+  if (editorTextarea.value) {
+    editorTextarea.value.removeEventListener('scroll', handleEditorScroll);
+  }
+  if (previewDiv.value) {
+    previewDiv.value.removeEventListener('scroll', handlePreviewScroll);
+  }
+});
 
 // 优化的图片加载函数
 async function loadNoteImages(noteId: string, timeout: number = 5000): Promise<Record<string, string> | null> {
   // 检查缓存
   if (imageLoadCache.value.has(noteId)) {
-    console.log(`从缓存加载笔记(${noteId})的图片`)
     return imageLoadCache.value.get(noteId) || null
   }
 
@@ -715,26 +729,20 @@ async function loadNoteImages(noteId: string, timeout: number = 5000): Promise<R
       const batchImages = await Promise.race([batchPromise, timeoutPromise])
       Object.assign(allImages, batchImages)
 
-      console.log(`加载笔记(${noteId})图片批次 ${Math.floor(offset / batchSize) + 1}/${Math.ceil(totalCount / batchSize)}`)
 
       // 如果是第一批，立即更新界面显示
       if (offset === 0 && Object.keys(batchImages).length > 0) {
         // 检查当前笔记是否还是目标笔记
         if (localNote.value.id === noteId) {
           localNote.value.images = { ...batchImages }
-          console.log(`首批图片已显示，笔记(${noteId})`)
         }
       }
     }
-
-    console.log(`获取到笔记(${noteId})的图片总数: ${Object.keys(allImages).length}`)
-
     // 缓存完整结果
     imageLoadCache.value.set(noteId, allImages)
 
     return allImages
   } catch (error) {
-    console.error(`加载笔记(${noteId})图片失败:`, error)
 
     // 如果是超时错误，缓存空结果避免重复请求
     if (error instanceof Error && error.message.includes('超时')) {
@@ -764,7 +772,6 @@ function loadImagesAsync(noteId: string) {
     // 检查当前笔记是否还是目标笔记（避免切换过快导致的状态错乱）
     if (localNote.value.id === noteId && images && Object.keys(images).length > 0) {
       localNote.value.images = images
-      console.log(`异步加载完成，笔记(${noteId})图片已更新到本地状态，触发重新渲染`)
       // 图片加载完成后，再次渲染以显示图片
       render()
     }
@@ -809,6 +816,14 @@ watch(() => props.note, async (newNote, oldNote) => {
     // 等待DOM更新后再重置标志
     await nextTick();
     isSwitchingNote.value = false;
+    
+    // 笔记切换完成后，确保目录状态更新
+    if (showToc.value) {
+      setTimeout(() => {
+        generateToc()
+        updateActiveHeading()
+      }, 300) // 给足够时间让渲染完成
+    }
   }
   // 如果是同一个笔记的更新，只更新非编辑相关的字段（如category_id等）
   else {
@@ -1506,9 +1521,20 @@ function setEditMode(mode: string) {
   //   isWysiwygMode.value = true;
   // }
 
-  // 模式切换后重新应用代码块主题
+  // 模式切换后重新应用代码块主题和确保编辑器内容同步
   nextTick(() => {
-    forceRefreshCodeBlocks(currentHighlightTheme.value)
+    forceRefreshCodeBlocks(currentHighlightTheme.value);
+    
+    // 在编辑模式下，确保编辑器内容与当前笔记内容同步
+    if ((mode === 'editOnly' || mode === 'split') && editorTextarea.value) {
+      // 延迟一点时间确保编辑器完全初始化
+      setTimeout(() => {
+        if (editorTextarea.value && editorTextarea.value.value !== localNote.value.content) {
+          editorTextarea.value.value = localNote.value.content;
+          editorTextarea.value.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }, 100);
+    }
   })
 }
 
@@ -2000,7 +2026,22 @@ function setupCodeCopyFeature() {
 }
 
 // 监听组件挂载，获取可用标签
+watch(editorTextarea, (newEditor) => {
+  if (newEditor) {
+    console.log('editorTextarea is now available. Adding scroll listener.');
+    (newEditor as any).addEventListener('scroll', handleEditorScroll);
+  } 
+});
+
+watch(previewDiv, (newPreview) => {
+  if (newPreview) {
+    console.log('previewDiv is now available. Adding scroll listener.');
+    newPreview.addEventListener('scroll', handlePreviewScroll);
+  }
+});
+
 onMounted(async () => {
+
   // 首先加载 Prism 语言组件
   await loadPrismLanguages()
 
@@ -2020,7 +2061,6 @@ onMounted(async () => {
   const savedTheme = localStorageStore.data.highlightTheme
   const theme = savedTheme || getDefaultHighlightTheme()
   currentHighlightTheme.value = theme
-  console.log(`初始化代码高亮主题: ${theme}`)
 
   // 应用代码高亮主题
   setHighlightTheme(theme)
@@ -2034,7 +2074,6 @@ onMounted(async () => {
   const savedMarkdownTheme = localStorageStore.data.markdownTheme
   const markdownTheme = savedMarkdownTheme || 'github'
   currentMarkdownTheme.value = markdownTheme
-  console.log(`初始化Markdown主题: ${markdownTheme}`)
 
   // 添加全局主题变更监听器
   const handleGlobalThemeChange = (event: CustomEvent) => {
@@ -2111,7 +2150,6 @@ onMounted(async () => {
     const defaultModel = await getDefaultAIModel('chat')
     if (defaultModel && defaultModel.provider) {
       defaultProviderId.value = defaultModel.provider
-      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
     }
   } catch (error) {
     console.error('NoteEditor: 获取默认AI模型失败:', error)
@@ -2181,8 +2219,6 @@ async function setHighlightTheme(theme: string) {
 
     linkEl.href = cssHref;
 
-    console.log(`已加载 Prism 主题 CSS: ${cssHref}`);
-
     // 重新高亮
     Prism.highlightAll();
   } catch (error) {
@@ -2202,6 +2238,11 @@ function insertTable() {
 
 // 目录相关方法
 function toggleToc() {
+  // 在仅编辑模式和分屏模式下禁止打开目录
+  if (isEditOnly.value || isSplitMode.value) {
+    return
+  }
+  
   showToc.value = !showToc.value
   if (showToc.value) {
     nextTick(() => {
@@ -2218,12 +2259,10 @@ function generateToc() {
   const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6')
   tocItems.value = []
   
-  headings.forEach((heading, index) => {
+  headings.forEach((heading) => {
     const level = parseInt(heading.tagName.charAt(1))
     const text = heading.textContent || ''
-    const id = `heading-${index}`
-    
-    heading.id = id
+    const id = heading.id || ''
     
     tocItems.value.push({
       id,
@@ -2234,8 +2273,63 @@ function generateToc() {
 }
 
 function scrollToHeading(headingId: string) {
+  // 仅编辑模式：直接在编辑器中跳转
+  if (isEditOnly.value && editorTextarea.value) {
+    // 从目录项中找到对应的标题文本
+    const tocItem = tocItems.value.find(item => item.id === headingId)
+    if (!tocItem) {
+      console.warn('未找到对应的目录项:', headingId)
+      return
+    }
+    
+    // 在编辑器中查找对应的标题文本
+    const content = localNote.value.content
+    const lines = content.split('\n')
+    let targetLine = -1
+    
+    // 查找匹配的标题行
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim()
+      const headingMatch = line.match(/^(#{1,6})\s+(.+)$/)
+      if (headingMatch) {
+        const level = headingMatch[1].length
+        const text = headingMatch[2].trim()
+        
+        // 匹配级别和文本内容
+        if (level === tocItem.level && text === tocItem.text) {
+          targetLine = i
+          break
+        }
+      }
+    }
+    
+    if (targetLine >= 0) {
+      // 计算目标行的大概位置
+      const lineHeight = 24 // 估算的行高
+      const targetScrollTop = targetLine * lineHeight
+      
+      editorTextarea.value.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth'
+      })
+      
+      // 设置光标位置到目标行
+      setTimeout(() => {
+        if (editorTextarea.value) {
+          const startPos = lines.slice(0, targetLine).join('\n').length + (targetLine > 0 ? 1 : 0)
+          editorTextarea.value.setSelectionRange(startPos, startPos)
+          editorTextarea.value.focus()
+        }
+      }, 100)
+    }
+    
+    activeHeadingId.value = headingId
+    return
+  }
+  
+  // 预览模式或分屏模式：在预览区跳转
   const preview = previewDiv.value;
-  const heading = preview?.querySelector(`#${headingId}`)
+  const heading = preview?.querySelector(`#${CSS.escape(headingId)}`)
   if (heading && preview) {
     const containerRect = preview.getBoundingClientRect()
     const headingRect = heading.getBoundingClientRect()
@@ -2246,6 +2340,13 @@ function scrollToHeading(headingId: string) {
       top: scrollTop,
       behavior: 'smooth'
     })
+    
+    // 分屏模式：同步编辑区滚动
+    if (isSplitMode.value && editorTextarea.value) {
+      const previewScrollRatio = scrollTop / (preview.scrollHeight - preview.clientHeight || 1)
+      const editorScrollable = editorTextarea.value.scrollHeight - editorTextarea.value.clientHeight
+      editorTextarea.value.scrollTop = previewScrollRatio * editorScrollable
+    }
     
     activeHeadingId.value = headingId
   }
@@ -2297,36 +2398,115 @@ function stopDrag() {
   document.removeEventListener('touchend', stopDrag)
 }
 
-const isScrollingEditor = ref(false)
-const isScrollingPreview = ref(false)
+const isScrollingEditor = ref(false);
+const isScrollingPreview = ref(false);
 
-// 处理预览区滚动事件
-function handlePreviewScroll(event: Event) {
-  if (isScrollingEditor.value) return;
 
-  // 标记正在从预览区滚动
-  isScrollingPreview.value = true;
 
-  // 获取滚动元素
-  const preview = event.target as HTMLDivElement;
-  if (!preview || !editorTextarea.value || !isSplitMode.value) return;
-
-  // 计算滚动比例
-  const previewScrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
-
-  // 设置编辑器的滚动位置
-  const editorScrollable = editorTextarea.value.scrollHeight - editorTextarea.value.clientHeight;
-  editorTextarea.value.scrollTop = previewScrollRatio * editorScrollable;
-
-  // 更新目录中的活跃标题
-  if (showToc.value) {
-    updateActiveHeading()
+// 处理编辑区滚动事件
+function handleEditorScroll(event: any) {
+  // 如果不是分屏模式或没有预览区，直接返回
+  if (!isSplitMode.value || !previewDiv.value) return;
+  
+  // 如果已经在同步预览区的滚动，防止循环
+  if (isScrollingPreview.value) {
+    console.log('NoteEditor: 预览区正在滚动，跳过编辑器滚动处理');
+    return;
   }
 
-  // 重置标记，延迟执行防止抖动
-  setTimeout(() => {
-    isScrollingPreview.value = false;
-  }, 100);
+  console.log('NoteEditor: handleEditorScroll', event);
+  
+  // 标记正在从编辑器同步滚动到预览区
+  isScrollingEditor.value = true;
+
+  const preview = previewDiv.value;
+  
+  try {
+    // 处理从CodeMirrorEditor传来的事件对象
+    if (event && event.scrollRatio !== undefined) {
+      // 使用传递的滚动比例
+      const editorScrollRatio = event.scrollRatio;
+      preview.scrollTop = editorScrollRatio * (preview.scrollHeight - preview.clientHeight);
+      console.log('NoteEditor: 同步编辑器滚动到预览区', {
+        ratio: editorScrollRatio,
+        previewScrollTop: preview.scrollTop
+      });
+    } else if (editorTextarea.value) {
+      // 兼容旧的处理方式
+      const editor = editorTextarea.value;
+      const editorScrollRatio = editor.scrollTop / (editor.scrollHeight - editor.clientHeight || 1);
+      preview.scrollTop = editorScrollRatio * (preview.scrollHeight - preview.clientHeight);
+      console.log('NoteEditor: 同步编辑器滚动到预览区(兼容模式)', {
+        ratio: editorScrollRatio,
+        previewScrollTop: preview.scrollTop
+      });
+    }
+
+    if (showToc.value) {
+      updateActiveHeading();
+    }
+  } catch (error) {
+    console.error('NoteEditor: 同步滚动时出错', error);
+  } finally {
+    // 使用setTimeout确保滚动完成后才重置标记
+    setTimeout(() => {
+      isScrollingEditor.value = false;
+      console.log('NoteEditor: 重置编辑器滚动标记');
+    }, 150);
+  }
+}
+
+// 处理预览区滚动事件
+function handlePreviewScroll(event: any) {
+  // 如果不是分屏模式或没有编辑器，直接返回
+  if (!isSplitMode.value || !editorTextarea.value) return;
+  
+  // 如果已经在同步编辑器的滚动，防止循环
+  if (isScrollingEditor.value) {
+    console.log('NoteEditor: 编辑器正在滚动，跳过预览区滚动处理');
+    return;
+  }
+
+  console.log('NoteEditor: handlePreviewScroll', event);
+  
+  // 标记正在从预览区同步滚动到编辑器
+  isScrollingPreview.value = true;
+
+  const editor = editorTextarea.value;
+  
+  try {
+    // 处理从CodeMirrorEditor传来的事件对象
+    if (event && event.scrollRatio !== undefined) {
+      // 使用传递的滚动比例
+      const previewScrollRatio = event.scrollRatio;
+      editor.scrollTop = previewScrollRatio * (editor.scrollHeight - editor.clientHeight);
+      console.log('NoteEditor: 同步预览区滚动到编辑器', {
+        ratio: previewScrollRatio,
+        editorScrollTop: editor.scrollTop
+      });
+    } else if (previewDiv.value) {
+      // 兼容旧的处理方式
+      const preview = previewDiv.value;
+      const previewScrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight || 1);
+      editor.scrollTop = previewScrollRatio * (editor.scrollHeight - editor.clientHeight);
+      console.log('NoteEditor: 同步预览区滚动到编辑器(兼容模式)', {
+        ratio: previewScrollRatio,
+        editorScrollTop: editor.scrollTop
+      });
+    }
+
+    if (showToc.value) {
+      updateActiveHeading();
+    }
+  } catch (error) {
+    console.error('NoteEditor: 同步滚动时出错', error);
+  } finally {
+    // 使用setTimeout确保滚动完成后才重置标记
+    setTimeout(() => {
+      isScrollingPreview.value = false;
+      console.log('NoteEditor: 重置预览区滚动标记');
+    }, 150);
+  }
 }
 
 // 监听内容变化时重新计算滚动同步
@@ -2387,7 +2567,32 @@ watch(() => isSplitMode.value, (newValue) => {
 });
 
 // 添加onActivated钩子
+onMounted(() => {
+  watch([editorTextarea, previewDiv], ([newEditor, newPreview], [oldEditor, oldPreview]) => {
+    console.log('Watching editor and preview divs:', { newEditor, newPreview });
+    if (oldEditor) {
+      oldEditor.removeEventListener('scroll', handleEditorScroll);
+    }
+    if (newEditor) {
+      console.log('Adding scroll listener to editor');
+      newEditor.addEventListener('scroll', handleEditorScroll);
+    }
+    if (oldPreview) {
+      oldPreview.removeEventListener('scroll', handlePreviewScroll);
+    }
+    if (newPreview) {
+      console.log('Adding scroll listener to preview');
+      newPreview.addEventListener('scroll', handlePreviewScroll);
+    }
+  }, { immediate: true, deep: true });
+});
+
 onActivated(() => {
+  console.log('onActivated: markdownEditor.value is', markdownEditor.value);
+  nextTick(() => {
+    console.log('onActivated nextTick: markdownEditor.value is', markdownEditor.value);
+  });
+
   console.log('NoteEditor组件被激活')
   // 不重新加载数据，只确保编辑器状态与当前笔记同步
   if (editorTextarea.value && props.note) {
@@ -2398,6 +2603,15 @@ onActivated(() => {
     }
   }
 })
+
+onBeforeUnmount(() => {
+  if (editorTextarea.value) {
+    editorTextarea.value.removeEventListener('scroll', handleEditorScroll);
+  }
+  if (previewDiv.value) {
+    previewDiv.value.removeEventListener('scroll', handlePreviewScroll);
+  }
+});
 
 // 添加组件卸载时的清理逻辑
 onBeforeUnmount(() => {
@@ -3285,7 +3499,6 @@ onMounted(async () => {
     const defaultModel = await getDefaultAIModel('chat')
     if (defaultModel && defaultModel.provider) {
       defaultProviderId.value = defaultModel.provider
-      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
     }
   } catch (error) {
     console.error('NoteEditor: 获取默认AI模型失败:', error)
@@ -3418,17 +3631,12 @@ function closeTipResultBox() {
 // 渲染Markdown内容
 const render = async () => {
   if (localNote.value && localNote.value.content !== undefined) {
-    try {
-      console.log('Rendering markdown with images:', Object.keys(localNote.value.images || {}))
-      
+    try {      
       // 获取笔记的音频/视频文件列表
       try {
         const audioFiles = await invoke<any[]>('get_tip_audio_files', { tipId: localNote.value.id })
-        console.log('Audio/video files for note:', audioFiles)
         if (audioFiles && audioFiles.length > 0) {
           console.log('Found audio/video files:', audioFiles.map((f: any) => ({ id: f.audio_id, format: f.file_format, name: f.file_name })))
-        } else {
-          console.log('No audio/video files found for this note')
         }
       } catch (audioError) {
         console.error('Failed to get audio files:', audioError)
@@ -3467,7 +3675,7 @@ const updateActiveHeading = () => {
   let activeId = ''
 
   for (const item of tocItems.value) {
-    const heading = preview.querySelector(`#${item.id}`)
+    const heading = preview.querySelector(`#${CSS.escape(item.id)}`)
     if (heading) {
       const headingRect = heading.getBoundingClientRect()
       if (headingRect.top <= containerTop) {

@@ -18,10 +18,8 @@
         'markdown-body': true,
         'markdown-preview': true
       }"
-      v-html="renderedContent"
       @scroll="handlePreviewScroll"
-      @wheel="setUserScrollingPane('preview')"
-      @touchstart="setUserScrollingPane('preview')"
+      v-html="renderedContent"
     ></div>
   </div>
 </template>
@@ -59,28 +57,84 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:modelValue', 'contextmenu', 'paste', 'keydown', 'blur', 'editor-scroll', 'preview-scroll']);
+const emit = defineEmits(['update:modelValue', 'contextmenu', 'paste', 'keydown', 'blur', 'ready']);
 
 const editorContainer = ref<HTMLDivElement | null>(null);
 const previewDiv = ref<HTMLDivElement | null>(null);
-
-// CodeMirror实例
 let editorView: EditorView | null = null;
+
+// 滚动同步相关状态
+let isScrollingEditor = false;
+let isScrollingPreview = false;
+let scrollSyncTimeout: number | null = null;
+const SCROLL_SYNC_DELAY = 100; // 防抖延迟
 
 // 主题配置
 const themeCompartment = new Compartment();
 
-const userScrollingPane = ref<'editor' | 'preview' | null>(null);
-let scrollEndTimer: number | null = null;
+// 滚动同步函数
+const calculateScrollRatio = (element: HTMLElement): number => {
+  const { scrollTop, scrollHeight, clientHeight } = element;
+  const maxScroll = scrollHeight - clientHeight;
+  return maxScroll > 0 ? scrollTop / maxScroll : 0;
+};
 
-const setUserScrollingPane = (pane: 'editor' | 'preview') => {
-  userScrollingPane.value = pane;
-  if (scrollEndTimer) {
-    clearTimeout(scrollEndTimer);
+const setScrollRatio = (element: HTMLElement, ratio: number) => {
+  const { scrollHeight, clientHeight } = element;
+  const maxScroll = scrollHeight - clientHeight;
+  const targetScrollTop = Math.max(0, Math.min(maxScroll, ratio * maxScroll));
+  
+  // 使用requestAnimationFrame提供更平滑的滚动
+  requestAnimationFrame(() => {
+    element.scrollTop = targetScrollTop;
+  });
+};
+
+// 编辑器滚动处理
+const handleEditorScroll = () => {
+  if (isScrollingPreview || !props.isSplitMode || !editorView || !previewDiv.value) return;
+  
+  isScrollingEditor = true;
+  
+  // 清除之前的定时器
+  if (scrollSyncTimeout) {
+    clearTimeout(scrollSyncTimeout);
   }
-  scrollEndTimer = window.setTimeout(() => {
-    userScrollingPane.value = null;
-  }, 200);
+  
+  // 获取编辑器滚动容器
+  const editorScroller = editorView.scrollDOM;
+  const scrollRatio = calculateScrollRatio(editorScroller);
+  
+  // 同步到预览区
+  setScrollRatio(previewDiv.value, scrollRatio);
+  
+  // 设置防抖定时器
+  scrollSyncTimeout = window.setTimeout(() => {
+    isScrollingEditor = false;
+  }, SCROLL_SYNC_DELAY);
+};
+
+// 预览区滚动处理
+const handlePreviewScroll = () => {
+  if (isScrollingEditor || !props.isSplitMode || !editorView || !previewDiv.value) return;
+  
+  isScrollingPreview = true;
+  
+  // 清除之前的定时器
+  if (scrollSyncTimeout) {
+    clearTimeout(scrollSyncTimeout);
+  }
+  
+  const scrollRatio = calculateScrollRatio(previewDiv.value);
+  
+  // 同步到编辑器
+  const editorScroller = editorView.scrollDOM;
+  setScrollRatio(editorScroller, scrollRatio);
+  
+  // 设置防抖定时器
+  scrollSyncTimeout = window.setTimeout(() => {
+    isScrollingPreview = false;
+  }, SCROLL_SYNC_DELAY);
 };
 
 // 初始化CodeMirror编辑器
@@ -108,14 +162,13 @@ const initEditor = () => {
       themeCompartment.of(isDark ? oneDark : []),
       EditorView.theme({
         '&': {
-          fontSize: '14px',
+          fontSize: 'var(--base-font-size)',
           fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
           height: '100%',
         },
         '.cm-content': {
           padding: '16px',
           minHeight: '100%',
-          overflow: 'auto',
         },
         '.cm-focused': {
           outline: 'none',
@@ -127,18 +180,13 @@ const initEditor = () => {
         '.cm-scroller': {
           fontFamily: 'inherit',
           overflow: 'auto',
-          maxHeight: '100%',
+          height: '100%',
         },
       }),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           const newValue = update.state.doc.toString();
           emit('update:modelValue', newValue);
-        }
-        
-        // 处理滚动同步
-        if (update.geometryChanged || update.docChanged) {
-          handleEditorScroll();
         }
       }),
       EditorView.domEventHandlers({
@@ -152,16 +200,6 @@ const initEditor = () => {
         blur: (event) => {
           emit('blur', event);
         },
-        scroll: () => {
-          setUserScrollingPane('editor');
-          handleEditorScroll();
-        },
-        wheel: () => {
-          setUserScrollingPane('editor');
-        },
-        touchstart: () => {
-          setUserScrollingPane('editor');
-        },
       }),
     ],
   });
@@ -170,7 +208,18 @@ const initEditor = () => {
     state,
     parent: editorContainer.value,
   });
+
+  // 确保 editorView 在下一个 tick 中可用，然后发出 ready 事件
+  nextTick(() => {
+    emit('ready');
+  });
 };
+
+// 暴露 editorView 和 previewDiv 给父组件
+defineExpose({
+  get editorView() { return editorView; },
+  previewDiv
+});
 
 // 更新主题
 const updateTheme = () => {
@@ -187,42 +236,6 @@ const updateTheme = () => {
     }
   });
 };
-
-// 处理编辑器滚动
-const handleEditorScroll = () => {
-  if (userScrollingPane.value !== 'editor' || !editorView || !previewDiv.value || !props.isSplitMode) return;
-
-  const scrollInfo = editorView.scrollDOM;
-  if (scrollInfo.scrollHeight <= scrollInfo.clientHeight) return;
-
-  const scrollRatio = scrollInfo.scrollTop / (scrollInfo.scrollHeight - scrollInfo.clientHeight);
-  const targetScrollTop = scrollRatio * (previewDiv.value.scrollHeight - previewDiv.value.clientHeight);
-  
-  if (Math.abs(previewDiv.value.scrollTop - targetScrollTop) > 1) {
-    previewDiv.value.scrollTop = targetScrollTop;
-  }
-  
-  emit('editor-scroll', { target: scrollInfo });
-};
-
-// 处理预览滚动
-const handlePreviewScroll = (event: Event) => {
-  if (userScrollingPane.value !== 'preview' || !editorView || !previewDiv.value || !props.isSplitMode) return;
-
-  const preview = previewDiv.value;
-  if (preview.scrollHeight <= preview.clientHeight) return;
-
-  const scrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
-  const scrollInfo = editorView.scrollDOM;
-  const targetScrollTop = scrollRatio * (scrollInfo.scrollHeight - scrollInfo.clientHeight);
-  
-  if (Math.abs(scrollInfo.scrollTop - targetScrollTop) > 1) {
-    scrollInfo.scrollTop = targetScrollTop;
-  }
-  
-  emit('preview-scroll', event);
-};
-
 
 
 // 监听props变化
@@ -241,9 +254,50 @@ watch(() => [props.isPreviewMode, props.isSplitMode], () => {
       // 如果编辑器应该显示但当前没有实例，重新初始化
       if (!editorView) {
         initEditor();
+        // 为新创建的编辑器添加滚动事件监听器
+        nextTick(() => {
+          if (props.isSplitMode && editorView) {
+            const editorScroller = editorView.scrollDOM;
+            editorScroller.addEventListener('scroll', handleEditorScroll);
+          }
+        });
       } else {
         // 如果编辑器存在但可能因为容器变化而需要重新布局
         editorView.requestMeasure();
+        // 确保编辑器内容与props同步
+        if (editorView.state.doc.toString() !== props.modelValue) {
+          editorView.dispatch({
+            changes: { from: 0, to: editorView.state.doc.length, insert: props.modelValue }
+          });
+        }
+        
+        // 根据分屏模式状态管理滚动事件监听器
+        const editorScroller = editorView.scrollDOM;
+        if (props.isSplitMode) {
+          // 移除旧的监听器（避免重复绑定）
+          editorScroller.removeEventListener('scroll', handleEditorScroll);
+          // 添加新的监听器
+          editorScroller.addEventListener('scroll', handleEditorScroll);
+        } else {
+          // 非分屏模式下移除滚动监听器
+          editorScroller.removeEventListener('scroll', handleEditorScroll);
+        }
+      }
+    } else if (props.isPreviewMode && !props.isSplitMode && editorView) {
+      // 在纯预览模式下，先清理滚动事件监听器，然后销毁编辑器实例
+      const editorScroller = editorView.scrollDOM;
+      editorScroller.removeEventListener('scroll', handleEditorScroll);
+      editorView.destroy();
+      editorView = null;
+    }
+    
+    // 清理滚动同步状态
+    if (!props.isSplitMode) {
+      isScrollingEditor = false;
+      isScrollingPreview = false;
+      if (scrollSyncTimeout) {
+        clearTimeout(scrollSyncTimeout);
+        scrollSyncTimeout = null;
       }
     }
     
@@ -255,7 +309,7 @@ watch(() => [props.isPreviewMode, props.isSplitMode], () => {
       previewDiv.value.addEventListener('click', handlePreviewClick);
     }
   });
-});
+}, { immediate: true });
 
 // 监听渲染内容变化，重新绑定事件监听器
 watch(() => props.renderedContent, () => {
@@ -318,6 +372,12 @@ onMounted(() => {
     // 确保编辑器正确测量布局
     if (editorView) {
       editorView.requestMeasure();
+      
+      // 为编辑器添加滚动事件监听器
+      if (props.isSplitMode) {
+        const editorScroller = editorView.scrollDOM;
+        editorScroller.addEventListener('scroll', handleEditorScroll);
+      }
     }
     
     // 为预览区域添加点击事件监听器
@@ -329,26 +389,26 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  // 清理滚动同步定时器
+  if (scrollSyncTimeout) {
+    clearTimeout(scrollSyncTimeout);
+  }
+  
+  // 清理编辑器滚动事件监听器
   if (editorView) {
+    const editorScroller = editorView.scrollDOM;
+    editorScroller.removeEventListener('scroll', handleEditorScroll);
     editorView.destroy();
   }
+  
   if (themeObserver) {
     themeObserver.disconnect();
-  }
-  if (scrollEndTimer) {
-    clearTimeout(scrollEndTimer);
   }
   
   // 清理预览区域的事件监听器
   if (previewDiv.value) {
     previewDiv.value.removeEventListener('click', handlePreviewClick);
   }
-});
-
-// Expose the editor instance to the parent
-defineExpose({
-  editorView,
-  previewDiv,
 });
 </script>
 
@@ -365,10 +425,10 @@ defineExpose({
   width: 45% !important;
   flex: none !important;
   min-width: 0;
-  overflow: hidden;
+  overflow: auto;
   word-wrap: break-word;
   word-break: break-word;
-  white-space: pre-wrap;
+  /* white-space: pre-wrap; */
 }
 
 /* 确保预览区内容自动换行 */

@@ -275,6 +275,7 @@
     "codeBlockTooltip": "代码块",
     "tableTooltip": "插入表格",
     "toggleTocTooltip": "显示/隐藏目录",
+    "tocDisabledTooltip": "目录仅在预览模式下可用",
     "audioRecordingTooltip": "录制音频",
     "audioPlayerTooltip": "音频播放器",
     "themeTooltip": "切换主题",

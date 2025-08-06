@@ -401,6 +401,8 @@ const handleMobileNav = () => {
 const deselectNote = () => {
   selectedNote.value = null;
   selectedNoteId.value = null;
+  // 清除最后打开的笔记ID
+  localStorageStore.setLastOpenedNoteId(null);
 }
 
 // --- Refs for UI state ---
@@ -633,10 +635,14 @@ function selectNote(note: Tip) {
   if (note && note.id) {
     selectedNote.value = { ...note }; // 使用扩展运算符创建一个新的对象
     selectedNoteId.value = note.id;
+    // 保存最后打开的笔记ID到本地存储
+    localStorageStore.setLastOpenedNoteId(note.id);
   } else {
     console.warn("Invalid note selected:", note);
     selectedNote.value = null;
     selectedNoteId.value = null;
+    // 清除最后打开的笔记ID
+    localStorageStore.setLastOpenedNoteId(null);
   }
 }
 
@@ -657,7 +663,26 @@ onMounted(async () => {
   noteListHidden.value = localStorageStore.data.noteListHidden;
 
   await fetchInitialData()
-  tipsStore.fetchTips(true)
+  await tipsStore.fetchTips(true)
+
+  // 恢复最后打开的笔记
+  const lastOpenedNoteId = localStorageStore.data.lastOpenedNoteId;
+  if (lastOpenedNoteId) {
+    try {
+      console.log('[MainLayout] 尝试恢复最后打开的笔记:', lastOpenedNoteId);
+      const note = await tipsStore.fetchTip(lastOpenedNoteId);
+      if (note) {
+        await handleNoteSelection(note);
+        console.log('[MainLayout] 成功恢复最后打开的笔记:', note.title);
+      } else {
+        console.log('[MainLayout] 最后打开的笔记不存在，清除记录');
+        localStorageStore.setLastOpenedNoteId(null);
+      }
+    } catch (error) {
+      console.error('[MainLayout] 恢复最后打开的笔记失败:', error);
+      localStorageStore.setLastOpenedNoteId(null);
+    }
+  }
 
   // ... other onMounted logic
 })

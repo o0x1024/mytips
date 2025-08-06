@@ -551,9 +551,7 @@ const initializeAudioEnvironment = async () => {
     // 检查设备可用性
     const hasAudioDevices = await checkAudioDeviceAvailability()
     deviceState.value = hasAudioDevices ? 'available' : 'unavailable'
-    
-    console.log(`音频环境状态 - 权限: ${permissionState.value}, 设备: ${deviceState.value}`)
-  } catch (error) {
+      } catch (error) {
     console.error('初始化音频环境检查失败:', error)
     deviceState.value = 'unavailable'
   }

@@ -112,7 +112,14 @@
     <div class="flex items-center gap-2" ref="toolbarRight">
 
       <!-- 目录 -->
-      <button @click="emitCommand('toggle-toc')" class="btn btn-xs btn-ghost" :class="{ 'btn-active': showToc }" :title="t('noteEditor.toggleTocTooltip')" data-priority="10">
+      <button 
+        @click="emitCommand('toggle-toc')" 
+        class="btn btn-xs btn-ghost" 
+        :class="{ 'btn-active': showToc, 'btn-disabled': isEditOnly || isSplitMode }" 
+        :disabled="isEditOnly || isSplitMode"
+        :title="isEditOnly || isSplitMode ? t('noteEditor.tocDisabledTooltip') : t('noteEditor.toggleTocTooltip')" 
+        data-priority="10"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
       </button>
 
