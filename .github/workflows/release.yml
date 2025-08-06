@@ -104,17 +104,32 @@ jobs:
       run: |
         # 根据目标架构安装正确的 OpenSSL
         if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
-          # 对于 x86_64 构建，强制使用 x86_64 架构安装 OpenSSL
+          # 对于 x86_64 构建，强制使用 x86_64 架构
+          # 首先卸载可能存在的 arm64 版本
+          brew uninstall --ignore-dependencies openssl@3 || true
+          
+          # 强制使用 x86_64 架构安装 OpenSSL
+          arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || true
           arch -x86_64 brew install openssl@3
-          echo "OPENSSL_DIR=$(arch -x86_64 brew --prefix openssl@3)" >> $GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=$(arch -x86_64 brew --prefix openssl@3)/lib" >> $GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=$(arch -x86_64 brew --prefix openssl@3)/include" >> $GITHUB_ENV
+          
+          # 设置环境变量指向 x86_64 版本
+          OPENSSL_PREFIX=$(arch -x86_64 brew --prefix openssl@3)
+          echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
           echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
-          # 设置编译器标志以确保正确的架构
-          echo "CFLAGS=-arch x86_64" >> $GITHUB_ENV
-          echo "LDFLAGS=-arch x86_64" >> $GITHUB_ENV
-          # 设置 PKG_CONFIG_PATH 确保找到正确的 OpenSSL
-          echo "PKG_CONFIG_PATH=$(arch -x86_64 brew --prefix openssl@3)/lib/pkgconfig" >> $GITHUB_ENV
+          echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
+          
+          # 设置编译器标志
+          echo "CFLAGS=-arch x86_64 -I$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          echo "LDFLAGS=-arch x86_64 -L$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          
+          # 设置 PKG_CONFIG_PATH
+          echo "PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig" >> $GITHUB_ENV
+          
+          # 强制 Rust 使用正确的链接器标志
+          echo "RUSTFLAGS=-C target-cpu=x86-64 -C link-arg=-arch -C link-arg=x86_64 -L $OPENSSL_PREFIX/lib" >> $GITHUB_ENV
         else
           # 对于 aarch64 构建
           brew install openssl@3
@@ -157,11 +172,28 @@ jobs:
         p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
 
+    - name: Clean Rust cache for macOS x86_64
+      if: matrix.rust_target == 'x86_64-apple-darwin'
+      run: |
+        # 清理可能存在的错误架构缓存
+        cargo clean
+        rm -rf ~/.cargo/registry/cache
+        rm -rf ~/.cargo/git/db
+        rm -rf src-tauri/target
+
     - name: Build the application
       if: matrix.platform != 'android'
       shell: bash
       run: |
+        # 对于 macOS x86_64，强制重新编译 openssl-sys
+        if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
+          cd src-tauri
+          cargo update -p openssl-sys
+          cd ..
+        fi
+        
         yarn tauri build --target ${{ matrix.rust_target }}
+        
         # 确保为 macOS 平台生成 DMG 签名文件
         if [[ "${{ matrix.platform }}" == "darwin-"* ]]; then
           echo "Checking for DMG files and generating signatures if missing..."
@@ -173,11 +205,14 @@ jobs:
         OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
         OPENSSL_LIB_DIR: ${{ env.OPENSSL_LIB_DIR }}
         OPENSSL_INCLUDE_DIR: ${{ env.OPENSSL_INCLUDE_DIR }}
-        VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
         OPENSSL_STATIC: ${{ env.OPENSSL_STATIC }}
+        OPENSSL_NO_VENDOR: ${{ env.OPENSSL_NO_VENDOR }}
+        VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
         CFLAGS: ${{ env.CFLAGS }}
         LDFLAGS: ${{ env.LDFLAGS }}
+        CPPFLAGS: ${{ env.CPPFLAGS }}
         PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
+        RUSTFLAGS: ${{ env.RUSTFLAGS }}
 
     - name: Build Android App Bundle (AAB)
       if: matrix.platform == 'android'
