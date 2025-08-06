@@ -184,7 +184,9 @@ jobs:
       if: matrix.rust_target == 'x86_64-apple-darwin'
       run: |
         # 清理可能存在的错误架构缓存
+        cd src-tauri
         cargo clean
+        cd ..
         rm -rf ~/.cargo/registry/cache
         rm -rf ~/.cargo/git/db
         rm -rf src-tauri/target
