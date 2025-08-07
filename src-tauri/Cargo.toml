@@ -67,6 +67,9 @@ docx-rs = "0.4.17"
 
 [dev-dependencies]
 tempfile = "3.8"
+jsonwebtoken = "9"
+base64 = "0.21"
+ring = "0.17"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

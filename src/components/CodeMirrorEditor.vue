@@ -18,7 +18,7 @@
         'markdown-body': true,
         'markdown-preview': true
       }"
-      @scroll="handlePreviewScroll"
+
       v-html="renderedContent"
     ></div>
   </div>
@@ -57,7 +57,7 @@ const props = defineProps({
   },
 });
 
-const emit = defineEmits(['update:modelValue', 'contextmenu', 'paste', 'keydown', 'blur', 'ready']);
+const emit = defineEmits(['update:modelValue', 'contextmenu', 'paste', 'keydown', 'blur', 'ready', 'editor-scroll', 'preview-scroll']);
 
 const editorContainer = ref<HTMLDivElement | null>(null);
 const previewDiv = ref<HTMLDivElement | null>(null);
@@ -107,7 +107,8 @@ const handleEditorScroll = () => {
   
   // 同步到预览区
   setScrollRatio(previewDiv.value, scrollRatio);
-  
+  // 新增：向父组件发送滚动比例，供外部同步使用
+  emit('editor-scroll', { scrollRatio });
   // 设置防抖定时器
   scrollSyncTimeout = window.setTimeout(() => {
     isScrollingEditor = false;
@@ -130,7 +131,8 @@ const handlePreviewScroll = () => {
   // 同步到编辑器
   const editorScroller = editorView.scrollDOM;
   setScrollRatio(editorScroller, scrollRatio);
-  
+  // 新增：向父组件发送滚动比例，供外部同步使用
+  emit('preview-scroll', { scrollRatio });
   // 设置防抖定时器
   scrollSyncTimeout = window.setTimeout(() => {
     isScrollingPreview = false;
@@ -305,8 +307,12 @@ watch(() => [props.isPreviewMode, props.isSplitMode], () => {
     if ((props.isPreviewMode || props.isSplitMode) && previewDiv.value) {
       // 先移除旧的监听器（如果存在）
       previewDiv.value.removeEventListener('click', handlePreviewClick);
+      previewDiv.value.removeEventListener('scroll', handlePreviewScroll);
       // 添加新的监听器
       previewDiv.value.addEventListener('click', handlePreviewClick);
+      if (props.isSplitMode) {
+        previewDiv.value.addEventListener('scroll', handlePreviewScroll);
+      }
     }
   });
 }, { immediate: true });
@@ -317,7 +323,11 @@ watch(() => props.renderedContent, () => {
     if ((props.isPreviewMode || props.isSplitMode) && previewDiv.value) {
       // 内容更新后重新绑定事件监听器
       previewDiv.value.removeEventListener('click', handlePreviewClick);
+      previewDiv.value.removeEventListener('scroll', handlePreviewScroll);
       previewDiv.value.addEventListener('click', handlePreviewClick);
+      if (props.isSplitMode) {
+        previewDiv.value.addEventListener('scroll', handlePreviewScroll);
+      }
     }
   });
 });
@@ -380,9 +390,12 @@ onMounted(() => {
       }
     }
     
-    // 为预览区域添加点击事件监听器
+    // 为预览区域添加事件监听器
     if (previewDiv.value) {
       previewDiv.value.addEventListener('click', handlePreviewClick);
+      if (props.isSplitMode) {
+        previewDiv.value.addEventListener('scroll', handlePreviewScroll);
+      }
     }
   });
   themeObserver = observeThemeChange();
@@ -408,6 +421,7 @@ onBeforeUnmount(() => {
   // 清理预览区域的事件监听器
   if (previewDiv.value) {
     previewDiv.value.removeEventListener('click', handlePreviewClick);
+    previewDiv.value.removeEventListener('scroll', handlePreviewScroll);
   }
 });
 </script>

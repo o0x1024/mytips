@@ -109,6 +109,48 @@ AI 助手页面 → 输入问题 → 使用 # 引用笔记
 
 ## 使用技巧
 
+### 远程数据库支持
+下载安装数据库应用
+```
+https://github.com/tursodatabase/libsql/blob/main/docs/USER_GUIDE.md
+https://github.com/tursodatabase/libsql/blob/main/docs/BUILD-RUN.md
+https://github.com/tursodatabase/libsql/tree/main/libsql-server
+```
+
+生成密钥对
+自动生成
+```
+https://github.com/tursodatabase/libsql/blob/main/libsql-server/scripts
+
+//生成证书
+python scripts/gen_certs.py
+
+ca_cert.pem -- certificate authority certificate
+ca_key.pem -- certificate authority private key
+server_cert.pem -- primary server certificate
+server_key.pem -- primary server private key
+client_cert.pem -- replica server certificate
+client_key.pem -- replica server private key
+```
+
+手动生成
+```
+openssl genpkey -algorithm ed25519 -out ed25519-private.pem             //生成私钥
+openssl pkey -in ed25519-private.pem -pubout -out ed25519-public.pem    //生成公钥
+```
+
+运行
+```
+sqld \
+  --http-listen-addr 127.0.0.1:8081 \
+  --grpc-listen-addr 127.0.0.1:5001 \
+  --grpc-tls \
+  --grpc-ca-cert-file ca_cert.pem \
+  --grpc-cert-file server_cert.pem \
+  --grpc-key-file server_key.pem 
+  --auth-jwt-key-file ed25519-public.pem   //可选
+```
+
 ### AI 助手进阶
 - **笔记引用** - 对话中输入 `#` 快速引用笔记内容
 - **流式控制** - 实时查看回复，随时停止生成

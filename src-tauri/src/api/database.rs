@@ -43,51 +43,58 @@ pub async fn get_database_info(
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<serde_json::Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     // 获取数据库文件大小
     let db_path = get_current_db_path(&app).map_err(|e| format!("获取数据库路径失败: {}", e))?;
     let file_size = match std::fs::metadata(&db_path) {
         Ok(metadata) => {
             let size_bytes = metadata.len();
             format_file_size(size_bytes)
-        },
+        }
         Err(_) => "Unknown".to_string(),
     };
-    
+
     // 获取笔记数量
     let note_count: i64 = {
-        let mut rows = conn.query("SELECT COUNT(*) FROM tips", ()).await.map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query("SELECT COUNT(*) FROM tips", ())
+            .await
+            .map_err(|e| e.to_string())?;
         if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
             row.get::<i64>(0).map_err(|e| e.to_string())?
         } else {
             0
         }
     };
-    
+
     // 获取分类数量
     let category_count: i64 = {
-        let mut rows = conn.query("SELECT COUNT(*) FROM categories", ()).await.map_err(|e| e.to_string())?;
+        let mut rows = conn
+            .query("SELECT COUNT(*) FROM categories", ())
+            .await
+            .map_err(|e| e.to_string())?;
         if let Some(row) = rows.next().await.map_err(|e| e.to_string())? {
             row.get::<i64>(0).map_err(|e| e.to_string())?
         } else {
             0
         }
     };
-    
+
     // 获取最后修改时间
     let last_modified = match std::fs::metadata(&db_path) {
-        Ok(metadata) => {
-            match metadata.modified() {
-                Ok(time) => {
-                    let datetime: chrono::DateTime<chrono::Utc> = time.into();
-                    datetime.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string()
-                },
-                Err(_) => "Unknown".to_string(),
+        Ok(metadata) => match metadata.modified() {
+            Ok(time) => {
+                let datetime: chrono::DateTime<chrono::Utc> = time.into();
+                datetime
+                    .with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
             }
+            Err(_) => "Unknown".to_string(),
         },
         Err(_) => "Unknown".to_string(),
     };
-    
+
     Ok(serde_json::json!({
         "size": file_size,
         "note_count": note_count,
@@ -169,7 +176,7 @@ pub async fn create_new_database(
     };
 
     // 创建新的数据库
-            if let Err(e) = create_empty_database(&file_path).await {
+    if let Err(e) = create_empty_database(&file_path).await {
         return Err(format!("创建数据库失败: {}", e));
     }
 
@@ -192,8 +199,8 @@ pub async fn reset_to_default_database(
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<serde_json::Value, String> {
     // 获取默认数据库路径
-    let default_path = get_default_db_path(&app)
-        .map_err(|e| format!("获取默认数据库路径失败: {}", e))?;
+    let default_path =
+        get_default_db_path(&app).map_err(|e| format!("获取默认数据库路径失败: {}", e))?;
 
     // 如果默认数据库不存在，创建一个新的
     if !default_path.exists() {
@@ -223,17 +230,20 @@ pub async fn test_remote_connection(
     if remote_url.trim().is_empty() {
         return Err("Remote URL cannot be empty".to_string());
     }
-    
+
     // 检查URL格式
-    if !remote_url.starts_with("libsql://") && 
-       !remote_url.starts_with("https://") && 
-       !remote_url.starts_with("http://") && 
-       !remote_url.starts_with("wss://") {
-        return Err("Invalid URL format. Expected libsql://, https://, http://, or wss://".to_string());
+    if !remote_url.starts_with("libsql://")
+        && !remote_url.starts_with("https://")
+        && !remote_url.starts_with("http://")
+        && !remote_url.starts_with("wss://")
+    {
+        return Err(
+            "Invalid URL format. Expected libsql://, https://, http://, or wss://".to_string(),
+        );
     }
-    
+
     println!("Testing connection to: {}", remote_url);
-    
+
     // 尝试实际连接
     match test_libsql_connection(&remote_url, auth_token.as_deref()).await {
         Ok(success) => Ok(success),
@@ -249,21 +259,21 @@ pub async fn test_remote_connection(
 async fn test_libsql_connection(url: &str, auth_token: Option<&str>) -> Result<bool> {
     // 这里应该实现实际的libSQL连接测试
     // 由于需要libsql依赖，暂时使用简单的HTTP请求测试
-    
+
     if url.starts_with("http://") || url.starts_with("https://") {
         // 对于HTTP URL，尝试发送一个简单的请求
         let client = reqwest::Client::new();
         let mut request = client.get(url);
-        
+
         if let Some(token) = auth_token {
             request = request.header("Authorization", format!("Bearer {}", token));
         }
-        
+
         match request.send().await {
             Ok(response) => {
                 // 如果收到任何响应（即使是错误），说明服务器是可达的
                 Ok(response.status().as_u16() < 500)
-            },
+            }
             Err(_) => Ok(false),
         }
     } else {
@@ -275,24 +285,24 @@ async fn test_libsql_connection(url: &str, auth_token: Option<&str>) -> Result<b
 
 /// 获取同步配置
 #[command]
-pub async fn get_sync_config(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn get_sync_config(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     match crate::db::get_sync_config(&conn).await {
-        Ok(Some(config)) => {
-            Ok(serde_json::json!({
-                "id": config.id,
-                "remote_url": config.remote_url.unwrap_or_default(),
-                "auth_token": config.auth_token.unwrap_or_default(),
-                "sync_mode": config.sync_mode.to_string(),
-                "sync_interval": config.sync_interval,
-                "last_sync_at": config.last_sync_at,
-                "is_online": config.is_online,
-                "auto_sync_enabled": config.auto_sync_enabled,
-                "created_at": config.created_at,
-                "updated_at": config.updated_at,
-            }))
-        },
+        Ok(Some(config)) => Ok(serde_json::json!({
+            "id": config.id,
+            "remote_url": config.remote_url.unwrap_or_default(),
+            "auth_token": config.auth_token.unwrap_or_default(),
+            "sync_mode": config.sync_mode.to_string(),
+            "sync_interval": config.sync_interval,
+            "last_sync_at": config.last_sync_at,
+            "is_online": config.is_online,
+            "auto_sync_enabled": config.auto_sync_enabled,
+            "created_at": config.created_at,
+            "updated_at": config.updated_at,
+        })),
         Ok(None) => {
             // 返回默认配置
             Ok(serde_json::json!({
@@ -307,7 +317,7 @@ pub async fn get_sync_config(db_manager: State<'_, UnifiedDbManager>) -> Result<
                 "created_at": chrono::Utc::now().timestamp_millis(),
                 "updated_at": chrono::Utc::now().timestamp_millis(),
             }))
-        },
+        }
         Err(e) => Err(format!("Failed to get sync config: {}", e)),
     }
 }
@@ -319,36 +329,65 @@ pub async fn save_sync_config(
     config: serde_json::Value,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     let sync_config = crate::db::SyncConfig {
         id: config["id"].as_str().unwrap_or("default").to_string(),
-        remote_url: config["remote_url"].as_str().map(|s| if s.is_empty() { None } else { Some(s.to_string()) }).flatten(),
-        auth_token: config["auth_token"].as_str().map(|s| if s.is_empty() { None } else { Some(s.to_string()) }).flatten(),
-        sync_mode: crate::db::SyncMode::from(config["sync_mode"].as_str().unwrap_or("OFFLINE").to_string()),
+        remote_url: config["remote_url"]
+            .as_str()
+            .map(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            })
+            .flatten(),
+        auth_token: config["auth_token"]
+            .as_str()
+            .map(|s| {
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.to_string())
+                }
+            })
+            .flatten(),
+        sync_mode: crate::db::SyncMode::from(
+            config["sync_mode"]
+                .as_str()
+                .unwrap_or("OFFLINE")
+                .to_string(),
+        ),
         sync_interval: config["sync_interval"].as_i64().unwrap_or(300),
         last_sync_at: config["last_sync_at"].as_i64().unwrap_or(0),
         is_online: config["is_online"].as_bool().unwrap_or(false),
         auto_sync_enabled: config["auto_sync_enabled"].as_bool().unwrap_or(true),
-        created_at: config["created_at"].as_i64().unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
+        created_at: config["created_at"]
+            .as_i64()
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis()),
         updated_at: chrono::Utc::now().timestamp_millis(),
     };
-    
-    crate::db::save_sync_config(&conn, &sync_config).await
+
+    crate::db::save_sync_config(&conn, &sync_config)
+        .await
         .map_err(|e| format!("Failed to save sync config: {}", e))
 }
 
 /// 获取同步状态
 #[command]
-pub async fn get_sync_status(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn get_sync_status(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     match crate::db::get_sync_config(&conn).await {
         Ok(Some(config)) => {
-            let is_enabled = config.sync_mode != crate::db::SyncMode::Offline && config.remote_url.is_some();
-            
+            let is_enabled =
+                config.sync_mode != crate::db::SyncMode::Offline && config.remote_url.is_some();
+
             // 获取同步统计信息
             let stats = get_sync_statistics(&conn).await.unwrap_or_default();
-            
+
             Ok(serde_json::json!({
                 "is_enabled": is_enabled,
                 "is_online": config.is_online,
@@ -362,22 +401,20 @@ pub async fn get_sync_status(db_manager: State<'_, UnifiedDbManager>) -> Result<
                     "is_online": config.is_online
                 }
             }))
-        },
-        Ok(None) => {
-            Ok(serde_json::json!({
-                "is_enabled": false,
-                "is_online": false,
-                "sync_mode": "OFFLINE",
-                "last_sync_time": 0,
-                "stats": {
-                    "total_records": 0,
-                    "synced_records": 0,
-                    "pending_records": 0,
-                    "failed_records": 0,
-                    "is_online": false
-                }
-            }))
-        },
+        }
+        Ok(None) => Ok(serde_json::json!({
+            "is_enabled": false,
+            "is_online": false,
+            "sync_mode": "OFFLINE",
+            "last_sync_time": 0,
+            "stats": {
+                "total_records": 0,
+                "synced_records": 0,
+                "pending_records": 0,
+                "failed_records": 0,
+                "is_online": false
+            }
+        })),
         Err(e) => Err(format!("Failed to get sync status: {}", e)),
     }
 }
@@ -389,7 +426,7 @@ pub async fn set_sync_mode(
     mode: String,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     // 获取现有配置或创建默认配置
     let mut config = match crate::db::get_sync_config(&conn).await {
         Ok(Some(config)) => config,
@@ -407,24 +444,29 @@ pub async fn set_sync_mode(
         },
         Err(e) => return Err(format!("Failed to get sync config: {}", e)),
     };
-    
+
     config.sync_mode = crate::db::SyncMode::from(mode);
     config.updated_at = chrono::Utc::now().timestamp_millis();
-    
-    crate::db::save_sync_config(&conn, &config).await
+
+    crate::db::save_sync_config(&conn, &config)
+        .await
         .map_err(|e| format!("Failed to save sync config: {}", e))
 }
 
 /// 使用LibSQL进行安全同步
 #[command]
-pub async fn manual_sync_libsql(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn manual_sync_libsql(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     // TODO: 实现LibSQL同步功能
     Err("LibSQL同步功能暂未实现".to_string())
 }
 
 /// 手动同步
 #[command]
-pub async fn manual_sync(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn manual_sync(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     // TODO: 实现完整的同步管理器集成
     // 暂时使用 UnifiedDbManager 的内置同步功能
     if let Err(e) = db_manager.inner().sync().await {
@@ -445,15 +487,17 @@ pub async fn manual_sync(db_manager: State<'_, UnifiedDbManager>) -> Result<serd
 
 /// 清理已同步的记录
 #[command]
-pub async fn clear_synced_records(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn clear_synced_records(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     // 清理已同步的记录
-    let result = conn.execute(
-        "DELETE FROM sync_status WHERE sync_status = 'SYNCED'",
-        ()
-    ).await.map_err(|e| format!("Failed to clear synced records: {}", e))?;
-    
+    let result = conn
+        .execute("DELETE FROM sync_status WHERE sync_status = 'SYNCED'", ())
+        .await
+        .map_err(|e| format!("Failed to clear synced records: {}", e))?;
+
     Ok(serde_json::json!({
         "message": "已同步的记录已清理",
         "cleared_count": result
@@ -467,8 +511,9 @@ pub async fn save_database_type(
     database_type: String,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
-    crate::db::save_setting(&conn, "database_type", &database_type).await
+
+    crate::db::save_setting(&conn, "database_type", &database_type)
+        .await
         .map_err(|e| format!("Failed to save database type: {}", e))
 }
 
@@ -476,7 +521,7 @@ pub async fn save_database_type(
 #[command]
 pub async fn get_database_type(db_manager: State<'_, UnifiedDbManager>) -> Result<String, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     match crate::db::get_setting(&conn, "database_type").await {
         Ok(Some(db_type)) => Ok(db_type),
         Ok(None) => Ok("local".to_string()), // 默认为本地数据库
@@ -485,16 +530,18 @@ pub async fn get_database_type(db_manager: State<'_, UnifiedDbManager>) -> Resul
 }
 
 // 内部函数：为现有数据创建同步记录
-async fn create_sync_records_for_existing_data_internal(conn: &libsql::Connection) -> Result<i32, anyhow::Error> {
+async fn create_sync_records_for_existing_data_internal(
+    conn: &libsql::Connection,
+) -> Result<i32, anyhow::Error> {
     let mut created_records = 0;
-    
+
     // 为所有笔记创建同步记录
     let mut tips_rows = conn.query("SELECT id FROM tips", ()).await?;
-    
+
     while let Some(row) = tips_rows.next().await? {
         let tip_id: String = row.get(0)?;
         let sync_record_id = uuid::Uuid::new_v4().to_string();
-        
+
         conn.execute(
             "INSERT OR IGNORE INTO sync_status (id, table_name, record_id, operation, sync_status, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -508,17 +555,17 @@ async fn create_sync_records_for_existing_data_internal(conn: &libsql::Connectio
                 chrono::Utc::now().timestamp_millis(),
             )
         ).await?;
-        
+
         created_records += 1;
     }
-    
+
     // 为所有分类创建同步记录
     let mut categories_rows = conn.query("SELECT id FROM categories", ()).await?;
-    
+
     while let Some(row) = categories_rows.next().await? {
         let category_id: String = row.get(0)?;
         let sync_record_id = uuid::Uuid::new_v4().to_string();
-        
+
         conn.execute(
             "INSERT OR IGNORE INTO sync_status (id, table_name, record_id, operation, sync_status, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -532,24 +579,26 @@ async fn create_sync_records_for_existing_data_internal(conn: &libsql::Connectio
                 chrono::Utc::now().timestamp_millis(),
             )
         ).await?;
-        
+
         created_records += 1;
     }
-    
+
     Ok(created_records)
 }
 
 /// 为现有数据创建同步记录
 #[command]
-pub async fn create_sync_records_for_existing_data(db_manager: State<'_, UnifiedDbManager>) -> Result<serde_json::Value, String> {
+pub async fn create_sync_records_for_existing_data(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<serde_json::Value, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-    
+
     match create_sync_records_for_existing_data_internal(&conn).await {
         Ok(created_records) => Ok(serde_json::json!({
             "message": format!("已为 {} 条记录创建同步状态", created_records),
             "created_records": created_records
         })),
-        Err(e) => Err(format!("创建同步记录失败: {}", e))
+        Err(e) => Err(format!("创建同步记录失败: {}", e)),
     }
 }
 
@@ -560,24 +609,25 @@ pub async fn configure_remote_database(
     config: serde_json::Value,
 ) -> Result<(), String> {
     println!("Starting configure_remote_database");
-    
-    let remote_url = config["remote_url"].as_str()
-        .ok_or("Missing remote_url")?;
+
+    let remote_url = config["remote_url"].as_str().ok_or("Missing remote_url")?;
     let auth_token = config["auth_token"].as_str().map(|s| s.to_string());
     let sync_mode = config["sync_mode"].as_str().unwrap_or("MANUAL");
     let sync_interval = config["sync_interval"].as_i64().unwrap_or(300);
     let auto_sync_enabled = config["auto_sync_enabled"].as_bool().unwrap_or(true);
-    
+
     println!("Remote URL: {}, Sync mode: {}", remote_url, sync_mode);
-    
+
     // 测试连接
-    if !test_libsql_connection(remote_url, auth_token.as_deref()).await
-        .map_err(|e| format!("连接测试失败: {}", e))? {
+    if !test_libsql_connection(remote_url, auth_token.as_deref())
+        .await
+        .map_err(|e| format!("连接测试失败: {}", e))?
+    {
         return Err("无法连接到远程数据库".to_string());
     }
-    
+
     println!("Remote connection test passed");
-    
+
     // 创建并保存同步配置（不进行实际的数据库副本创建）
     let sync_config = crate::db::SyncConfig {
         id: "default".to_string(),
@@ -591,15 +641,16 @@ pub async fn configure_remote_database(
         created_at: chrono::Utc::now().timestamp_millis(),
         updated_at: chrono::Utc::now().timestamp_millis(),
     };
-    
+
     // 保存配置到本地数据库
     {
         let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
-        crate::db::save_sync_config(&conn, &sync_config).await
+        crate::db::save_sync_config(&conn, &sync_config)
+            .await
             .map_err(|e| format!("Failed to save sync config: {}", e))?;
         println!("Sync config saved");
     }
-    
+
     // 为现有数据创建同步记录，但不立即同步
     {
         let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -608,7 +659,7 @@ pub async fn configure_remote_database(
             Err(e) => println!("Warning: Failed to create sync records: {}", e),
         }
     }
-    
+
     println!("configure_remote_database completed successfully");
     Ok(())
 }
@@ -631,24 +682,26 @@ fn get_current_db_path(app: &AppHandle) -> Result<PathBuf> {
 
 /// 获取默认数据库路径
 fn get_default_db_path(app: &AppHandle) -> Result<PathBuf> {
-    let data_dir = app.path()
+    let data_dir = app
+        .path()
         .app_data_dir()
         .map_err(|_| anyhow!("无法确定数据目录"))?;
-    
+
     // 确保目录存在
     fs::create_dir_all(&data_dir)?;
-    
+
     Ok(data_dir.join("mytips.db"))
 }
 
 /// 获取自定义数据库路径设置
 fn get_custom_database_path(app: &AppHandle) -> Result<Option<String>> {
-    let config_dir = app.path()
+    let config_dir = app
+        .path()
         .app_config_dir()
         .map_err(|_| anyhow!("无法确定配置目录"))?;
-    
+
     let config_file = config_dir.join("database_path.txt");
-    
+
     if config_file.exists() {
         let path = fs::read_to_string(config_file)?;
         Ok(Some(path.trim().to_string()))
@@ -659,13 +712,14 @@ fn get_custom_database_path(app: &AppHandle) -> Result<Option<String>> {
 
 /// 保存数据库路径设置
 fn save_database_path(app: &AppHandle, path: &str) -> Result<()> {
-    let config_dir = app.path()
+    let config_dir = app
+        .path()
         .app_config_dir()
         .map_err(|_| anyhow!("无法确定配置目录"))?;
-    
+
     // 确保配置目录存在
     fs::create_dir_all(&config_dir)?;
-    
+
     let config_file = config_dir.join("database_path.txt");
     fs::write(config_file, path)?;
     Ok(())
@@ -673,10 +727,11 @@ fn save_database_path(app: &AppHandle, path: &str) -> Result<()> {
 
 /// 删除自定义数据库路径设置
 fn remove_database_path_setting(app: &AppHandle) -> Result<()> {
-    let config_dir = app.path()
+    let config_dir = app
+        .path()
         .app_config_dir()
         .map_err(|_| anyhow!("无法确定配置目录"))?;
-    
+
     let config_file = config_dir.join("database_path.txt");
     if config_file.exists() {
         fs::remove_file(config_file)?;
@@ -687,35 +742,41 @@ fn remove_database_path_setting(app: &AppHandle) -> Result<()> {
 /// 验证SQLite数据库文件
 async fn validate_sqlite_database(path: &PathBuf) -> Result<()> {
     use libsql::Builder;
-    
+
     // 尝试打开数据库连接
     let db = Builder::new_local(path)
         .build()
         .await
         .map_err(|e| anyhow!("无法打开数据库文件: {}", e))?;
-    
-    let conn = db.connect()
+
+    let conn = db
+        .connect()
         .map_err(|e| anyhow!("无法连接到数据库: {}", e))?;
-    
+
     // 检查是否有基本的表结构
-    let mut rows = conn.query("SELECT name FROM sqlite_master WHERE type='table'", ())
+    let mut rows = conn
+        .query("SELECT name FROM sqlite_master WHERE type='table'", ())
         .await
         .map_err(|e| anyhow!("查询表结构失败: {}", e))?;
-    
+
     let mut table_names = Vec::new();
-    while let Some(row) = rows.next().await.map_err(|e| anyhow!("读取行失败: {}", e))? {
+    while let Some(row) = rows
+        .next()
+        .await
+        .map_err(|e| anyhow!("读取行失败: {}", e))?
+    {
         let name: String = row.get(0).map_err(|e| anyhow!("获取表名失败: {}", e))?;
         table_names.push(name);
     }
-    
+
     // 检查是否包含我们期望的基本表
     let has_tips = table_names.iter().any(|name| name == "tips");
     let has_categories = table_names.iter().any(|name| name == "categories");
-    
+
     if !has_tips || !has_categories {
         return Err(anyhow!("数据库缺少必要的表结构"));
     }
-    
+
     Ok(())
 }
 
@@ -740,9 +801,7 @@ async fn create_empty_database(path: &PathBuf) -> Result<()> {
     crate::db::operations::create_all_tables(&conn).await?;
 
     // 插入默认分类 - 使用 NULL 而不是空字符串避免外键约束问题
-    let default_categories = vec![
-        ("uncategorized", "未分类"),
-    ];
+    let default_categories = vec![("uncategorized", "未分类")];
 
     let now = chrono::Utc::now().timestamp_millis();
     for (id, name) in default_categories {
@@ -783,7 +842,7 @@ fn format_sync_time(timestamp: i64) -> String {
                 let local_datetime: DateTime<Local> = datetime.with_timezone(&Local);
                 local_datetime.format("%Y-%m-%d %H:%M:%S").to_string()
             }
-            None => "时间格式错误".to_string()
+            None => "时间格式错误".to_string(),
         }
     }
 }
@@ -800,7 +859,7 @@ async fn get_total_records(conn: &libsql::Connection) -> i64 {
         }
         Err(_) => 0,
     };
-    
+
     let categories_count: i64 = match conn.query("SELECT COUNT(*) FROM categories", ()).await {
         Ok(mut rows) => {
             if let Ok(Some(row)) = rows.next().await {
@@ -811,7 +870,7 @@ async fn get_total_records(conn: &libsql::Connection) -> i64 {
         }
         Err(_) => 0,
     };
-    
+
     let tags_count: i64 = match conn.query("SELECT COUNT(*) FROM tags", ()).await {
         Ok(mut rows) => {
             if let Ok(Some(row)) = rows.next().await {
@@ -822,17 +881,20 @@ async fn get_total_records(conn: &libsql::Connection) -> i64 {
         }
         Err(_) => 0,
     };
-    
+
     tips_count + categories_count + tags_count
 }
 
 /// 获取已同步记录数
 async fn get_synced_records(conn: &libsql::Connection) -> i64 {
     // 查询已同步状态的记录数
-    match conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'SYNCED'", 
-        ()
-    ).await {
+    match conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'SYNCED'",
+            (),
+        )
+        .await
+    {
         Ok(mut rows) => {
             if let Ok(Some(row)) = rows.next().await {
                 row.get::<i64>(0).unwrap_or(0)
@@ -846,10 +908,13 @@ async fn get_synced_records(conn: &libsql::Connection) -> i64 {
 
 /// 获取待同步记录数
 async fn get_pending_records(conn: &libsql::Connection) -> i64 {
-    match conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'PENDING'", 
-        ()
-    ).await {
+    match conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'PENDING'",
+            (),
+        )
+        .await
+    {
         Ok(mut rows) => {
             if let Ok(Some(row)) = rows.next().await {
                 row.get::<i64>(0).unwrap_or(0)
@@ -863,10 +928,13 @@ async fn get_pending_records(conn: &libsql::Connection) -> i64 {
 
 /// 获取失败记录数
 async fn get_failed_records(conn: &libsql::Connection) -> i64 {
-    match conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'FAILED'", 
-        ()
-    ).await {
+    match conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'FAILED'",
+            (),
+        )
+        .await
+    {
         Ok(mut rows) => {
             if let Ok(Some(row)) = rows.next().await {
                 row.get::<i64>(0).unwrap_or(0)
@@ -880,23 +948,30 @@ async fn get_failed_records(conn: &libsql::Connection) -> i64 {
 
 /// 执行初始同步（将本地数据推送到远程）
 async fn perform_initial_sync_async(config: &crate::db::SyncConfig) -> Result<()> {
-    println!("Performing initial sync to remote database: {:?}", config.remote_url);
-    
+    println!(
+        "Performing initial sync to remote database: {:?}",
+        config.remote_url
+    );
+
     // 这个函数现在主要用于验证连接，实际的同步会在第一次手动同步时进行
     // 可以在这里添加一些基本的连接验证逻辑
-    
+
     if let Some(ref remote_url) = config.remote_url {
         // 验证远程URL格式
-        if !remote_url.starts_with("libsql://") && 
-           !remote_url.starts_with("https://") && 
-           !remote_url.starts_with("http://") && 
-           !remote_url.starts_with("wss://") {
+        if !remote_url.starts_with("libsql://")
+            && !remote_url.starts_with("https://")
+            && !remote_url.starts_with("http://")
+            && !remote_url.starts_with("wss://")
+        {
             return Err(anyhow!("Invalid remote URL format"));
         }
-        
-        println!("Initial sync configuration validated for URL: {}", remote_url);
+
+        println!(
+            "Initial sync configuration validated for URL: {}",
+            remote_url
+        );
     }
-    
+
     Ok(())
 }
 
@@ -905,49 +980,52 @@ async fn perform_initial_sync_async(config: &crate::db::SyncConfig) -> Result<()
 // 辅助函数：获取同步统计信息
 async fn get_sync_statistics(conn: &libsql::Connection) -> Result<SyncStatistics, anyhow::Error> {
     // 统计待同步记录
-    let mut pending_rows = conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'PENDING'",
-        ()
-    ).await?;
+    let mut pending_rows = conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'PENDING'",
+            (),
+        )
+        .await?;
     let pending_count: i64 = if let Some(row) = pending_rows.next().await? {
         row.get(0)?
     } else {
         0
     };
-    
+
     // 统计已同步记录
-    let mut synced_rows = conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'SYNCED'",
-        ()
-    ).await?;
+    let mut synced_rows = conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'SYNCED'",
+            (),
+        )
+        .await?;
     let synced_count: i64 = if let Some(row) = synced_rows.next().await? {
         row.get(0)?
     } else {
         0
     };
-    
+
     // 统计失败记录
-    let mut failed_rows = conn.query(
-        "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'FAILED'",
-        ()
-    ).await?;
+    let mut failed_rows = conn
+        .query(
+            "SELECT COUNT(*) FROM sync_status WHERE sync_status = 'FAILED'",
+            (),
+        )
+        .await?;
     let failed_count: i64 = if let Some(row) = failed_rows.next().await? {
         row.get(0)?
     } else {
         0
     };
-    
+
     // 统计总记录
-    let mut total_rows = conn.query(
-        "SELECT COUNT(*) FROM sync_status",
-        ()
-    ).await?;
+    let mut total_rows = conn.query("SELECT COUNT(*) FROM sync_status", ()).await?;
     let total_count: i64 = if let Some(row) = total_rows.next().await? {
         row.get(0)?
     } else {
         0
     };
-    
+
     Ok(SyncStatistics {
         total_records: total_count as i32,
         synced_records: synced_count as i32,
@@ -975,4 +1053,76 @@ impl Default for SyncStatistics {
     }
 }
 
- 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Ok;
+    use jsonwebtoken::{Algorithm, EncodingKey, Header};
+    // use libsql_server::auth::user_auth_strategies::jwt::Token;
+    use base64::Engine;
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Claims {
+        sub: String,
+        exp: i64,
+    }
+    // 测试 HTTP 200 情况应返回 true
+    #[tokio::test]
+    async fn test_http_connection_success() {
+        // 对于HTTP URL，尝试发送一个简单的请求
+        // let client = reqwest::Client::new();
+        // let mut request = client.get("http://127.0.0.1:8888");
+
+        // if let Some(token) = auth_token {
+        //     request = request.header("Authorization", format!("Bearer {}", token));
+        // }
+
+        // match request.send().await {
+        //     Ok(response) => {
+        //         // 如果收到任何响应（即使是错误），说明服务器是可达的
+        //         Ok(response.status().as_u16() < 500)
+        //     },
+        //     Err(_) => Ok(false),
+        // }
+        println!("123")
+    }
+
+    // 测试 HTTP 500 情况应返回 false
+    #[tokio::test]
+    async fn test_http_connection_server_error() {
+        let pem_private_key = r#"-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIDKsTrJoUnvyCbZKUeH1hFcASyqtnWGoHwYRu22+mPyd
+-----END PRIVATE KEY-----"#;
+
+        // 解析 PEM 格式的私钥
+        // 移除 PEM 头尾和换行符，获取 base64 内容
+        let pem_content = pem_private_key
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replace("-----END PRIVATE KEY-----", "")
+            .replace("\n", "")
+            .replace("\r", "");
+
+        // 解码 base64 得到 DER 格式的私钥
+        let der_bytes = base64::engine::general_purpose::STANDARD.decode(pem_content.trim()).unwrap();
+
+        // 创建 EncodingKey
+        let encoding_key = EncodingKey::from_ed_der(&der_bytes);
+
+        // 创建默认的 Token claims（与原代码保持一致）
+        let claims = serde_json::json!({
+            "sub": "user",
+            "iat": std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        });
+
+        // 创建 JWT header，使用 EdDSA 算法
+        let header = Header::new(Algorithm::EdDSA);
+
+        // 生成 JWT token
+        let token = jsonwebtoken::encode(&header, &claims, &encoding_key).unwrap();
+
+        println!("token:{}", token)
+    }
+}

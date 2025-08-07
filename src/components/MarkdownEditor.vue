@@ -46,20 +46,15 @@ const emit = defineEmits(['update:modelValue', 'contextmenu', 'paste', 'keydown'
 
 // 处理编辑器滚动事件，确保传递所有必要信息
 const handleEditorScroll = (event: any) => {
-  console.log('MarkdownEditor: handleEditorScroll', event);
   emit('editor-scroll', event);
 };
 
 // 处理预览区域滚动事件，确保传递所有必要信息
 const handlePreviewScroll = (event: any) => {
-  console.log('MarkdownEditor: handlePreviewScroll', event);
   emit('preview-scroll', event);
 };
 
 const onCodeMirrorReady = () => {
-  console.log('MarkdownEditor: CodeMirrorEditor is ready, emitting ready event.');
-  console.log('MarkdownEditor: codeMirrorEditor.value:', codeMirrorEditor.value);
-  console.log('MarkdownEditor: editorView:', codeMirrorEditor.value?.editorView);
   emit('ready');
 };
 
@@ -67,15 +62,11 @@ const codeMirrorEditor = ref<InstanceType<typeof CodeMirrorEditor> | null>(null)
 
 // 创建兼容的 editorTextarea 对象
 const editorTextarea = computed(() => {
-  console.log('MarkdownEditor: editorTextarea computed - codeMirrorEditor.value:', codeMirrorEditor.value);
   if (!codeMirrorEditor.value) {
-    console.log('MarkdownEditor: editorTextarea computed - codeMirrorEditor.value is null');
     return null;
   }
   const editorView = codeMirrorEditor.value.editorView;
-  console.log('MarkdownEditor: editorTextarea computed - editorView:', editorView);
   if (!editorView) {
-    console.log('MarkdownEditor: editorTextarea computed - editorView is null');
     return null;
   }
   
