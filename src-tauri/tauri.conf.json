@@ -26,15 +26,7 @@
       }
     ],
     "security": {
-      "csp": {
-        "default-src": "'self'",
-        "script-src": "'self' 'unsafe-eval' 'unsafe-inline'",
-        "style-src": "'self' 'unsafe-inline' 'unsafe-eval' data: blob:",
-        "img-src": "'self' data: https: asset: blob:",
-        "font-src": "'self' data:",
-        "connect-src": "'self' https: wss: ws:",
-        "media-src": "'self' data: blob: asset: https://asset.localhost"
-      }
+      "csp": null
     }
   },
   "bundle": {
