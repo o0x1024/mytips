@@ -704,7 +704,14 @@
       "privateKeyPem": "私钥(PEM格式)",
       "fullAccessToken": "完全访问令牌",
       "readOnlyToken": "只读访问令牌",
-      "expiresAt": "过期时间"
+      "expiresAt": "过期时间",
+      "result": {
+        "publicKey": "Public Key (PEM)",
+        "privateKey": "Private Key (PEM)",
+        "fullAccessToken": "Full Access Token",
+        "readOnlyToken": "Read-Only Token",
+        "expiresAt": "Expires At"
+      }
     },
      "prompts": {
       "switchToMode": "确定要切换到{modeLabel}吗？",
