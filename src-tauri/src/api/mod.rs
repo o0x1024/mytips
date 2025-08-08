@@ -2,6 +2,7 @@
 pub mod ai;
 pub mod audio;
 pub mod categories;
+pub mod certificates;
 pub mod clipboard_api;
 pub mod database;
 pub mod database_manager;
@@ -27,6 +28,7 @@ pub use database_manager::{
 pub use ai::*;
 pub use audio::*;
 pub use categories::*;
+pub use certificates::*;
 pub use clipboard_api::*;
 pub use database::*;
 pub use export::*;

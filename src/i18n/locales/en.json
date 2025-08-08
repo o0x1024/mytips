@@ -668,6 +668,45 @@
       "exporting": "Exporting...",
       "migrating": "Migrating..."
     },
+    "certificateManagement": {
+      "title": "Certificate Generation",
+      "description": "Generate X.509 certificate files for development and testing, including CA certificate, server certificate, and client certificate.",
+      "outputDirectory": "Certificate Output Directory",
+      "outputDirectoryPlaceholder": "Select certificate output directory",
+      "selectDirectory": "Select Directory",
+      "selectDirectoryTitle": "Select Certificate Output Directory",
+      "selectDirectoryFirst": "Please select certificate output directory first",
+      "selectDirectoryFailed": "Failed to select directory",
+      "generateCertificates": "Generate Certificates",
+      "generating": "Generating...",
+      "generateSuccess": "Certificates generated successfully!\n\nGenerated files:\n{files}\n\nCertificates valid until: {expiry}",
+      "generateFailed": "Failed to generate certificates",
+      "openDirectory": "Open Directory",
+      "openDirectoryFailed": "Failed to open directory"
+    },
+    "jwtManagement": {
+      "title": "JWT Key Generation",
+      "description": "Generate Ed25519 key pairs and JWT tokens for authentication and testing, including public key, private key, and access tokens.",
+      "outputDirectory": "JWT Output Directory",
+      "outputDirectoryPlaceholder": "Select JWT output directory",
+      "selectDirectory": "Select Directory",
+      "selectDirectoryTitle": "Select JWT Output Directory",
+      "selectDirectoryFirst": "Please select JWT output directory first",
+      "selectDirectoryFailed": "Failed to select directory",
+      "generateKeys": "Generate JWT Keys",
+      "generating": "Generating...",
+      "generateSuccess": "JWT keys generated successfully!",
+      "generateFailed": "Failed to generate JWT keys",
+      "openDirectory": "Open Directory",
+      "openDirectoryFailed": "Failed to open directory",
+      "result": {
+        "publicKey": "Public Key (PEM)",
+        "privateKey": "Private Key (PEM)",
+        "fullAccessToken": "Full Access Token",
+        "readOnlyToken": "Read-Only Token",
+        "expiresAt": "Expires At"
+      }
+    },
     "prompts": {
       "switchToMode": "Switch to {modeLabel}?",
       "switchToModeDesc": "{description}",

@@ -1,6 +1,6 @@
 [package]
 name = "mytips"
-version = "1.1.4"
+version = "1.1.5"
 description = "一款本地优先的笔记和代码片段管理工具"
 authors = ["you"]
 edition = "2021"
@@ -59,17 +59,24 @@ tauri-plugin-process = "2"
 aes-gcm = "0.10"
 pbkdf2 = "0.12"
 zeroize = "1.7"
+# X.509证书生成依赖
+rcgen = "0.13"
+time = "0.3"
+pem = "3.0"
 open = "5.3.0"
 image = "0.25.1"
 tempfile = "3.10.1"
 docx-rs = "0.4.17"
 
 
+# JWT和Ed25519相关依赖
+jsonwebtoken = "9"
+ed25519-dalek = { version = "2.1", features = ["rand_core", "pkcs8"] }
+rand_core = { version = "0.6", features = ["std"] }
+pkcs8 = "0.10"
+
 [dev-dependencies]
 tempfile = "3.8"
-jsonwebtoken = "9"
-base64 = "0.21"
-ring = "0.17"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

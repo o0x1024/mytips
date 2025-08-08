@@ -28,7 +28,7 @@ if (!fs.existsSync(updaterDir)) {
     
     // 读取GitHub仓库信息
     const repoName = process.env.GITHUB_REPOSITORY || 'o0x1024/mytips';
-    const releaseNotes = process.env.RELEASE_NOTES || 'editor instead use codemirror and fix bug';
+    const releaseNotes = process.env.RELEASE_NOTES || 'update sqld cert gen';
     
     // 根据截图中的文件列表创建平台清单
     const platforms = {

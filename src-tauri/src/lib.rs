@@ -35,6 +35,7 @@ use api::audio::{
     cleanup_audio_cache,
 };
 use api::*;
+use api::certificates::{generate_jwt_keys, get_default_jwt_directory};
 use api::database_manager::{
     switch_database_mode, get_database_status, sync_database, test_database_connection,
     switch_to_local_mode, switch_to_remote_mode, switch_to_embedded_replica_mode,
@@ -405,6 +406,12 @@ pub fn run() -> anyhow::Result<()> {
             api::ai::service::add_custom_model_config,
             api::ai::service::update_custom_model_config,
             api::ai::service::delete_custom_model_config,
+            // 证书生成 APIs
+            generate_dev_certificates,
+            get_default_cert_directory,
+            // JWT生成 APIs
+            generate_jwt_keys,
+            get_default_jwt_directory,
         ])
         .build(tauri::generate_context!())?
         .run(|_app_handle, event| {
