@@ -197,9 +197,13 @@ jobs:
       run: |
         # 对于 macOS x86_64，强制重新编译 openssl-sys
         if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
-          cd src-tauri
-          cargo update -p openssl-sys
-          cd ..
+          echo "Checking if openssl-sys exists in Cargo.lock before update..."
+          if [ -f "src-tauri/Cargo.lock" ] && grep -q 'name = "openssl-sys"' src-tauri/Cargo.lock; then
+            echo "openssl-sys found. Forcing cargo to update this crate."
+            (cd src-tauri && cargo update -p openssl-sys) || true
+          else
+            echo "openssl-sys not found in lockfile. Skip forced update."
+          fi
         fi
         
         yarn tauri build --target ${{ matrix.rust_target }}
