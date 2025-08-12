@@ -36,7 +36,6 @@
           :is-edit-only="isEditOnly"
           :is-preview-mode="isPreviewMode"
           :is-split-mode="isSplitMode"
-          :is-wysiwyg-mode="isWysiwygMode"
           :show-toc="showToc"
           :current-highlight-theme="currentHighlightTheme"
           :current-markdown-theme="currentMarkdownTheme"
@@ -47,7 +46,6 @@
         <div class="flex-1 flex overflow-hidden relative">
           <!-- Markdown 编辑器核心组件 -->
           <MarkdownEditor
-            v-if="!isWysiwygMode"
             :key="note.id"
             v-model="localNote.content"
             :rendered-content="renderedContent"
@@ -60,15 +58,6 @@
             @preview-scroll="handlePreviewScroll"
           />
 
-          <!-- ProseMirror Editor -->
-          <ProseMirrorEditor
-            v-if="isWysiwygMode"
-            ref="proseMirrorEditor"
-            :key="note.id + '-wysiwyg'"
-            :model-value="localNote.content"
-            :images="localNote.images"  
-            @update:model-value="handleProseMirrorUpdate"
-          />
 
           <!-- 右键菜单 -->
           <div v-if="showContextMenu"
@@ -138,13 +127,21 @@
               </div>
               <div class="overflow-y-auto overflow-x-hidden" style="max-height: 320px;">
                 <ul class="space-y-1 w-full">
-                <li v-for="(item, index) in tocItems" :key="index" :style="{ paddingLeft: (item.level - 1) * 12 + 'px' }" class="text-sm overflow-hidden">
-                  <a @click="scrollToHeading(item.id)" @mousedown.stop @touchstart.stop class="toc-item block py-1 px-2 text-base-content/80 cursor-pointer" :class="{ 'active': item.id === activeHeadingId }" :title="item.text">
+                <li v-for="(item, index) in tocItems" :key="item.id || index" :style="{ paddingLeft: (item.level - 1) * 12 + 'px' }" class="text-sm overflow-hidden">
+                  <a @click.prevent="scrollToHeading(item.id)" @mousedown.stop @touchstart.stop class="toc-item block py-1 px-2 text-base-content/80 cursor-pointer" :class="{ 'active': item.id === activeHeadingId }" :title="item.text">
                       {{ item.text }}
                     </a>
                   </li>
                 </ul>
             </div>
+          </div>
+
+          <!-- 右键AI操作全局Loading提示（等待服务端首个响应时显示） -->
+          <div
+            v-if="(isExplaining && !explanationContent) || (isTranslating && !translationContent) || (isTipProcessing && !tipResultContent)"
+            class="absolute top-2 right-2 z-20 flex items-center gap-2 bg-base-200/90 rounded px-2 py-1 border border-base-300 shadow"
+          >
+            <span class="loading loading-spinner loading-sm"></span>
           </div>
         </div>
 
@@ -266,7 +263,6 @@ import EditorToolbar from './EditorToolbar.vue'
 import EditorTopBar from './EditorTopBar.vue'
 import EditorFooter from './EditorFooter.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
-import ProseMirrorEditor from './ProseMirrorEditor.vue'
 import AIExplanationDialog from './dialogs/AIExplanationDialog.vue'
 import AITranslationDialog from './dialogs/AITranslationDialog.vue'
 import TipInputDialog from './dialogs/TipInputDialog.vue'
@@ -276,6 +272,7 @@ import AudioPlayer from './audio/AudioPlayer.vue'
 import { showAlert } from '../services/dialog'
 import { useEncryptionStore } from '../stores/encryptionStore'
 import { getDefaultAIModel } from '../services/aiService'
+import { useAIStore } from '../stores/aiStore'
 import Prism from 'prismjs'
 // Import prism styles and plugins
 import 'prismjs/plugins/line-numbers/prism-line-numbers.css'
@@ -375,7 +372,7 @@ const encryptionStore = useEncryptionStore()
 const localNote = ref<Note>({ ...props.note })
 const isPreviewMode = ref(savedMode === 'preview')
 const markdownEditor = ref<{ editorTextarea: HTMLTextAreaElement | null; previewDiv: HTMLDivElement | null; } | null>(null);
-const proseMirrorEditor = ref<{ executeCommand: (command: string) => void } | null>(null);
+// WYSIWYG editor removed
 const editorTextarea = computed(() => markdownEditor.value?.editorTextarea || null);
 const previewDiv = computed(() => markdownEditor.value?.previewDiv || null);
 const autoSaveTimeout = ref<number | null>(null)
@@ -387,7 +384,7 @@ const contextMenuY = ref(0)
 const isAIProcessing = ref(false)
 const isEditOnly = ref(savedMode === 'editOnly')
 const isSplitMode = ref(savedMode === 'split')
-const isWysiwygMode = ref(savedMode === 'wysiwyg')
+// WYSIWYG mode removed
 const isSwitchingNote = ref(false)
 const streamingContent = ref('')  // 用于存储流式输出的内容
 const isStreaming = ref(false)    // 是否正在流式输出
@@ -1457,7 +1454,6 @@ function cleanupStream() {
 
 function setEditMode(mode: string) {
   localStorageStore.setEditorMode(mode);
-  isWysiwygMode.value = false; 
   isEditOnly.value = false;
   isPreviewMode.value = false;
   isSplitMode.value = false;
@@ -1468,8 +1464,6 @@ function setEditMode(mode: string) {
     isPreviewMode.value = true
   } else if (mode === 'split') {
     isSplitMode.value = true
-  } else if (mode === 'wysiwyg') {
-    isWysiwygMode.value = true;
   }
 
   // 模式切换后重新应用代码块主题
@@ -1694,6 +1688,8 @@ async function processExplanation(textToExplain: string) {
       }
 
       if (payload.chunk) {
+        // 首个chunk到达即关闭loading
+        isExplaining.value = false
         // 累积解释内容
         rawExplanation += payload.chunk
         // 不再使用 marked，直接设置为带有段落标签的HTML
@@ -2074,38 +2070,48 @@ function generateToc() {
   if (!preview) return;
   
   const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6')
-  tocItems.value = []
-  
+  const newToc: { id: string; level: number; text: string }[] = []
+
   headings.forEach((heading, index) => {
     const level = parseInt(heading.tagName.charAt(1))
-    const text = heading.textContent || ''
-    const id = `heading-${index}`
-    
-    heading.id = id
-    
-    tocItems.value.push({
-      id,
-      text: text.trim(),
-      level
-    })
+    const text = (heading.textContent || '').trim()
+    if (!text) return
+
+    // 优先使用渲染流程生成的 id（由 rehype-slug 提供）
+    let id = heading.id
+    if (!id) {
+      id = `heading-${index}`
+      heading.id = id
+    }
+
+    newToc.push({ id, level, text })
   })
+
+  tocItems.value = newToc
 }
 
 function scrollToHeading(headingId: string) {
   const preview = previewDiv.value;
   const heading = preview?.querySelector(`#${headingId}`)
   if (heading && preview) {
+    // 兼容有吸顶工具栏/偏移
     const containerRect = preview.getBoundingClientRect()
     const headingRect = heading.getBoundingClientRect()
-    
-    const scrollTop = preview.scrollTop + headingRect.top - containerRect.top - 20
-    
-    preview.scrollTo({
-      top: scrollTop,
-      behavior: 'smooth'
-    })
-    
+    const safeOffset = 12
+    const scrollTop = preview.scrollTop + headingRect.top - containerRect.top - safeOffset
+
+    // 平滑滚动并高亮
+    preview.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
     activeHeadingId.value = headingId
+
+    // 若 heading 在可视区域之外，先确保其渲染完成后再尝试一次
+    requestAnimationFrame(() => {
+      const headingRect2 = heading.getBoundingClientRect()
+      const newScrollTop = preview.scrollTop + headingRect2.top - containerRect.top - safeOffset
+      if (Math.abs(newScrollTop - preview.scrollTop) > 4) {
+        preview.scrollTo({ top: Math.max(0, newScrollTop), behavior: 'smooth' })
+      }
+    })
   }
 }
 
@@ -2424,6 +2430,8 @@ async function processTranslation(text: string) {
       }
 
       if (payload.chunk) {
+        // 首个chunk到达即关闭loading
+        isTranslating.value = false
         rawResult += payload.chunk
         translationContent.value = await renderInlineMarkdown(rawResult)
       }
@@ -2907,11 +2915,6 @@ function handleToolbarCommand(command: string, ...args: any[]) {
     case 'toggle-fullscreen':
       toggleFullscreen()
       break
-    case 'prosemirror-command':
-      if (proseMirrorEditor.value) {
-        proseMirrorEditor.value.executeCommand(args[0]);
-      }
-      break
     default:
       console.warn('Unknown toolbar command:', command)
   }
@@ -3127,19 +3130,45 @@ function handleThemeChange(event: Event) {
 }
 
 // 全局默认AI提供商ID（在上方已定义并在顶层 onMounted 中赋值）
-const defaultProviderId = ref<string>('gemini')
+const aiStore = useAIStore()
+const defaultProviderId = ref<string>(aiStore.defaultChatProvider || 'gemini')
 
 // 在组件挂载时获取全局默认AI模型
 onMounted(async () => {
   try {
-    const defaultModel = await getDefaultAIModel('chat')
-    if (defaultModel && defaultModel.provider) {
-      defaultProviderId.value = defaultModel.provider
-      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
-    }
+    await aiStore.loadDefaultChatModel()
+    defaultProviderId.value = aiStore.defaultChatProvider
+    console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
   } catch (error) {
     console.error('NoteEditor: 获取默认AI模型失败:', error)
   }
+})
+
+// 监听全局设置变更，更新默认AI模型
+let settingsUnlisten: (() => void) | null = null
+onMounted(async () => {
+  try {
+    const { listen } = await import('@tauri-apps/api/event')
+    settingsUnlisten = await listen('global-settings-changed', async (event: { payload: any }) => {
+      const key = event?.payload?.key
+      if (key === 'defaultAIModel') {
+        try {
+          await aiStore.loadDefaultChatModel()
+          defaultProviderId.value = aiStore.defaultChatProvider
+          console.log('NoteEditor: 默认AI provider已更新为:', defaultProviderId.value)
+        } catch (e) {
+          console.error('NoteEditor: 刷新默认AI模型失败:', e)
+        }
+      }
+    })
+  } catch (e) {
+    console.error('NoteEditor: 监听全局设置变更失败:', e)
+  }
+})
+
+onBeforeUnmount(() => {
+  try { settingsUnlisten && settingsUnlisten(); } catch {}
+  settingsUnlisten = null
 })
 
 // TIP结果流监听器引用
@@ -3175,6 +3204,8 @@ async function processTip(_originalText: string, prompt: string) {
       }
 
       if (payload.chunk) {
+        // 首个chunk到达即关闭loading
+        isTipProcessing.value = false
         rawResult += payload.chunk
         tipResultContent.value = await renderInlineMarkdown(rawResult)
       }
@@ -3280,7 +3311,9 @@ const render = async () => {
         // Since rehype-prism-plus handles highlighting, 
         // we just need to ensure the line numbers are applied if needed.
         Prism.highlightAll()
-        updateActiveHeading()
+    updateActiveHeading()
+    // 渲染完成后，确保目录与标题 id 对齐
+    generateToc()
       })
     } catch (error) {
       console.error('Markdown rendering error:', error)
@@ -3396,14 +3429,7 @@ function endPan(event: MouseEvent) {
 }
 // --- End: Image Zoom & Pan Functions ---
 
-function handleProseMirrorUpdate(markdownContent: string) {
-  // ProseMirror editor now directly emits markdown
-  if (localNote.value.content !== markdownContent) {
-    console.log("markdownContent:",markdownContent)
-    localNote.value.content = markdownContent;
-    // The existing watcher on localNote.content will handle auto-saving and re-rendering.
-  }
-}
+// Removed: WYSIWYG update handler
 
 </script>
 

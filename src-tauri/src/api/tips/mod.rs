@@ -164,6 +164,66 @@ pub async fn get_all_tips(app: AppHandle) -> Result<Vec<TipWithTags>, String> {
     Ok(result)
 }
 
+// 笔记选择器：获取最新的N条笔记摘要（带预览）
+#[tauri::command]
+pub async fn list_latest_tip_summaries(limit: i32, app: AppHandle) -> Result<Vec<TipSummary>, String> {
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let summaries = operations::list_latest_tip_summaries_with_preview(&conn, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(summaries)
+}
+
+// 笔记选择器：搜索并限制返回条数
+#[tauri::command]
+pub async fn search_tips_for_selector(query: String, limit: i32, app: AppHandle) -> Result<Vec<TipSummary>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let summaries = operations::search_tips_summary_fast(&conn, &query, limit)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(summaries)
+}
+
+// 通过标题获取单个笔记（用于#引用）
+#[tauri::command]
+pub async fn get_tip_by_title(title: String, app: AppHandle) -> Result<TipWithTags, String> {
+    let unified_manager = get_unified_manager(&app).await?;
+    let conn = unified_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let tip = operations::get_tip_by_title(&conn, &title).await.map_err(|e| e.to_string())?
+        .ok_or("Tip not found by title")?;
+    let tip_type_str: String = tip.tip_type.into();
+
+    // 获取图片
+    let images = match operations::get_tip_images(&conn, &tip.id).await {
+        Ok(image_list) => {
+            if image_list.is_empty() { None } else {
+                let mut image_map = HashMap::new();
+                for (id, data) in image_list { image_map.insert(id, data); }
+                Some(image_map)
+            }
+        }
+        Err(_) => None,
+    };
+
+    Ok(TipWithTags {
+        id: tip.id,
+        title: tip.title,
+        content: tip.content,
+        tip_type: tip_type_str,
+        language: tip.language,
+        category_id: tip.category_id,
+        created_at: tip.created_at,
+        updated_at: tip.updated_at,
+        tags: Vec::new(),
+        images,
+    })
+}
+
 // 获取所有笔记的摘要
 #[tauri::command]
 pub async fn get_all_tip_summaries(app: AppHandle) -> Result<Vec<TipSummary>, String> {

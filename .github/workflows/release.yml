@@ -88,7 +88,75 @@ jobs:
           libatk1.0-dev \
           libgdk-pixbuf2.0-dev \
           libpango1.0-dev \
-          libsoup-3.0-dev
+          libsoup-3.0-dev \
+          libssl-dev \
+          openssl
+
+    - name: Setup OpenSSL for Linux
+      if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-22.04'
+      run: |
+        echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=/usr/include/openssl" >> $GITHUB_ENV
+
+    - name: Install OpenSSL for macOS
+      if: runner.os == 'macOS'
+      run: |
+        # 根据目标架构安装正确的 OpenSSL
+        if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
+          # 对于 x86_64 构建，确保使用正确的 Homebrew 路径
+          # 首先卸载可能存在的 arm64 版本
+          brew uninstall --ignore-dependencies openssl@3 || true
+          
+          # 检查并安装 x86_64 版本的 Homebrew 到 /usr/local
+          if [ ! -f "/usr/local/bin/brew" ]; then
+            # 安装 x86_64 版本的 Homebrew 到 /usr/local
+            arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          
+          # 使用 /usr/local/bin/brew 安装 OpenSSL
+          arch -x86_64 /usr/local/bin/brew install openssl@3
+          
+          # 确保 PATH 包含 /usr/local/bin
+          echo "/usr/local/bin" >> $GITHUB_PATH
+          
+          # 设置环境变量指向 x86_64 版本
+          OPENSSL_PREFIX=$(arch -x86_64 /usr/local/bin/brew --prefix openssl@3)
+          echo "OPENSSL_DIR=$OPENSSL_PREFIX" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+          echo "OPENSSL_NO_VENDOR=1" >> $GITHUB_ENV
+          
+          # 设置编译器标志
+          echo "CFLAGS=-arch x86_64 -I$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          echo "LDFLAGS=-arch x86_64 -L$OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I$OPENSSL_PREFIX/include" >> $GITHUB_ENV
+          
+          # 设置 PKG_CONFIG_PATH
+          echo "PKG_CONFIG_PATH=$OPENSSL_PREFIX/lib/pkgconfig" >> $GITHUB_ENV
+          
+          # 强制 Rust 使用正确的链接器标志
+          echo "RUSTFLAGS=-C target-cpu=x86-64 -C link-arg=-arch -C link-arg=x86_64 -L $OPENSSL_PREFIX/lib" >> $GITHUB_ENV
+        else
+          # 对于 aarch64 构建
+          brew install openssl@3
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$(brew --prefix openssl@3)/lib" >> $GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@3)/include" >> $GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+        fi
+
+    - name: Install OpenSSL for Windows
+      if: runner.os == 'Windows'
+      run: |
+        # 使用 vcpkg 安装 OpenSSL，这是 Rust 生态系统推荐的方式
+        vcpkg install openssl:x64-windows-static
+        echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+        echo "OPENSSL_DIR=C:\vcpkg\installed\x64-windows-static" >> $env:GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=C:\vcpkg\installed\x64-windows-static\lib" >> $env:GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=C:\vcpkg\installed\x64-windows-static\include" >> $env:GITHUB_ENV
+        echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
 
 
 
@@ -112,14 +180,49 @@ jobs:
         p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
         p12-password: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
 
+    - name: Clean Rust cache for macOS x86_64
+      if: matrix.rust_target == 'x86_64-apple-darwin'
+      run: |
+        # 清理可能存在的错误架构缓存
+        cd src-tauri
+        cargo clean
+        cd ..
+        rm -rf ~/.cargo/registry/cache
+        rm -rf ~/.cargo/git/db
+        rm -rf src-tauri/target
+
     - name: Build the application
       if: matrix.platform != 'android'
       shell: bash
       run: |
+        # 对于 macOS x86_64，强制重新编译 openssl-sys
+        if [[ "${{ matrix.rust_target }}" == "x86_64-apple-darwin" ]]; then
+          cd src-tauri
+          cargo update -p openssl-sys
+          cd ..
+        fi
+        
         yarn tauri build --target ${{ matrix.rust_target }}
+        
+        # 确保为 macOS 平台生成 DMG 签名文件
+        if [[ "${{ matrix.platform }}" == "darwin-"* ]]; then
+          echo "Checking for DMG files and generating signatures if missing..."
+          find src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg -name "*.dmg" -exec sh -c 'if [ ! -f "$1.sig" ]; then echo "Generating signature for $1"; tauri signer sign "$1" --private-key "$TAURI_SIGNING_PRIVATE_KEY" --password "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD"; fi' _ {} \;
+        fi
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
+        OPENSSL_LIB_DIR: ${{ env.OPENSSL_LIB_DIR }}
+        OPENSSL_INCLUDE_DIR: ${{ env.OPENSSL_INCLUDE_DIR }}
+        OPENSSL_STATIC: ${{ env.OPENSSL_STATIC }}
+        OPENSSL_NO_VENDOR: ${{ env.OPENSSL_NO_VENDOR }}
+        VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+        CFLAGS: ${{ env.CFLAGS }}
+        LDFLAGS: ${{ env.LDFLAGS }}
+        CPPFLAGS: ${{ env.CPPFLAGS }}
+        PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
+        RUSTFLAGS: ${{ env.RUSTFLAGS }}
 
     - name: Build Android App Bundle (AAB)
       if: matrix.platform == 'android'
@@ -130,6 +233,11 @@ jobs:
       env:
         TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
+        OPENSSL_LIB_DIR: ${{ env.OPENSSL_LIB_DIR }}
+        OPENSSL_INCLUDE_DIR: ${{ env.OPENSSL_INCLUDE_DIR }}
+        VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
+        OPENSSL_STATIC: ${{ env.OPENSSL_STATIC }}
 
     - name: Upload Desktop artifact
       if: matrix.platform != 'android'
@@ -147,6 +255,7 @@ jobs:
         path: |
           src-tauri/gen/android/app/build/outputs/bundle/universalRelease/release/
           src-tauri/gen/android/app/build/outputs/apk/universal/release/
+          src-tauri/gen/android/app/build/outputs/**/*.sig
 
   release:
     needs: build
@@ -211,6 +320,7 @@ jobs:
 
         # 创建一个临时目录来整理所有待上传的文件
         UPLOAD_DIR=$(mktemp -d)
+        echo "UPLOAD_DIR=$UPLOAD_DIR" >> $GITHUB_ENV
         
         # 查找并移动 Linux x86_64 产物
         if [ -d "$TARGET_DIR/tauri-build-linux-x86_64" ]; then
@@ -226,18 +336,32 @@ jobs:
 
         # 查找并移动 macOS x64 产物
         if [ -d "$TARGET_DIR/tauri-build-darwin-x86_64" ]; then
+          # 处理 .app.tar.gz 文件
           find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz" \;
           find "$TARGET_DIR/tauri-build-darwin-x86_64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.app.tar.gz.sig" \;
+          # 处理 DMG 文件
           find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
           find "$TARGET_DIR/tauri-build-darwin-x86_64/dmg" -name "*.dmg.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg.sig" \;
+          # 如果没有找到 DMG 文件，检查是否有其他命名格式的 DMG
+          if [ ! -f "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" ]; then
+            find "$TARGET_DIR/tauri-build-darwin-x86_64" -name "*.dmg" -exec cp {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg" \;
+            find "$TARGET_DIR/tauri-build-darwin-x86_64" -name "*.dmg.sig" -exec cp {} "$UPLOAD_DIR/mytips-${VERSION}-x86_64.dmg.sig" \;
+          fi
         fi
 
         # 查找并移动 macOS aarch64 产物
         if [ -d "$TARGET_DIR/tauri-build-darwin-aarch64" ]; then
+          # 处理 .app.tar.gz 文件
           find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz" \;
           find "$TARGET_DIR/tauri-build-darwin-aarch64/macos" -name "*.app.tar.gz.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.app.tar.gz.sig" \;
+          # 处理 DMG 文件
           find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
           find "$TARGET_DIR/tauri-build-darwin-aarch64/dmg" -name "*.dmg.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg.sig" \;
+          # 如果没有找到 DMG 文件，检查是否有其他命名格式的 DMG
+          if [ ! -f "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" ]; then
+            find "$TARGET_DIR/tauri-build-darwin-aarch64" -name "*.dmg" -exec cp {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg" \;
+            find "$TARGET_DIR/tauri-build-darwin-aarch64" -name "*.dmg.sig" -exec cp {} "$UPLOAD_DIR/mytips-${VERSION}-aarch64.dmg.sig" \;
+          fi
         fi
         
         # 查找并移动 Windows 产物 (NSIS)
@@ -250,10 +374,32 @@ jobs:
         
         # 查找并移动 Android 产物 (AAB 和 APK)
         if [ -d "$TARGET_DIR/tauri-build-android" ]; then
+          # 处理 AAB 文件
           find "$TARGET_DIR/tauri-build-android/" -name "*.aab" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.aab.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab.sig" \;
+          # 处理 APK 文件
           find "$TARGET_DIR/tauri-build-android/" -name "*.apk" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk" \;
+          find "$TARGET_DIR/tauri-build-android/" -name "*.apk.sig" -exec mv {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk.sig" \;
+          # 如果没有找到 APK 签名文件，检查是否有其他位置的签名文件
+          if [ ! -f "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk.sig" ]; then
+            find "$TARGET_DIR/tauri-build-android/" -name "*.sig" | grep -E "apk|universal" | head -1 | xargs -I {} cp {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.apk.sig" 2>/dev/null || true
+          fi
+          # 如果没有找到 AAB 签名文件，检查是否有其他位置的签名文件
+          if [ ! -f "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab.sig" ]; then
+            find "$TARGET_DIR/tauri-build-android/" -name "*.sig" | grep -E "aab|bundle" | head -1 | xargs -I {} cp {} "$UPLOAD_DIR/mytips-${VERSION}-android-release.aab.sig" 2>/dev/null || true
+          fi
         fi
 
+        # 显示移动后的文件状态
+        echo "Files in upload directory after moving:"
+        ls -la "$UPLOAD_DIR"
+        echo "Checking for signature files:"
+        find "$UPLOAD_DIR" -name "*.sig" -ls
+        
+        # 重新生成清单文件，现在签名文件已经移动到正确位置
+        echo "Regenerating update manifest with actual signature files..."
+        UPLOAD_DIR="$UPLOAD_DIR" node scripts/generate-update-manifest.cjs
+        
         # 查找并移动清单文件
         if [ -d "dist/update-manifests" ]; then
           # 复制latest.json到根目录，确保它可以通过固定URL访问

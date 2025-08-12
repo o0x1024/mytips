@@ -1483,6 +1483,70 @@ pub async fn search_tips_summary_fast(conn: &DbConnection, query: &str, limit: i
     Ok(summaries)
 }
 
+/// 获取最新的笔记摘要（带预览，限制数量）
+pub async fn list_latest_tip_summaries_with_preview(conn: &DbConnection, limit: i32) -> Result<Vec<TipSummary>> {
+    let mut rows = conn.query(
+        "SELECT id, title, tip_type, language, category_id, created_at, updated_at, is_encrypted,
+                substr(content, 1, 200) as content_preview
+         FROM tips 
+         ORDER BY updated_at DESC
+         LIMIT ?1",
+        params![limit]
+    ).await?;
+
+    let mut summaries = Vec::new();
+    while let Some(row) = rows.next().await? {
+        let tip_type_str: String = row.get(2)?;
+        let summary = TipSummary {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            tip_type: tip_type_str,
+            language: row.get(3)?,
+            category_id: row.get(4)?,
+            created_at: row.get(5)?,
+            updated_at: row.get(6)?,
+            tags: Vec::new(),
+            is_encrypted: row.get(7)?,
+            content: Some(row.get(8)?),
+        };
+        summaries.push(summary);
+    }
+    Ok(summaries)
+}
+
+/// 通过标题获取单个笔记（完整内容）
+pub async fn get_tip_by_title(conn: &DbConnection, title: &str) -> Result<Option<Tip>> {
+    let mut rows = conn.query(
+        "SELECT id, title, content, tip_type, language, category_id, created_at, updated_at,
+                version, last_synced_at, sync_hash, is_encrypted, encryption_key_id, encrypted_content 
+         FROM tips WHERE title = ?1 LIMIT 1",
+        params![title]
+    ).await?;
+
+    if let Some(row) = rows.next().await? {
+        let tip_type_str: String = row.get(3)?;
+        let tip = Tip {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            content: row.get(2)?,
+            tip_type: tip_type_str.try_into()?,
+            language: row.get(4)?,
+            category_id: row.get(5)?,
+            created_at: row.get(6)?,
+            updated_at: row.get(7)?,
+            version: row.get(8)?,
+            last_synced_at: row.get(9)?,
+            sync_hash: row.get(10)?,
+            is_encrypted: row.get(11)?,
+            encryption_key_id: row.get(12)?,
+            encrypted_content: row.get(13)?,
+        };
+        Ok(Some(tip))
+    } else {
+        Ok(None)
+    }
+}
+
 /// 删除剪贴板条目
 pub async fn delete_clipboard_entry(conn: &DbConnection, entry_id: i64) -> Result<()> {
     conn.execute(

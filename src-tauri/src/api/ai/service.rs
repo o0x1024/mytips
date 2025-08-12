@@ -226,11 +226,6 @@ async fn test_gemini_connection(
 
     // 默认的Gemini模型列表
     let default_models = vec![
-        "gemini-2.0-flash".to_string(),
-        "gemini-1.5-flash".to_string(),
-        "gemini-1.5-pro".to_string(),
-        "gemini-pro".to_string(),
-        "gemini-pro-vision".to_string(),
     ];
 
     Ok(TestConnectionResponse {
@@ -279,7 +274,7 @@ async fn test_deepseek_connection(
         })
         .unwrap_or_else(|| vec![
             "deepseek-chat".to_string(),
-            "deepseek-coder".to_string(),
+
         ]);
 
     Ok(TestConnectionResponse {
@@ -760,24 +755,8 @@ pub async fn get_default_ai_model(
         }
     }
 
-    // 返回默认模型
-    if model_type == "chat" {
-        Ok(Some(ModelInfo {
-            name: "gpt-3.5-turbo".to_string(),
-            provider: "openai".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        }))
-    } else if model_type == "embedding" {
-        Ok(Some(ModelInfo {
-            name: "text-embedding-3-small".to_string(),
-            provider: "openai".to_string(),
-            is_chat: false,
-            is_embedding: true,
-        }))
-    } else {
-        Ok(None)
-    }
+    // 若未设置，直接返回 None（不返回硬编码的默认值）
+    Ok(None)
 }
 
 // 设置默认AI模型

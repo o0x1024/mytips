@@ -234,7 +234,17 @@
     "readFileErrorTitle": "读取失败"
   },
   "markdownEditor": {
-    "placeholder": "开始输入内容..."
+    "placeholder": "开始输入内容...",
+    "searchPlaceholder": "搜索文本...",
+    "replacePlaceholder": "替换为...",
+    "searchResults": "{{current}}/{{total}}",
+    "noResults": "无结果",
+    "findNext": "下一个",
+    "findPrevious": "上一个",
+    "replaceNext": "替换",
+    "replaceAll": "全部替换",
+    "toggleReplace": "切换替换",
+    "closeSearch": "关闭搜索"
   },
   "noteEditor": {
     "encryptedNoteTitle": "笔记 “{title}” 已加密",
@@ -255,6 +265,7 @@
     "editModeTooltip": "编辑模式",
     "splitModeTooltip": "分屏模式",
     "previewModeTooltip": "预览模式",
+    "headingTooltip": "标题",
     "boldTooltip": "粗体",
     "italicTooltip": "斜体",
     "strikethroughTooltip": "删除线",
@@ -264,12 +275,15 @@
     "codeBlockTooltip": "代码块",
     "tableTooltip": "插入表格",
     "toggleTocTooltip": "显示/隐藏目录",
+    "tocDisabledTooltip": "目录仅在预览模式下可用",
     "audioRecordingTooltip": "录制音频",
     "audioPlayerTooltip": "音频播放器",
     "themeTooltip": "切换主题",
     "codeTheme": "代码块主题",
     "enterFullscreenTooltip": "进入全屏",
-    "exitFullscreenTooltip": "退出全屏"
+    "exitFullscreenTooltip": "退出全屏",
+    "noNoteSelected": "未选择笔记",
+    "selectNoteToEdit": "请从左侧列表中选择一个笔记进行编辑"
   },
   "noteList": {
     "notes": "笔记",
@@ -382,7 +396,9 @@
     "exportToWord": "为 Word",
     "delete": "删除",
     "exportSuccess": "笔记本已成功导出。",
-    "exportFailure": "导出失败: {error}"
+    "exportFailure": "导出失败: {error}",
+    "cannotDeleteUncategorized": "未分类笔记本不能被删除",
+    "cannotRenameUncategorized": "未分类笔记本不能被重命名"
   },
   "conflictResolutionDialog": {
     "title": "同步冲突处理",
@@ -623,6 +639,24 @@
       "lastModified": "最后修改",
       "copyPath": "复制路径"
     },
+    "mediaManagement": {
+      "title": "媒体文件管理",
+      "totalImages": "图片总数",
+      "orphanedImages": "孤儿图片",
+      "totalAudio": "音频文件总数",
+      "orphanedAudio": "孤儿音频文件",
+      "totalOrphaned": "孤儿文件总数",
+      "getStatistics": "获取统计信息",
+      "cleanupOrphaned": "清理孤儿文件",
+      "statisticsLoaded": "媒体文件统计信息已加载",
+      "statisticsFailed": "获取媒体文件统计信息失败",
+      "noOrphanedFiles": "没有发现孤儿媒体文件",
+      "cleanupConfirmTitle": "确认清理孤儿媒体文件",
+      "cleanupConfirmMessage": "确定要清理 {count} 个孤儿媒体文件吗？\n\n这些文件不再被任何笔记引用，删除后无法恢复。",
+      "confirmCleanup": "确认清理",
+      "cleanupSuccess": "成功清理了 {count} 个孤儿媒体文件，释放了 {size} 的存储空间",
+      "cleanupFailed": "清理孤儿媒体文件失败"
+    },
     "backupAndRestore": {
       "title": "数据备份与恢复",
       "localBackup": "本地备份",
@@ -633,8 +667,53 @@
       "restoring": "恢复中...",
       "exporting": "导出中...",
       "migrating": "迁移中..."
+     },
+    "certificateManagement": {
+      "title": "证书生成管理",
+      "description": "生成用于开发和测试的X.509证书文件，包括CA证书、服务器证书和客户端证书。",
+      "outputDirectory": "证书保存目录",
+      "outputDirectoryPlaceholder": "选择证书保存目录",
+      "selectDirectory": "选择目录",
+      "selectDirectoryTitle": "选择证书保存目录",
+      "selectDirectoryFirst": "请先选择证书保存目录",
+      "selectDirectoryFailed": "选择目录失败",
+      "generateCertificates": "生成证书",
+      "generating": "生成中...",
+      "generateSuccess": "证书生成成功！\n\n生成的文件：\n{files}\n\n证书有效期至：{expiry}",
+      "generateFailed": "证书生成失败",
+      "openDirectory": "打开目录",
+      "openDirectoryFailed": "打开目录失败"
     },
-    "prompts": {
+    "jwtManagement": {
+      "title": "JWT密钥生成管理",
+      "description": "生成用于JWT认证的Ed25519密钥对和测试令牌，包括公钥、私钥和访问令牌。",
+      "outputDirectory": "JWT文件保存目录",
+      "outputDirectoryPlaceholder": "选择JWT文件保存目录",
+      "selectDirectory": "选择目录",
+      "selectDirectoryTitle": "选择JWT文件保存目录",
+      "selectDirectoryFirst": "请先选择JWT文件保存目录",
+      "selectDirectoryFailed": "选择目录失败",
+      "generateKeys": "生成JWT密钥",
+      "generating": "生成中...",
+      "generateSuccess": "JWT密钥生成成功！\n\n生成的文件：\n{files}\n\n令牌有效期至：{expiry}",
+      "generateFailed": "JWT密钥生成失败",
+      "openDirectory": "打开目录",
+      "openDirectoryFailed": "打开目录失败",
+      "publicKeyPem": "公钥(PEM格式)",
+      "publicKeyBase64": "公钥(Base64格式)",
+      "privateKeyPem": "私钥(PEM格式)",
+      "fullAccessToken": "完全访问令牌",
+      "readOnlyToken": "只读访问令牌",
+      "expiresAt": "过期时间",
+      "result": {
+        "publicKey": "Public Key (PEM)",
+        "privateKey": "Private Key (PEM)",
+        "fullAccessToken": "Full Access Token",
+        "readOnlyToken": "Read-Only Token",
+        "expiresAt": "Expires At"
+      }
+    },
+     "prompts": {
       "switchToMode": "确定要切换到{modeLabel}吗？",
       "switchToModeDesc": "{description}",
       "switchTo": "切换",
@@ -1282,6 +1361,9 @@
     "lastError": "最后错误"
   },
   "ai": {
+    "click_to_view_details":"点击查看详情",
+    "no_matching_notes":"没有找到匹配的笔记",
+    "no_notes_please_create_some_notes":"暂无笔记，请先创建一些笔记",
     "custom":"Custom",
     "send_failed":"发送失败",
     "resend": "重发",
@@ -1364,6 +1446,10 @@
     "creative_writer": "创意写手",
     "data_analyst": "数据分析师",
     "describe_the_characteristics_of_the_role": "描述角色的特点",
-    "you_are_an_experienced_programming_mentor": "你是一位经验丰富的编程导师"
+    "you_are_an_experienced_programming_mentor": "你是一位经验丰富的编程导师",
+    "display": "显示",
+    "latest": "最新",
+    "enter_to_select": "回车选择",
+    "search_results": "搜索结果"
   }
 }

@@ -2,9 +2,9 @@
 mod api;
 mod clipboard;
 mod db;
-mod sync;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod global_shortcut;
+mod sync;
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
@@ -19,32 +19,33 @@ use api::ai::conversations::{
 };
 use api::ai::roles::{create_ai_role, delete_ai_role, get_ai_role, list_ai_roles, update_ai_role};
 use api::ai::service::{
-    get_ai_chat_models, get_ai_config, get_ai_embedding_models, get_ai_service_status,
-    get_ai_usage_stats, get_default_ai_model, reload_ai_services, save_ai_config,
-    set_default_ai_model, test_ai_connection, list_custom_model_configs, add_custom_model_config, update_custom_model_config, delete_custom_model_config
+    add_custom_model_config, delete_custom_model_config, get_ai_chat_models, get_ai_config,
+    get_ai_embedding_models, get_ai_service_status, get_ai_usage_stats, get_default_ai_model,
+    list_custom_model_configs, reload_ai_services, save_ai_config, set_default_ai_model,
+    test_ai_connection, update_custom_model_config,
 };
-use api::clipboard_api::{get_clipboard_ids_for_last_days};
 use api::audio::{
-    save_audio_file, get_audio_file, get_tip_audio_files, delete_audio_file,
-    transcribe_audio, update_audio_transcription, batch_transcribe_tip_audio,
-    get_supported_transcription_languages, validate_transcription_service_config,
-    get_available_transcription_services, analyze_audio_content, batch_analyze_tip_audio,
-    search_audio_content_by_text, get_audio_search_stats, build_audio_search_index,
-    optimize_audio_file, batch_optimize_audio_files, get_audio_optimization_stats,
-    cleanup_audio_cache,
+    analyze_audio_content, batch_analyze_tip_audio, batch_optimize_audio_files,
+    batch_transcribe_tip_audio, build_audio_search_index, cleanup_audio_cache, delete_audio_file,
+    get_audio_file, get_audio_optimization_stats, get_audio_search_stats,
+    get_available_transcription_services, get_supported_transcription_languages,
+    get_tip_audio_files, optimize_audio_file, save_audio_file, search_audio_content_by_text,
+    transcribe_audio, update_audio_transcription, validate_transcription_service_config,
+};
+use api::clipboard_api::get_clipboard_ids_for_last_days;
+use api::database_manager::{
+    get_database_status, get_supported_database_modes, switch_database_mode,
+    switch_to_embedded_replica_mode, switch_to_local_mode, switch_to_remote_mode, sync_database,
+    test_database_connection,
 };
 use api::*;
-use api::database_manager::{
-    switch_database_mode, get_database_status, sync_database, test_database_connection,
-    switch_to_local_mode, switch_to_remote_mode, switch_to_embedded_replica_mode,
-    get_supported_database_modes,
-};
 
+use db::UnifiedDbManager;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use db::UnifiedDbManager;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::api::certificates::*;
 use crate::api::database_manager::cleanup_local_database_files;
 
 // 打开开发者工具的命令
@@ -61,11 +62,11 @@ fn init_logging() {
 
     // 设置默认日志级别为 info，可以通过环境变量 RUST_LOG 覆盖
     let default_level = "info";
-    
+
     // 创建自定义环境过滤器，过滤掉包含 handshake 的模块
-    let mut filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(default_level));
-    
+    let mut filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+
     // 添加特定的过滤规则来屏蔽包含 handshake 的日志
     filter = filter
         .add_directive("libsql::replication::remote_client=off".parse().unwrap())
@@ -73,12 +74,12 @@ fn init_logging() {
 
     // 创建格式化层
     let fmt_layer = fmt::layer()
-        .with_target(true)  // show module path
-        .with_level(true)   // show log level
-        .with_thread_ids(false)  // do not show thread id (less noise)
-        .with_file(true)   // show file name
-        .with_line_number(true)  // show line number
-        .compact();  // use compact format
+        .with_target(true) // show module path
+        .with_level(true) // show log level
+        .with_thread_ids(false) // do not show thread id (less noise)
+        .with_file(true) // show file name
+        .with_line_number(true) // show line number
+        .compact(); // use compact format
 
     // 初始化订阅器
     tracing_subscriber::registry()
@@ -88,9 +89,14 @@ fn init_logging() {
 
     // 记录初始化成功信息
     tracing::info!("Log system initialized successfully");
-    tracing::info!("Current log level: {}", env::var("RUST_LOG").unwrap_or_else(|_| default_level.to_string()));
+    tracing::info!(
+        "Current log level: {}",
+        env::var("RUST_LOG").unwrap_or_else(|_| default_level.to_string())
+    );
     tracing::info!("Filtered out handshake logs from libsql replication");
-    tracing::info!("You can adjust log level via RUST_LOG environment variable, e.g.: RUST_LOG=debug");
+    tracing::info!(
+        "You can adjust log level via RUST_LOG environment variable, e.g.: RUST_LOG=debug"
+    );
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -134,20 +140,22 @@ pub fn run() -> anyhow::Result<()> {
             let rt = tokio::runtime::Runtime::new().unwrap();
             let unified_manager = rt.block_on(UnifiedDbManager::new(app_handle.clone()))?;
             app.manage(unified_manager);
-            
+
             // Setup window close event handler
             if let Some(window) = app.get_webview_window("main") {
                 let window_clone = window.clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        // Prevent the window from closing and hide it instead
+                        // Prevent closing, hide window and remove dock/taskbar icon on macOS
                         api.prevent_close();
                         #[cfg(desktop)]
-                        let _ = window_clone.hide();
+                        {
+                            let _ = window_clone.hide();
+                        }
                     }
                 });
             }
-            
+
             // Setup global shortcut handler when building the plugin
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
@@ -159,13 +167,19 @@ pub fn run() -> anyhow::Result<()> {
                                 let app_clone = app_handle.clone();
                                 let shortcut = shortcut.clone();
                                 tauri::async_runtime::spawn(async move {
-                                    if let Err(e) = global_shortcut::handle_shortcut_triggered(&app_clone).await {
-                                        tracing::error!("Failed to handle shortcut {:?}: {}", shortcut, e);
+                                    if let Err(e) =
+                                        global_shortcut::handle_shortcut_triggered(&app_clone).await
+                                    {
+                                        tracing::error!(
+                                            "Failed to handle shortcut {:?}: {}",
+                                            shortcut,
+                                            e
+                                        );
                                     }
                                 });
                             }
                         })
-                        .build()
+                        .build(),
                 )?;
             }
 
@@ -179,15 +193,14 @@ pub fn run() -> anyhow::Result<()> {
                 // Setup initial global shortcuts
                 let app_handle_clone = app.handle().clone();
                 rt.block_on(async {
-                    if let Err(e) = global_shortcut::setup_global_shortcuts(&app_handle_clone).await {
+                    if let Err(e) = global_shortcut::setup_global_shortcuts(&app_handle_clone).await
+                    {
                         tracing::warn!("Failed to setup global shortcuts: {}", e);
                     }
                 });
-                
+
                 clipboard::start_clipboard_listener(app.handle().clone());
             }
-
-
 
             Ok(())
         })
@@ -293,7 +306,6 @@ pub fn run() -> anyhow::Result<()> {
             api::export::export_notebook_to_folder,
             api::export::export_notebook_to_pdf,
             api::export::export_notebook_to_word,
-
             api::import::cancel_import,
             // Clipboard history APIs
             get_clipboard_history,
@@ -314,7 +326,6 @@ pub fn run() -> anyhow::Result<()> {
             // Clipboard monitoring control
             clipboard::start_clipboard_monitoring,
             clipboard::stop_clipboard_monitoring,
-
             api::database_manager::optimize_database_wal,
             // Shortcut-related APIs
             get_global_shortcut_config,
@@ -332,7 +343,6 @@ pub fn run() -> anyhow::Result<()> {
             show_confirm_dialog,
             open_url,
             open_devtools,
-
             api::import::import_from_github,
             // Encryption-related APIs
             api::encryption::get_encryption_statuses,
@@ -388,6 +398,16 @@ pub fn run() -> anyhow::Result<()> {
             api::ai::service::add_custom_model_config,
             api::ai::service::update_custom_model_config,
             api::ai::service::delete_custom_model_config,
+            // 证书生成 APIs
+            generate_dev_certificates,
+            get_default_cert_directory,
+            // JWT生成 APIs
+            generate_jwt_keys,
+            get_default_jwt_directory,
+
+            api::tips::list_latest_tip_summaries,
+            api::tips::search_tips_for_selector,
+            api::tips::get_tip_by_title,
         ])
         .build(tauri::generate_context!())?
         .run(|_app_handle, event| {
@@ -402,39 +422,36 @@ pub fn run() -> anyhow::Result<()> {
 
 #[cfg(desktop)]
 fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    
     // Create tray menu items
     let show = MenuItem::with_id(app, "show", "Show Main Window", true, None::<&str>)?;
     let hide = MenuItem::with_id(app, "hide", "Hide Window", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    
+
     // Create the tray menu
     let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
-    
+
     // Create and setup tray icon
     let _tray = TrayIconBuilder::with_id("main-tray")
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "show" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
-                    }
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "show" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
                 }
-                "hide" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.hide();
-                    }
-                }
-                "quit" => {
-                    std::process::exit(0);
-                }
-                _ => {}
             }
+            "hide" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
+            "quit" => {
+                std::process::exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             match event {
@@ -456,7 +473,7 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                         let _ = tauri::WebviewWindowBuilder::new(
                             &app_handle,
                             "main",
-                            tauri::WebviewUrl::App("index.html".into())
+                            tauri::WebviewUrl::App("index.html".into()),
                         )
                         .title("mytips")
                         .inner_size(1400.0, 800.0)

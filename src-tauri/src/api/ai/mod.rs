@@ -9,17 +9,18 @@ use base64::{engine::general_purpose, Engine as _};
 use futures_util::StreamExt;
 use models::{stream_message_with_images_from_ai, CustomModel,
 };
-use roles::{get_ai_role};
+// use roles::{get_ai_role};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tokio::sync::{mpsc, Mutex as TokioMutex};
+use tokio::sync::Mutex as TokioMutex;
 use self::service::SaveAiConfigRequest;
-use genai::chat::{ChatMessage, ChatRequest, ChatRole, ContentPart, ImageSource, MessageContent};
-use genai::Client;
+use genai::chat::{ChatMessage, ChatRequest, ChatRole};
+// use genai::Client;
 use roles::get_ai_role_internal;
 use conversations::list_ai_messages_internal;
+use crate::api::settings::get_client_with_proxy;
 
 
 // 系统提示词常量
@@ -69,7 +70,7 @@ pub async fn send_ai_message(
             m.endpoint,
             m.api_key.unwrap_or_default(),
             m.model_name.clone(),
-            m.adapter_type,
+            m.adapter_type.clone(),
             None,
             db_manager.inner(),
         ).await?;
@@ -216,16 +217,15 @@ pub async fn send_ai_message_stream(
         if let Err(e) = stream_result {
             app_clone.emit("ai-stream-error", serde_json::json!({ "id": stream_id_clone, "error": e.to_string() })).ok();
         }
-        if !provider_id.starts_with("custom_") {
-            app_clone.emit(
-                "ai-stream-chunk",
-                serde_json::json!({
-                    "id": stream_id_clone,
-                    "chunk": "",
-                    "done": true
-                    }),
-                ).ok();
-        }
+        // Always emit final done marker once
+        app_clone.emit(
+            "ai-stream-chunk",
+            serde_json::json!({
+                "id": stream_id_clone,
+                "chunk": "",
+                "done": true
+                }),
+            ).ok();
         
         STREAM_CANCEL_MAP.lock().await.remove(&stream_id_clone);
         println!("Cleaned up stream_id: {}", stream_id_clone);
@@ -250,10 +250,16 @@ async fn handle_stream_request(
     println!("Stream request params: provider_id={}, role_id={:?}, conversation_id={:?}", 
              provider_id, role_id, conversation_id);
     
-    // 自定义模型使用非流式请求，然后模拟流式输出
+    // 自定义模型优先尝试流式输出，不支持时回退到非流式模拟
     if provider_id.starts_with("custom_") {
-        return handle_custom_model_as_nonstream(app, message, stream_id, provider_id, role_id, conversation_id, 
-                                                db_manager, should_cancel).await;
+        match handle_custom_model_as_stream(app.clone(), message.clone(), stream_id.clone(), provider_id.clone(), role_id.clone(), conversation_id.clone(), db_manager.clone(), should_cancel.clone()).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                println!("[Custom Model] Stream not supported or failed, fallback to non-stream: {}", e);
+                return handle_custom_model_as_nonstream(app, message, stream_id, provider_id, role_id, conversation_id, 
+                                                        db_manager, should_cancel).await;
+            }
+        }
     }
 
     let (client, model_name) = if provider_id.starts_with("custom_") {
@@ -357,8 +363,10 @@ async fn handle_stream_request(
     for (i, msg) in chat_messages.iter().enumerate() {
         let content = match &msg.content {
             genai::chat::MessageContent::Text(text) => {
-                let preview = if text.len() > 30 {
-                    format!("{}...", &text[..30])
+                // Safe char-boundary truncate to avoid UTF-8 panic
+                let max_chars = 30;
+                let preview: String = if text.chars().count() > max_chars {
+                    text.chars().take(max_chars).collect::<String>() + "..."
                 } else {
                     text.clone()
                 };
@@ -451,6 +459,289 @@ async fn handle_stream_request(
     
     println!("Stream completed or closed for id: {}", stream_id);
 
+    Ok(())
+}
+
+// 自定义模型的流式实现：若失败则由调用方回退到非流式
+async fn handle_custom_model_as_stream(
+    app: AppHandle,
+    message: String,
+    stream_id: String,
+    provider_id: String,
+    role_id: Option<String>,
+    conversation_id: Option<String>,
+    db_manager: UnifiedDbManager,
+    should_cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    // 仅处理 custom_
+    if !provider_id.starts_with("custom_") {
+        return Err("Not a custom provider".to_string());
+    }
+
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    let id = provider_id
+        .strip_prefix("custom_")
+        .ok_or_else(|| "Invalid custom provider id".to_string())?;
+
+    let cfg_json = db::get_setting(&conn, "custom_ai_models")
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or("No custom models configured")?;
+    let custom_models: Vec<models::CustomModelConfig> =
+        serde_json::from_str(&cfg_json).map_err(|e| e.to_string())?;
+    let m = custom_models
+        .into_iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| format!("Custom model {} not found", id))?;
+
+    println!(
+        "[Custom Stream] Using model: id={}, name={}, adapter={}",
+        id, m.model_name, m.adapter_type
+    );
+
+    // 角色描述
+    let role_description = if let Some(ref role_id_str) = role_id {
+        get_ai_role_internal(role_id_str.clone(), db_manager.clone())
+            .await
+            .map(|role| role.description.unwrap_or_default())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let system_content = if role_description.is_empty() {
+        SYSTEM_PROMPT.to_string()
+    } else {
+        format!("{}\n{}", SYSTEM_PROMPT, role_description)
+    };
+
+    // 组装消息（含历史）
+    let mut chat_messages: Vec<genai::chat::ChatMessage> = Vec::new();
+    if !system_content.trim().is_empty() {
+        chat_messages.push(genai::chat::ChatMessage {
+            role: genai::chat::ChatRole::System,
+            content: system_content.into(),
+            options: Default::default(),
+        });
+    }
+
+    let mut seen_contents = std::collections::HashSet::new();
+    if let Some(conv_id) = conversation_id.clone() {
+        if let Ok(history) = list_ai_messages_internal(conv_id.clone(), db_manager.clone()).await {
+            println!(
+                "[Custom Stream] Loaded {} history messages for conversation {}",
+                history.len(), conv_id
+            );
+            let history_msgs: Vec<genai::chat::ChatMessage> = history
+                .into_iter()
+                .filter_map(|m| {
+                    if seen_contents.insert(m.content.clone()) {
+                        let role = match m.role.as_str() {
+                            "user" => genai::chat::ChatRole::User,
+                            "assistant" => genai::chat::ChatRole::Assistant,
+                            "system" => genai::chat::ChatRole::System,
+                            _ => genai::chat::ChatRole::User,
+                        };
+                        Some(genai::chat::ChatMessage { role, content: m.content.into(), options: Default::default() })
+                    } else {
+                        println!("[Custom Stream] Skipping duplicate message content");
+                        None
+                    }
+                })
+                .collect();
+            chat_messages.extend(history_msgs);
+        }
+    }
+
+    if seen_contents.insert(message.clone()) {
+        chat_messages.push(genai::chat::ChatMessage {
+            role: genai::chat::ChatRole::User,
+            content: message.clone().into(),
+            options: Default::default(),
+        });
+    }
+
+    // 如果是 Ollama，直接使用 /api/generate 进行流式输出
+    if m.adapter_type.to_lowercase() == "ollama" {
+        use serde_json::json;
+        let client = get_client_with_proxy(&db_manager)
+            .await
+            .map_err(|e| e.to_string())?;
+        let base = m
+            .endpoint
+            .trim_end_matches('/')
+            .trim_end_matches("/v1")
+            .trim_end_matches("/api")
+            .to_string();
+        let url = format!("{}/api/generate", base);
+        println!("[Custom Stream][Ollama] POST {} (stream)", url);
+
+        let mut req = client.post(&url).header("Content-Type", "application/json");
+        if let Some(ref key) = m.api_key {
+            if !key.is_empty() {
+                req = req.header("Authorization", format!("Bearer {}", key));
+            }
+        }
+
+        let payload = json!({
+            "model": m.model_name,
+            "prompt": message,
+            "stream": true
+        });
+
+        let resp = req
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| format!("Ollama stream request failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body_text = resp.text().await.unwrap_or_default();
+            return Err(format!("Ollama HTTP {}: {}", status, body_text));
+        }
+
+        let mut byte_stream = resp.bytes_stream();
+        let mut buffer = String::new();
+
+        while let Some(item) = byte_stream.next().await {
+            if should_cancel.load(Ordering::SeqCst) {
+                println!("Stream {} cancelled.", stream_id);
+                break;
+            }
+
+            let chunk = item.map_err(|e| format!("Ollama stream read failed: {}", e))?;
+            let s = String::from_utf8_lossy(&chunk);
+            buffer.push_str(&s);
+
+            // 逐行解析 JSON 行
+            loop {
+                if let Some(pos) = buffer.find('\n') {
+                    let line = buffer[..pos].trim().to_string();
+                    buffer.drain(..=pos);
+                    if line.is_empty() { continue; }
+
+                    match serde_json::from_str::<serde_json::Value>(&line) {
+                        Ok(v) => {
+                            // done 标记
+                            if v.get("done").and_then(|b| b.as_bool()) == Some(true) {
+                                println!("[Custom Stream][Ollama] Done received");
+                                break;
+                            }
+
+                            if let Some(text) = v.get("response").and_then(|t| t.as_str()) {
+                                if !text.is_empty() {
+                                    app.emit(
+                                        "ai-stream-chunk",
+                                        serde_json::json!({ "id": stream_id, "chunk": text, "done": false }),
+                                    ).ok();
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            // 如果不是标准 JSON 行，作为纯文本输出
+                            app.emit(
+                                "ai-stream-chunk",
+                                serde_json::json!({ "id": stream_id, "chunk": line, "done": false }),
+                            ).ok();
+                        }
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        println!("[Custom Stream][Ollama] Stream finished for id: {}", stream_id);
+        return Ok(());
+    }
+
+    // 客户端与选项（非 Ollama 适配器走 genai 流式）
+    let client = models::create_custom_genai_client(
+        m.endpoint.clone(),
+        m.api_key.clone().unwrap_or_default(),
+        m.model_name.clone(),
+        m.adapter_type.clone(),
+        None,
+        &db_manager,
+    )
+    .await?;
+
+    let mut request_options = genai::chat::ChatOptions::default();
+    request_options.capture_content = Some(true);
+    // 可选：设置自定义默认参数
+    request_options.temperature = Some(0.7);
+    request_options.max_tokens = Some(2000);
+
+    let chat_req = genai::chat::ChatRequest::new(chat_messages.clone());
+    println!(
+        "[Custom Stream] Executing stream chat request to model: {}",
+        m.model_name
+    );
+
+    let stream_resp = client
+        .exec_chat_stream(&m.model_name, chat_req, Some(&request_options))
+        .await
+        .map_err(|e| {
+            println!("[Custom Stream] Stream request failed: {}", e);
+            e.to_string()
+        })?;
+
+    let mut stream = stream_resp.stream;
+    println!("[Custom Stream] Stream connection established, waiting for events...");
+    println!(
+        "[Custom Stream] Stream response model: {:?}",
+        stream_resp.model_iden
+    );
+
+    while let Some(event) = stream.next().await {
+        if should_cancel.load(Ordering::SeqCst) {
+            println!("Stream {} cancelled.", stream_id);
+            break;
+        }
+
+        match event {
+            Ok(genai::chat::ChatStreamEvent::Chunk(c)) => {
+                let txt = c.content;
+                if !txt.is_empty() {
+                    app.emit(
+                        "ai-stream-chunk",
+                        serde_json::json!({ "id": stream_id, "chunk": txt, "done": false }),
+                    )
+                    .ok();
+                }
+            }
+            Ok(genai::chat::ChatStreamEvent::End(end)) => {
+                if let Some(contents) = end.captured_content {
+                    for content in contents {
+                        if let genai::chat::MessageContent::Text(text) = content {
+                            if !text.is_empty() {
+                                app.emit(
+                                    "ai-stream-chunk",
+                                    serde_json::json!({ "id": stream_id, "chunk": text, "done": false }),
+                                )
+                                .ok();
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(other) => {
+                println!("[Custom Stream] Received non-chunk event: {:?}", other);
+            }
+            Err(e) => {
+                println!("[Custom Stream] Stream error: {}", e);
+                app.emit(
+                    "ai-stream-error",
+                    serde_json::json!({ "id": stream_id, "error": e.to_string() }),
+                )
+                .ok();
+                break;
+            }
+        }
+    }
+
+    println!("[Custom Stream] Stream completed or closed for id: {}", stream_id);
     Ok(())
 }
 
@@ -584,27 +875,7 @@ async fn handle_custom_model_as_nonstream(
                     tokio::time::sleep(tokio::time::Duration::from_millis(30)).await;
                 }
                 
-                // 发送结束标志
-                println!("[Non-Stream] Sending stream end marker");
-                // 先添加一个明显的最终消息块，确保内容被发送
-                let final_chunk = ".";
-                if let Err(err) = app.emit(
-                    "ai-stream-chunk",
-                    serde_json::json!({ "id": stream_id, "chunk": final_chunk, "done": false }),
-                ) {
-                    println!("[Error] Failed to emit final chunk: {}", err);
-                }
-                
-                // 添加短暂延迟确保前一个消息被处理
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
-                // 发送结束标记
-                if let Err(err) = app.emit(
-                    "ai-stream-chunk",
-                    serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
-                ) {
-                    println!("[Error] Failed to emit end marker: {}", err);
-                }
+                // 非流式模拟不再在此处发送最终结束标记，由外层统一发送
             },
                             Err(e) => {
                     println!("[Non-Stream] Error: {}", e);
@@ -620,11 +891,7 @@ async fn handle_custom_model_as_nonstream(
                     // 添加短暂延迟
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     
-                    // 发送结束标记
-                    app.emit(
-                        "ai-stream-chunk",
-                        serde_json::json!({ "id": stream_id, "chunk": "", "done": true }),
-                    ).ok();
+                    // 非流式模拟错误时也不在此处发送结束标记，由外层统一发送
                 }
         }
     });
@@ -748,7 +1015,7 @@ async fn handle_stream_request_with_images(
         
         // 由于自定义模型可能不支持图片，我们转换为base64格式附加到消息中
         let mut enhanced_message = text_message.clone();
-        for (i, (filename, image_data)) in image_files.iter().enumerate() {
+            for (i, (filename, _image_data)) in image_files.iter().enumerate() {
             enhanced_message.push_str(&format!("\n\n[Image {}]: {}", i + 1, filename));
         }
         
@@ -851,7 +1118,7 @@ async fn handle_stream_request_with_images(
             m.endpoint,
             m.api_key.unwrap_or_default(),
             m.model_name.clone(),
-            m.adapter_type,
+            m.adapter_type.clone(),
             None,
             &db_manager,
         ).await?;
@@ -1111,14 +1378,4 @@ pub async fn summarize_clipboard_entries(
 }
 
 // 导出service模块的命令
-pub use service::{
-    test_ai_connection,
-    get_ai_chat_models,
-    get_ai_embedding_models,
-    get_default_ai_model,
-    set_default_ai_model,
-    save_ai_config,
-    get_ai_usage_stats,
-    reload_ai_services,
-    get_ai_service_status,
-};
+// pub use service::{ save_ai_config };

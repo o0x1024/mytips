@@ -8,11 +8,15 @@
         </button>
       </div>
 
-      <div class="p-6 flex-1 overflow-y-auto">
-        <div v-if="loading" class="flex items-center justify-center h-full">
+      <div class="p-6 flex-1 overflow-y-auto relative">
+        <div v-if="(!content || content.length === 0) && loading" class="flex items-center justify-center h-full">
           <span class="loading loading-spinner loading-lg"></span>
         </div>
-        <div v-else class="prose max-w-none" v-html="content"></div>
+        <div v-if="content && content.length > 0" class="prose max-w-none" v-html="content"></div>
+        <div v-if="loading && content && content.length > 0" class="absolute top-2 right-2 opacity-70 text-xs">
+          <span class="loading loading-spinner loading-sm mr-1"></span>
+          Streaming...
+        </div>
       </div>
 
       <div class="p-4 border-t border-base-300 flex justify-end gap-2">

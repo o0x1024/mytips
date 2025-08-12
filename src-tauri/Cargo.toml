@@ -65,6 +65,18 @@ tempfile = "3.10.1"
 docx-rs = "0.4.17"
 
 
+# X.509证书生成依赖
+rcgen = "0.13"
+time = "0.3"
+pem = "3.0"
+
+
+# JWT和Ed25519相关依赖
+jsonwebtoken = "9"
+ed25519-dalek = { version = "2.1", features = ["rand_core", "pkcs8"] }
+rand_core = { version = "0.6", features = ["std"] }
+pkcs8 = "0.10"
+
 [dev-dependencies]
 tempfile = "3.8"
 

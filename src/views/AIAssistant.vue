@@ -1104,6 +1104,32 @@ const showSaveSuccess = ref(false)
 const isNotePreviewMode = ref(true) // 笔记预览模式
 const notePanelModal = ref<HTMLDialogElement | null>(null)
 
+// --- SQLite busy/locked 重试工具 ---
+function sleep(ms: number) { return new Promise(resolve => setTimeout(resolve, ms)) }
+
+async function invokeWithRetry<T = any>(cmd: string, args: any, maxRetries = 5): Promise<T> {
+  let attempt = 0
+  let lastError: any = null
+  while (attempt <= maxRetries) {
+    try {
+      // @ts-ignore
+      return await invoke(cmd, args)
+    } catch (e: any) {
+      const msg = String(e?.toString?.() || e?.message || e)
+      lastError = e
+      if (msg.includes('database is locked') || msg.includes('SQLITE_BUSY')) {
+        const delay = 150 * Math.pow(2, attempt) // 指数退避
+        console.warn(`SQLite busy, retrying ${attempt + 1}/${maxRetries} after ${delay}ms for ${cmd}`)
+        await sleep(delay)
+        attempt++
+        continue
+      }
+      throw e
+    }
+  }
+  throw lastError
+}
+
 
 
 // 编辑对话标题相关
@@ -1370,11 +1396,13 @@ const setupStreamListeners = async () => {
           }
 
           if (finalContentToSave.trim()) { // 只有在有内容时才保存
-             await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
+             await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
           }
 
           // 重新加载消息列表
           await loadMessages(activeConversationId.value);
+          await nextTick();
+          scrollToBottom();
         } catch(e) {
             console.error("Error while finalizing stream:", e);
         } finally {
@@ -1451,11 +1479,20 @@ async function sendMessage(resendMessage?: any) {
     let referencedNotes: any[] = []
     const noteReferences = messageToSend.match(/#([^#\s]+)/g) // 匹配 #标题 格式
     if (noteReferences && noteReferences.length > 0) {
+      // 确保引用笔记时使用全量数据
+      if (tipsStore.hasMore) {
+        try {
+          await tipsStore.fetchAllTips()
+        } catch (e) {
+          console.warn('Failed to load all tips before referencing:', e)
+        }
+      }
       let notesContent = ''
 
       for (const ref of noteReferences) {
         const noteTitle = ref.substring(1) // 移除#号
-        const note = tipsStore.tips.find(tip => tip.title === noteTitle)
+    // 修改为按标题向后端查询单条完整笔记，避免前端全量数据依赖
+    const note = await invoke('get_tip_by_title', { title: noteTitle }).catch(() => null) as any
         if (note) {
           notesContent += `\n\n--- 笔记：${note.title} ---\n${note.content || ''}\n--- 笔记内容结束 ---\n`
           referencedNotes.push({
@@ -1527,9 +1564,13 @@ async function sendMessage(resendMessage?: any) {
       formattedContent: await renderInlineMarkdown(userInput.value)
     });
 
-    // 异步保存到数据库
-    invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
-      .catch(err => console.error("Failed to save user message:", err));
+    // 立即保存到数据库，避免稍后加载消息时丢失本地乐观消息
+    try {
+      await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+    } catch (err) {
+      console.error('Failed to save user message:', err)
+      // 不中断发送流程，UI 仍保留乐观消息
+    }
 
     userInput.value = ''
     clearAllFiles() // 清空已上传的文件
@@ -3011,27 +3052,16 @@ const selectedNotes = ref<any[]>([])
 const filteredNotes = ref<any[]>([])
 const messageTextarea = ref<HTMLTextAreaElement | null>(null)
 const noteSearchInput = ref<HTMLInputElement | null>(null)
+// 选择器数据不再全量加载，改为按需请求后端10条
 
 // 加载笔记用于选择器
 const loadNotesForSelector = async () => {
   try {
-    // 确保tips数据已加载
-    if (tipsStore.tips.length === 0) {
-      await tipsStore.fetchAllTips()
-    }
-
-    // 按添加时间排序（最新的在前）并限制为10篇
-    const sortedTips = [...tipsStore.tips]
-      .sort((a, b) => {
-        const timeA = a.updated_at || a.created_at || 0
-        const timeB = b.updated_at || b.created_at || 0
-        return timeB - timeA // 降序排列，最新的在前
-      })
-      .slice(0, 10) // 只取前10篇
-
-    filteredNotes.value = sortedTips
+    // 从后端拉取最新10条摘要
+    const latest: any[] = await invoke('list_latest_tip_summaries', { limit: 10 })
+    filteredNotes.value = Array.isArray(latest) ? latest : []
     noteSearchQuery.value = ''
-    console.log('加载笔记列表:', filteredNotes.value.length, '总笔记数:', tipsStore.tips.length)
+    console.log('Loaded note list:', filteredNotes.value.length)
 
     // 延迟聚焦到搜索框
     await nextTick()
@@ -3039,7 +3069,7 @@ const loadNotesForSelector = async () => {
       noteSearchInput.value?.focus()
     }, 100)
   } catch (error) {
-    console.error('加载笔记失败:', error)
+    console.error('Failed to load notes:', error)
     filteredNotes.value = []
   }
 }
@@ -3061,7 +3091,7 @@ const selectNote = (note: any) => {
   const cleanInput = currentInput.endsWith('#') ? currentInput.slice(0, -1) : currentInput
   userInput.value = cleanInput + noteReference
 
-  console.log('选中笔记:', note.title, '插入引用:', noteReference)
+  console.log('Selected note:', note.title, 'Inserted reference:', noteReference)
 
   // 关闭选择器
   hideNoteSelector()
@@ -3116,42 +3146,30 @@ const getInputPlaceholder = () => {
 }
 
 // 监听笔记搜索查询
-watch(noteSearchQuery, (newQuery) => {
-  if (newQuery.trim()) {
-    // 搜索匹配的笔记
-    const searchResults = tipsStore.tips.filter(note =>
-      (note.content || '').toLowerCase().includes(newQuery.toLowerCase())
-    )
-
-    // 按时间排序并限制为10篇
-    filteredNotes.value = searchResults
-      .sort((a, b) => {
-        const timeA = a.updated_at || a.created_at || 0
-        const timeB = b.updated_at || b.created_at || 0
-        return timeB - timeA // 降序排列，最新的在前
-      })
-      .slice(0, 10) // 只取前10篇
-  } else {
-    // 没有搜索词时，显示最新的10篇笔记
-    const sortedTips = [...tipsStore.tips]
-      .sort((a, b) => {
-        const timeA = a.updated_at || a.created_at || 0
-        const timeB = b.updated_at || b.created_at || 0
-        return timeB - timeA // 降序排列，最新的在前
-      })
-      .slice(0, 10) // 只取前10篇
-
-    filteredNotes.value = sortedTips
+watch(noteSearchQuery, async (newQuery) => {
+  const query = newQuery.trim()
+  try {
+    if (query) {
+      // 走后端搜索摘要（已按相关性+时间排序并限制条数）
+      const res: any[] = await invoke('search_tips_for_selector', { query, limit: 10 })
+      filteredNotes.value = Array.isArray(res) ? res : []
+    } else {
+      // 无搜索词：后端返回最新10条
+      const latest: any[] = await invoke('list_latest_tip_summaries', { limit: 10 })
+      filteredNotes.value = Array.isArray(latest) ? latest : []
+    }
+  } catch (e) {
+    console.error('Failed to filter notes for selector:', e)
   }
 })
 
 // 监听输入框内容变化，检测#号
 watch(userInput, (newValue, oldValue) => {
-  console.log('输入变化:', { newValue, oldValue, endsWithHash: newValue.endsWith('#') })
+  console.log('Input changed:', { newValue, oldValue, endsWithHash: newValue.endsWith('#') })
 
   // 检查是否刚输入了#号
   if (newValue.endsWith('#') && !oldValue.endsWith('#') && !showNoteSelector.value) {
-    console.log('检测到#号输入，显示笔记选择器')
+    console.log('Detected # input, showing note selector')
     // 显示笔记选择器
     showNoteSelector.value = true
     loadNotesForSelector()
@@ -3160,10 +3178,10 @@ watch(userInput, (newValue, oldValue) => {
 
 // 监听笔记选择器显示状态
 watch(showNoteSelector, (newValue) => {
-  console.log('笔记选择器显示状态:', newValue)
+  console.log('Note selector visibility:', newValue)
   if (newValue) {
-    console.log('当前笔记数量:', tipsStore.tips.length)
-    console.log('过滤后笔记数量:', filteredNotes.value.length)
+    console.log('Total notes:', tipsStore.tips.length)
+    console.log('Filtered notes:', filteredNotes.value.length)
   }
 })
 

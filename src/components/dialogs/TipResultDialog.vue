@@ -8,11 +8,18 @@
         </button>
       </div>
 
-      <div class="p-6 flex-1 overflow-y-auto">
-        <div v-if="loading" class="flex items-center justify-center h-full">
+      <div class="p-6 flex-1 overflow-y-auto relative">
+        <!-- 当还没有任何内容时显示大号加载动画 -->
+        <div v-if="(!content || content.length === 0) && loading" class="flex items-center justify-center h-full">
           <span class="loading loading-spinner loading-lg"></span>
         </div>
-        <div v-else class="prose max-w-none" v-html="content"></div>
+        <!-- 有内容时始终渲染内容，实现流式追加显示 -->
+        <div v-if="content && content.length > 0" class="prose max-w-none" v-html="content"></div>
+        <!-- 流式过程中显示一个小的加载提示但不遮挡内容 -->
+        <div v-if="loading && content && content.length > 0" class="absolute top-2 right-2 opacity-70 text-xs">
+          <span class="loading loading-spinner loading-sm mr-1"></span>
+          Streaming...
+        </div>
       </div>
 
       <div class="p-4 border-t border-base-300 flex justify-end gap-2">

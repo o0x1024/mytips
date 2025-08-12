@@ -13,8 +13,7 @@ import { getCachedAudioUrl, setCachedAudioUrl } from '../utils/audioCache'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import emoji from 'remark-emoji';
-// 移除 remarkMarkmap 导入
-// import remarkMarkmap from 'remark-markmap'
+import rehypeMermaid from 'rehype-mermaid'
 
 // 定义TOC条目类型
 export interface TocItem {
@@ -43,6 +42,30 @@ function rehypeToc(toc: TocItem[]) {
 
         if (id && text) {
           toc.push({ id, level, text: text.trim() })
+        }
+      }
+    })
+  }
+}
+
+/**
+ * 规范化代码块语言，避免未知语言导致高亮报错
+ * 将 language-markmap 等未知语言重写为 language-text
+ */
+function rehypeNormalizeCodeLanguage() {
+  return (tree: HastRoot) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName === 'code' && node.properties) {
+        const className = node.properties.className as unknown
+        const classes: string[] = Array.isArray(className)
+          ? (className as string[])
+          : typeof className === 'string'
+            ? [className]
+            : []
+
+        if (classes.some(cls => /language-markmap/i.test(cls))) {
+          node.properties.className = classes
+            .map(cls => /language-markmap/i.test(cls) ? 'language-text' : cls)
         }
       }
     })
@@ -145,7 +168,16 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
       ...defaultSchema,
       attributes: {
         ...defaultSchema.attributes,
-        '*': [...(defaultSchema.attributes?.['*'] || []), 'class', 'style', 'data-enhanced', 'data-highlighted', 'loading'],
+        // 允许保留通用属性及 id，否则标题上的 id 会被移除，目录无法定位
+        '*': [
+          ...((defaultSchema.attributes?.['*'] as any[]) || []),
+          'id',
+          'class',
+          'style',
+          'data-enhanced',
+          'data-highlighted',
+          'loading'
+        ],
         code: [...(defaultSchema.attributes?.code || []), 'className'],
         source: ['src', 'type'],
         audio: ['controls', 'src'],
@@ -162,9 +194,43 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
         'span', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext'
       ],
     })
+    .use(rehypeNormalizeCodeLanguage)
+    .use(rehypeMermaid, {
+      strategy: 'img-svg',
+      mermaidConfig: {
+        theme: 'base',
+        themeVariables: {
+          primaryColor: '#ffffff',
+          primaryTextColor: '#000000',
+          primaryBorderColor: '#333333',
+          lineColor: '#333333',
+          sectionBkgColor: '#ffffff',
+          altSectionBkgColor: '#f8f9fa',
+          gridColor: '#e0e0e0',
+          secondaryColor: '#f0f0f0',
+          tertiaryColor: '#ffffff',
+          background: '#ffffff',
+          mainBkg: '#ffffff',
+          secondBkg: '#f8f9fa',
+          tertiaryBkg: '#ffffff'
+        },
+        flowchart: {
+          useMaxWidth: true,
+          htmlLabels: true
+        },
+        sequence: {
+          useMaxWidth: true,
+          wrap: true
+        },
+        gantt: {
+          useMaxWidth: true
+        }
+      }
+    })
     // rehypeKatex produces already sanitized HTML, keep after sanitize to avoid stripping classes
     .use(rehypePrism, { 
-        showLineNumbers: true
+        showLineNumbers: true,
+        ignoreMissing: true
      })
     .use(rehypeStringify, { allowDangerousHtml: true })
     .process(markdown)

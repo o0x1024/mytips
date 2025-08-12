@@ -547,8 +547,11 @@ pub async fn create_custom_genai_client(
     _custom_headers: Option<std::collections::HashMap<String, String>>,
     db_manager: &UnifiedDbManager,
 ) -> Result<Client, String> {
-    // 获取代理设置
+    // 获取代理设置，并在本地端点时绕过代理（避免对 127.0.0.1/localhost 的代理导致 404）
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
+    // let is_local_endpoint = endpoint_url.contains("127.0.0.1")
+    //     || endpoint_url.contains("localhost")
+    //     || endpoint_url.contains("::1");
 
     let proxy_url = if proxy_settings.enabled {
         format!(
@@ -559,7 +562,10 @@ pub async fn create_custom_genai_client(
         "".to_string()
     };
     
-    println!("[Custom Client] Configuring proxy: {}", if proxy_url.is_empty() { "None" } else { &proxy_url });
+    println!(
+        "[Custom Client] Configuring proxy: {} ",
+        if proxy_url.is_empty() { "None" } else { &proxy_url },
+    );
 
     let reqwest_client = if !proxy_url.is_empty() {
         let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?;
@@ -577,6 +583,7 @@ pub async fn create_custom_genai_client(
         "anthropic" | "claude" => AdapterKind::Anthropic,
         "gemini" | "google" => AdapterKind::Gemini,
         "deepseek" => AdapterKind::DeepSeek,
+        "ollama" => AdapterKind::Ollama,
         _ => AdapterKind::OpenAI, // 默认使用OpenAI格式
     };
 
@@ -592,8 +599,29 @@ pub async fn create_custom_genai_client(
             let adapter_kind = adapter_kind.clone();
 
             async move {
-                // 使用自定义端点
-                service_target.endpoint = Endpoint::from_owned(endpoint_url);
+                // 规范化端点：
+                // - OpenAI 习惯以 /v1 结尾
+                // - Ollama 使用根路径（http://host:11434），其自身拼接 /api/chat 等
+                let mut base = endpoint_url.trim_end_matches('/').to_string();
+                match adapter_kind {
+                    AdapterKind::OpenAI => {
+                        if !base.ends_with("/v1") {
+                            base.push_str("/v1");
+                        }
+                    }
+                    AdapterKind::Ollama => {
+                        // 对于 Ollama，genai 适配器会自行拼接 /api/chat 等路径
+                        // 这里确保端点为根地址（去掉 /v1 或 /api 等后缀）
+                        base = base
+                            .trim_end_matches("/v1")
+                            .trim_end_matches("/api")
+                            .trim_end_matches('/')
+                            .to_string();
+                    }
+                    _ => {}
+                }
+                // 使用规范化端点
+                service_target.endpoint = Endpoint::from_owned(base);
 
                 // 使用提供的API密钥
                 service_target.auth = if api_key.is_empty() {
@@ -649,7 +677,51 @@ pub async fn send_message_to_custom_ai(
     db_manager: &UnifiedDbManager,
 ) -> Result<String, String> {
     println!("[Custom AI] Sending message to model: {}", model_name);
-    // 创建自定义genai客户端
+    // 对 Ollama 走原生 HTTP API，避免第三方库路径拼接差异导致的 404
+    if adapter_type.to_lowercase() == "ollama" {
+        use serde_json::json;
+        let client = get_client_with_proxy(db_manager).await?;
+        let base = endpoint_url
+            .trim_end_matches('/')
+            .trim_end_matches("/v1")
+            .trim_end_matches("/api")
+            .to_string();
+        let url = format!("{}/api/chat", base);
+        println!("[Custom AI][Ollama] POST {}", url);
+
+        let mut req = client.post(&url)
+            .header("Content-Type", "application/json");
+        if !api_key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+        if let Some(headers) = &custom_headers {
+            for (k, v) in headers {
+                req = req.header(k, v);
+            }
+        }
+
+        let payload = json!({
+            "model": model_name,
+            "messages": [{"role": "user", "content": message}],
+            "stream": false
+        });
+
+        let resp = req.json(&payload).send().await
+            .map_err(|e| format!("Ollama request failed: {}", e))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body_text = resp.text().await.unwrap_or_default();
+            return Ok(format_ai_error(&format!("Ollama HTTP {}: {}", status, body_text)));
+        }
+        let v: serde_json::Value = resp.json().await
+            .map_err(|e| format!("Ollama parse json failed: {}", e))?;
+        if let Some(content) = v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()) {
+            return Ok(content.to_string());
+        }
+        return Ok(format_ai_error("无法解析 Ollama 响应"));
+    }
+
+    // 其他适配器使用 genai 客户端
     let client = create_custom_genai_client(
         endpoint_url,
         api_key,
@@ -659,11 +731,8 @@ pub async fn send_message_to_custom_ai(
         db_manager,
     ).await?;
 
-    // 创建聊天请求
     let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
-    
     println!("[Custom AI] Executing chat request...");
-    // 发送请求并获取响应
     let chat_res = match client.exec_chat(&model_name, chat_req, None).await {
         Ok(res) => res,
         Err(e) => {
@@ -672,17 +741,10 @@ pub async fn send_message_to_custom_ai(
             return Ok(format_ai_error(&error_message));
         }
     };
-    
+
     println!("[Custom AI] Chat request successful, processing response...");
-    // 提取响应文本
     match chat_res.first_text() {
-        Some(content) => {
-            println!("[Custom AI] Received content of length: {}", content.len());
-            Ok(content.to_string())
-        },
-        None => {
-            println!("[Custom AI] Error: Could not get content from response");
-            Ok(format_ai_error("无法获取自定义AI响应内容"))
-        }
+        Some(content) => Ok(content.to_string()),
+        None => Ok(format_ai_error("无法获取自定义AI响应内容"))
     }
 }

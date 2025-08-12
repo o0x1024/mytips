@@ -234,7 +234,17 @@
     "readFileErrorTitle": "Read Failed"
   },
   "markdownEditor": {
-    "placeholder": "Start typing..."
+    "placeholder": "Start typing...",
+    "searchPlaceholder": "Search text...",
+    "replacePlaceholder": "Replace with...",
+    "searchResults": "{{current}}/{{total}}",
+    "noResults": "No results",
+    "findNext": "Next",
+    "findPrevious": "Previous",
+    "replaceNext": "Replace",
+    "replaceAll": "Replace All",
+    "toggleReplace": "Toggle Replace",
+    "closeSearch": "Close search"
   },
   "noteEditor": {
     "encryptedNoteTitle": "Note Encrypted: {title}",
@@ -255,6 +265,7 @@
     "editModeTooltip": "Edit Mode",
     "splitModeTooltip": "Split Mode",
     "previewModeTooltip": "Preview Mode",
+    "headingTooltip": "Heading",
     "boldTooltip": "Bold",
     "italicTooltip": "Italic",
     "strikethroughTooltip": "Strikethrough",
@@ -264,12 +275,15 @@
     "codeBlockTooltip": "Code Block",
     "tableTooltip": "Insert Table",
     "toggleTocTooltip": "Toggle Table of Contents",
+    "tocDisabledTooltip": "Table of Contents is only available in preview mode",
     "audioRecordingTooltip": "Record Audio",
     "audioPlayerTooltip": "Audio Playlist",
     "themeTooltip": "Toggle Theme",
     "codeTheme": "Code Block Theme",
     "enterFullscreenTooltip": "Enter Fullscreen",
-    "exitFullscreenTooltip": "Exit Fullscreen"
+    "exitFullscreenTooltip": "Exit Fullscreen",
+    "noNoteSelected": "No Note Selected",
+    "selectNoteToEdit": "Please select a note from the left panel to edit"
   },
   "noteList": {
     "notes": "Notes",
@@ -382,7 +396,9 @@
     "exportToWord": "To Word",
     "delete": "Delete",
     "exportSuccess": "Notebook has been successfully exported.",
-    "exportFailure": "Export failed: {error}"
+    "exportFailure": "Export failed: {error}",
+    "cannotDeleteUncategorized": "The Uncategorized notebook cannot be deleted",
+    "cannotRenameUncategorized": "The Uncategorized notebook cannot be renamed"
   },
   "conflictResolutionDialog": {
     "title": "Sync Conflict Resolution",
@@ -623,6 +639,24 @@
       "lastModified": "Last Modified",
       "copyPath": "Copy Path"
     },
+    "mediaManagement": {
+      "title": "Media File Management",
+      "totalImages": "Total Images",
+      "orphanedImages": "Orphaned Images",
+      "totalAudio": "Total Audio Files",
+      "orphanedAudio": "Orphaned Audio Files",
+      "totalOrphaned": "Total Orphaned Files",
+      "getStatistics": "Get Statistics",
+      "cleanupOrphaned": "Cleanup Orphaned Files",
+      "statisticsLoaded": "Media file statistics loaded",
+      "statisticsFailed": "Failed to get media file statistics",
+      "noOrphanedFiles": "No orphaned media files found",
+      "cleanupConfirmTitle": "Confirm Cleanup Orphaned Media Files",
+      "cleanupConfirmMessage": "Are you sure you want to cleanup {count} orphaned media files?\n\nThese files are no longer referenced by any notes and cannot be recovered after deletion.",
+      "confirmCleanup": "Confirm Cleanup",
+      "cleanupSuccess": "Successfully cleaned up {count} orphaned media files, freed {size} of storage space",
+      "cleanupFailed": "Failed to cleanup orphaned media files"
+    },
     "backupAndRestore": {
       "title": "Backup & Restore",
       "localBackup": "Local Backup",
@@ -633,6 +667,45 @@
       "restoring": "Restoring...",
       "exporting": "Exporting...",
       "migrating": "Migrating..."
+    },
+    "certificateManagement": {
+      "title": "Certificate Generation",
+      "description": "Generate X.509 certificate files for development and testing, including CA certificate, server certificate, and client certificate.",
+      "outputDirectory": "Certificate Output Directory",
+      "outputDirectoryPlaceholder": "Select certificate output directory",
+      "selectDirectory": "Select Directory",
+      "selectDirectoryTitle": "Select Certificate Output Directory",
+      "selectDirectoryFirst": "Please select certificate output directory first",
+      "selectDirectoryFailed": "Failed to select directory",
+      "generateCertificates": "Generate Certificates",
+      "generating": "Generating...",
+      "generateSuccess": "Certificates generated successfully!\n\nGenerated files:\n{files}\n\nCertificates valid until: {expiry}",
+      "generateFailed": "Failed to generate certificates",
+      "openDirectory": "Open Directory",
+      "openDirectoryFailed": "Failed to open directory"
+    },
+    "jwtManagement": {
+      "title": "JWT Key Generation",
+      "description": "Generate Ed25519 key pairs and JWT tokens for authentication and testing, including public key, private key, and access tokens.",
+      "outputDirectory": "JWT Output Directory",
+      "outputDirectoryPlaceholder": "Select JWT output directory",
+      "selectDirectory": "Select Directory",
+      "selectDirectoryTitle": "Select JWT Output Directory",
+      "selectDirectoryFirst": "Please select JWT output directory first",
+      "selectDirectoryFailed": "Failed to select directory",
+      "generateKeys": "Generate JWT Keys",
+      "generating": "Generating...",
+      "generateSuccess": "JWT keys generated successfully!",
+      "generateFailed": "Failed to generate JWT keys",
+      "openDirectory": "Open Directory",
+      "openDirectoryFailed": "Failed to open directory",
+      "result": {
+        "publicKey": "Public Key (PEM)",
+        "privateKey": "Private Key (PEM)",
+        "fullAccessToken": "Full Access Token",
+        "readOnlyToken": "Read-Only Token",
+        "expiresAt": "Expires At"
+      }
     },
     "prompts": {
       "switchToMode": "Switch to {modeLabel}?",
@@ -1281,6 +1354,9 @@
     "lastError": "Last Error"
   },
   "ai": {
+    "click_to_view_details":"Click to view details",
+    "no_matching_notes":"No matching notes found",
+    "no_notes_please_create_some_notes":"No notes yet, please create some first.",
     "send_failed":"Send failed",
     "resend": "Resend",
     "copied": "Copied",
@@ -1362,6 +1438,10 @@
     "creative_writer": "Creative Writer",
     "data_analyst": "Data Analyst",
     "describe_the_characteristics_of_the_role": "Describe the characteristics of the role",
-    "you_are_an_experienced_programming_mentor": "You are an experienced programming mentor"
+    "you_are_an_experienced_programming_mentor": "You are an experienced programming mentor",
+    "display": "Display",
+    "latest": "Latest",
+    "enter_to_select": "Enter to select",
+    "search_results": "Search Results"
   }
 }

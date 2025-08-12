@@ -30,21 +30,12 @@
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
         </button>
-        <button
-          @click="emitCommand('set-edit-mode', 'wysiwyg')"
-          class="btn btn-xs btn-ghost"
-          :class="{ 'btn-active': isWysiwygMode }"
-          title="WYSIWYG Mode"
-          data-priority="1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
-        </button>
       </div>
 
       <div class="divider divider-horizontal mx-1"></div>
       
-      <!-- Markdown编辑工具，仅在非所见即所得模式下显示 -->
-      <template v-if="!isWysiwygMode">
+      <!-- Markdown编辑工具 -->
+      <template>
         <!-- 加粗 -->
         <button @click="emitCommand('insert-markdown', '**', '**')" class="btn btn-xs btn-ghost" :title="t('noteEditor.boldTooltip')" data-priority="2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
@@ -79,21 +70,6 @@
         </button>
       </template>
 
-      <!-- 所见即所得模式下的工具 -->
-      <template v-if="isWysiwygMode">
-        <!-- <button @click="emitCommand('prosemirror-command', 'toggleBold')" class="btn btn-xs btn-ghost" title="Bold">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
-        </button>
-        <button @click="emitCommand('prosemirror-command', 'toggleItalic')" class="btn btn-xs btn-ghost" title="Italic">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
-        </button>
-        <button @click="emitCommand('prosemirror-command', 'toggleBulletList')" class="btn btn-xs btn-ghost" title="Bullet List">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-        </button>
-        <button @click="emitCommand('prosemirror-command', 'toggleOrderedList')" class="btn btn-xs btn-ghost" title="Ordered List">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="10" y1="6" x2="21" y2="6"></line><line x1="10" y1="12" x2="21" y2="12"></line><line x1="10" y1="18" x2="21" y2="18"></line><path d="M4 6h1v4"></path><path d="M4 10h2"></path><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path></svg>
-        </button> -->
-      </template>
     </div>
 
     <div class="flex items-center gap-2" ref="toolbarRight">
@@ -149,7 +125,6 @@ defineProps({
   isEditOnly: Boolean,
   isPreviewMode: Boolean,
   isSplitMode: Boolean,
-  isWysiwygMode: Boolean,
   showToc: Boolean,
   currentHighlightTheme: String,
   currentMarkdownTheme: String,

@@ -43,7 +43,7 @@ mytips is committed to creating a **secure, intelligent, and efficient** persona
 
 - **Hierarchical Management** - Multi-level notebook structure, intuitive organization like file system
 - **Tag Classification** - Flexible tagging system with cross-classification and quick filtering
-- **Markdown Editing** - WYSIWYG editor with real-time preview and split-screen mode
+- **Markdown Editing** - Real-time preview and split-screen mode
 - **Syntax Highlighting** - Built-in support for 100+ programming languages
 - **Full-text Search** - Millisecond search response, quickly locate any content
 - **Encryption Protection** - End-to-end encryption for sensitive notes security

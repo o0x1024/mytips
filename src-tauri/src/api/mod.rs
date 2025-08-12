@@ -14,6 +14,7 @@ pub mod tags;
 pub mod templates;
 pub mod tips;
 pub mod updater;
+pub mod certificates;
 
 // Re-export commonly used functions from database_manager
 pub use database_manager::{
