@@ -161,7 +161,7 @@ jobs:
 
 
     - name: Install dependencies
-      run: yarn install --frozen-lockfile
+      run: yarn install
       
     - name: Setup Android signing
       if: matrix.platform == 'android'
