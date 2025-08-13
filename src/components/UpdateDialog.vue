@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { relaunch } from '@tauri-apps/plugin-process'
 import { invoke } from '@tauri-apps/api/core'
@@ -294,6 +294,27 @@ function formatReleaseNotes(notes: string): string {
     .replace(/`(.*?)`/g, '<code>$1</code>')
     .replace(/#{1,6}\s*(.*)/g, '<strong>$1</strong>')
 }
+
+// Enter 触发“立即更新”（忽略输入控件）
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter') return
+  if (!showDialog.value || isDownloading.value || isInstalling.value) return
+  if ((e.target as HTMLElement)?.closest('input, textarea, select, [contenteditable="true"]')) return
+  e.preventDefault()
+  downloadAndInstall()
+}
+
+watch(showDialog, (v) => {
+  if (v) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>

@@ -5,8 +5,8 @@ import { getDefaultAIModel, setDefaultAIModel } from '../services/aiService'
 export const useAIStore = defineStore('ai', () => {
   const selectedModel = ref('chatgpt')
   // 全局默认聊天模型（供 TIP/翻译/解释 等非会话功能使用）
-  const defaultChatProvider = ref<string>('gemini')
-  const defaultChatModel = ref<string>('gemini-2.0-flash')
+  const defaultChatProvider = ref<string>('deepseek')
+  const defaultChatModel = ref<string>('deepseek-chat')
 
   function setSelectedModel(modelId: string) {
     selectedModel.value = modelId

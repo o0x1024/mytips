@@ -365,7 +365,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -733,5 +733,32 @@ onUnmounted(() => {
   if (unlisten) {
     unlisten()
   }
+})
+
+// Enter 触发当前步骤主操作（忽略 textarea）
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter') return
+  if (!props.show || isMinimized.value) return
+  if ((e.target as HTMLElement)?.closest('textarea, [contenteditable="true"]')) return
+  e.preventDefault()
+  if (currentStep.value === 1 && canProceedFromStep1.value) {
+    nextStep()
+  } else if (currentStep.value === 2 && preview.value) {
+    startImport()
+  } else if (currentStep.value === 3 && !isImporting.value) {
+    finish()
+  }
+}
+
+watch(() => props.show, (v) => {
+  if (v) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script> 

@@ -48,6 +48,7 @@
           <MarkdownEditor
             :key="note.id"
             v-model="localNote.content"
+            @update:modelValue="handleEditorModelUpdate"
             :rendered-content="renderedContent"
             :is-split-mode="isSplitMode"
             :is-preview-mode="isPreviewMode"
@@ -411,11 +412,13 @@ const hasSelectedText = computed(() => {
   return start !== end
 })
 const showExplanationBox = ref(false)
-const explanationContent = ref('')
+const explanationContent = ref('') // 渲染后的HTML内容
+const explanationRawContent = ref('') // 原始文本内容
 const selectedTextForExplanation = ref('')
 const isExplaining = ref(false)
 const showTranslationBox = ref(false)
-const translationContent = ref('')
+const translationContent = ref('') // 渲染后的HTML内容
+const translationRawContent = ref('') // 原始文本内容
 const selectedTextForTranslation = ref('')
 const isTranslating = ref(false)
 // 添加TIP对话框相关状态
@@ -425,7 +428,8 @@ const selectedTextForTip = ref('')
 const originalTipPrompt = ref('')
 // TIP结果弹窗相关状态
 const showTipResultBox = ref(false)
-const tipResultContent = ref('')
+const tipResultContent = ref('') // 渲染后的HTML内容
+const tipResultRawContent = ref('') // 原始文本内容
 const isTipProcessing = ref(false)
 
 // 音频录制相关状态
@@ -1291,7 +1295,8 @@ async function processWithAI(originalText: string, prompt: string, appendResult 
     console.log(`生成流ID: ${currentStreamingId.value}`)
 
     // 使用全局默认AI提供商
-    const providerId = defaultProviderId.value
+    const providerId = await getActualProviderId()
+    console.log('AI扩充功能使用的providerId:', providerId, '原始defaultProviderId:', defaultProviderId.value)
 
     // 在发送API请求前设置事件监听器
     const { listen } = await import('@tauri-apps/api/event')
@@ -1658,9 +1663,13 @@ function convertImageToBase64(file: File): Promise<string> {
 async function processExplanation(textToExplain: string) {
   try {
     isExplaining.value = true
+    // 重置内容
+    explanationContent.value = ''
+    explanationRawContent.value = ''
 
     // 使用全局默认AI提供商
-    const providerId = defaultProviderId.value
+    const providerId = await getActualProviderId()
+    console.log('AI解释功能使用的providerId:', providerId, '原始defaultProviderId:', defaultProviderId.value)
 
     // 创建唯一的流ID
     const streamId = `explain_${Date.now()}`
@@ -1671,7 +1680,6 @@ async function processExplanation(textToExplain: string) {
 
     // 设置事件监听器来接收流式响应
     const { listen } = await import('@tauri-apps/api/event')
-    let rawExplanation = ''
     const unlisten = await listen('ai-stream-chunk', async (event: { payload: any }) => {
       const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
 
@@ -1682,6 +1690,7 @@ async function processExplanation(textToExplain: string) {
       if (payload.error) {
         console.error('AI stream error from backend:', payload.error)
         explanationContent.value = `<p class="text-error">解释生成失败: ${payload.error}</p>`
+        explanationRawContent.value = `解释生成失败: ${payload.error}`
         isExplaining.value = false
         unlisten()
         return
@@ -1690,10 +1699,10 @@ async function processExplanation(textToExplain: string) {
       if (payload.chunk) {
         // 首个chunk到达即关闭loading
         isExplaining.value = false
-        // 累积解释内容
-        rawExplanation += payload.chunk
-        // 不再使用 marked，直接设置为带有段落标签的HTML
-        explanationContent.value = await renderInlineMarkdown(rawExplanation)
+        // 累积原始内容
+        explanationRawContent.value += payload.chunk
+        // 渲染HTML内容用于显示
+        explanationContent.value = await renderInlineMarkdown(explanationRawContent.value)
       }
 
       // 如果完成了，清理监听器
@@ -1722,7 +1731,9 @@ async function processExplanation(textToExplain: string) {
 // 复制解释内容
 async function copyExplanation() {
   try {
-    await navigator.clipboard.writeText(explanationContent.value)
+    // 移除think标签内容
+    const cleanText = explanationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+    await navigator.clipboard.writeText(cleanText)
     // 可以添加一个复制成功的提示
   } catch (error) {
     console.error('复制到剪贴板失败:', error)
@@ -1735,8 +1746,11 @@ function insertExplanationToContent() {
   const textarea = editorTextarea.value
   if (!textarea) return
 
+  // 使用原始内容并移除think标签
+  const cleanText = explanationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+  
   const prefix = '\n\n> 💡 解释：\n\n'
-  const content = prefix + explanationContent.value
+  const content = prefix + cleanText
 
   const end = textarea.selectionEnd
 
@@ -1964,8 +1978,7 @@ onMounted(async () => {
   try {
     const defaultModel = await getDefaultAIModel('chat')
     if (defaultModel && defaultModel.provider) {
-      defaultProviderId.value = defaultModel.provider
-      console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
+      console.log('NoteEditor: 获取全局默认AI provider:', defaultModel.provider)
     }
   } catch (error) {
     console.error('NoteEditor: 获取默认AI模型失败:', error)
@@ -2089,6 +2102,23 @@ function generateToc() {
 
   tocItems.value = newToc
 }
+
+// 编辑器内容更新的直接处理，确保分屏模式下即时预览
+function handleEditorModelUpdate(val: string) {
+  // 快速更新本地内容（v-model 已经做了，但这里作为显式入口保证时序一致）
+  if (localNote.value.content !== val) {
+    localNote.value.content = val
+  }
+  // 立即调度一次轻量渲染，避免重启后首次输入不触发预览
+  if (renderTimeout.value) {
+    clearTimeout(renderTimeout.value)
+  }
+  // 使用更短的延时确保顺滑
+  renderTimeout.value = setTimeout(() => {
+    render()
+  }, 50) as unknown as number
+}
+
 
 function scrollToHeading(headingId: string) {
   const preview = previewDiv.value;
@@ -2257,6 +2287,11 @@ onActivated(() => {
       editorTextarea.value.value = props.note.content || ''
     }
   }
+  
+  // 确保预览区也同步渲染最新内容
+  nextTick(() => {
+    render()
+  })
 })
 
 // 添加组件卸载时的清理逻辑
@@ -2412,10 +2447,12 @@ async function processTranslation(text: string) {
       ? `请将以下英文翻译成中文：\n\n${text}`
       : `请将以下中文翻译成英文：\n\n${text}`
     const streamId = `translate_${Date.now()}`
+    // 重置内容
     translationContent.value = ''
-    const providerId = defaultProviderId.value
+    translationRawContent.value = ''
+    const providerId = await getActualProviderId()
+    console.log('AI翻译功能使用的providerId:', providerId, '原始defaultProviderId:', defaultProviderId.value)
     const { listen } = await import('@tauri-apps/api/event')
-    let rawResult = ''
     const unlisten = await listen('ai-stream-chunk', async (event: { payload: any }) => {
       const payload = event.payload as { id: string, chunk: string, done: boolean, error?: string }
       if (payload.id !== streamId) return
@@ -2424,6 +2461,7 @@ async function processTranslation(text: string) {
       if (payload.error) {
         console.error('AI stream error from backend:', payload.error)
         translationContent.value = `<p class="text-error">翻译失败: ${payload.error}</p>`
+        translationRawContent.value = `翻译失败: ${payload.error}`
         isTranslating.value = false
         unlisten()
         return
@@ -2432,8 +2470,10 @@ async function processTranslation(text: string) {
       if (payload.chunk) {
         // 首个chunk到达即关闭loading
         isTranslating.value = false
-        rawResult += payload.chunk
-        translationContent.value = await renderInlineMarkdown(rawResult)
+        // 累积原始内容
+        translationRawContent.value += payload.chunk
+        // 渲染HTML内容用于显示
+        translationContent.value = await renderInlineMarkdown(translationRawContent.value)
       }
       if (payload.done) {
         isTranslating.value = false
@@ -2450,20 +2490,19 @@ async function processTranslation(text: string) {
   } catch (error) {
     console.error('翻译失败:', error)
     translationContent.value = `<p class=\"text-error\">翻译失败: ${error}</p>`
+    translationRawContent.value = `翻译失败: ${error}`
     isTranslating.value = false
   }
 }
 
 // 复制翻译内容
 async function copyTranslation() {
-  // 使用临时元素提取HTML内容中的纯文本
-  const tempElement = document.createElement('div')
-  tempElement.innerHTML = translationContent.value
-  const textContent = tempElement.textContent || ''
+  // 使用原始内容并移除think标签
+  const cleanText = translationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
 
   // 复制到剪贴板
   try {
-    await navigator.clipboard.writeText(textContent)
+    await navigator.clipboard.writeText(cleanText)
     // 显示成功消息
     await showAlert('翻译内容已复制到剪贴板', { title: '复制成功' })
   } catch (err) {
@@ -2477,10 +2516,8 @@ function insertTranslationToContent() {
   const textarea = editorTextarea.value
   if (!textarea) return
 
-  // 获取纯文本内容
-  const tempElement = document.createElement('div')
-  tempElement.innerHTML = translationContent.value
-  const textContent = tempElement.textContent || ''
+  // 使用原始内容并移除think标签
+  const cleanText = translationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
 
   // 获取当前光标位置
   const cursorPos = textarea.selectionEnd
@@ -2488,7 +2525,7 @@ function insertTranslationToContent() {
   // 插入翻译内容
   const newContent =
     localNote.value.content.substring(0, cursorPos) +
-    '\n\n' + textContent + '\n\n' +
+    '\n\n' + cleanText + '\n\n' +
     localNote.value.content.substring(cursorPos)
 
   // 更新内容
@@ -2497,7 +2534,7 @@ function insertTranslationToContent() {
   // 设置新的光标位置
   nextTick(() => {
     textarea.focus()
-    textarea.selectionStart = textarea.selectionEnd = cursorPos + textContent.length + 4 // +4 for the newlines
+    textarea.selectionStart = textarea.selectionEnd = cursorPos + cleanText.length + 4 // +4 for the newlines
   })
 
   // 关闭翻译框
@@ -3129,16 +3166,70 @@ function handleThemeChange(event: Event) {
   }
 }
 
-// 全局默认AI提供商ID（在上方已定义并在顶层 onMounted 中赋值）
+// 全局默认AI提供商ID（与全局store保持实时同步）
 const aiStore = useAIStore()
-const defaultProviderId = ref<string>(aiStore.defaultChatProvider || 'gemini')
+const defaultProviderId = computed(() => aiStore.defaultChatProvider || 'deepseek')
+
+// 自定义模型配置
+const customModelConfigs = ref<Record<string, any>>({})
+
+// 获取实际的provider ID（处理自定义模型的情况）
+async function getActualProviderId(): Promise<string> {
+  const providerId = defaultProviderId.value
+  
+  // 如果是自定义模型，需要获取其配置的真实适配器类型
+  if (providerId.startsWith('custom_')) {
+    try {
+      // 加载自定义模型配置
+      await loadCustomModels()
+      const config = customModelConfigs.value[providerId]
+      if (config && config.adapter_type) {
+        console.log(`自定义模型 ${providerId} 的真实适配器类型:`, config.adapter_type)
+        // 返回真实的适配器类型，比如 'ollama'
+        return config.adapter_type
+      }
+    } catch (error) {
+      console.error('获取自定义模型配置失败:', error)
+    }
+  }
+  
+  return providerId
+}
+
+// 加载自定义模型配置
+async function loadCustomModels() {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    const customModels = await invoke('list_custom_model_configs') as Array<{
+      id: string
+      name: string
+      endpoint: string
+      model_name: string
+      adapter_type: string
+      api_key?: string
+    }>
+    
+    customModelConfigs.value = {}
+    customModels.forEach(model => {
+      customModelConfigs.value[`custom_${model.id}`] = model
+    })
+    
+    console.log('加载自定义模型配置:', customModelConfigs.value)
+  } catch (error) {
+    console.error('加载自定义模型配置失败:', error)
+  }
+}
 
 // 在组件挂载时获取全局默认AI模型
 onMounted(async () => {
   try {
     await aiStore.loadDefaultChatModel()
-    defaultProviderId.value = aiStore.defaultChatProvider
-    console.log('NoteEditor: 获取全局默认AI provider:', defaultProviderId.value)
+    await loadCustomModels() // 预加载自定义模型配置
+    console.log('NoteEditor: 获取全局默认AI provider:', aiStore.defaultChatProvider)
+    
+    // 调试：显示实际将要使用的provider
+    const actualProvider = await getActualProviderId()
+    console.log('NoteEditor: 实际使用的AI provider:', actualProvider)
   } catch (error) {
     console.error('NoteEditor: 获取默认AI模型失败:', error)
   }
@@ -3154,8 +3245,7 @@ onMounted(async () => {
       if (key === 'defaultAIModel') {
         try {
           await aiStore.loadDefaultChatModel()
-          defaultProviderId.value = aiStore.defaultChatProvider
-          console.log('NoteEditor: 默认AI provider已更新为:', defaultProviderId.value)
+          console.log('NoteEditor: 默认AI provider已更新为:', aiStore.defaultChatProvider)
         } catch (e) {
           console.error('NoteEditor: 刷新默认AI模型失败:', e)
         }
@@ -3178,14 +3268,14 @@ let tipStreamUnlisten: (() => void) | null = null
 async function processTip(_originalText: string, prompt: string) {
   try {
     isTipProcessing.value = true
+    // 重置内容
     tipResultContent.value = ''
+    tipResultRawContent.value = ''
     showTipResultBox.value = true
 
-    const providerId = defaultProviderId.value
+    const providerId = await getActualProviderId()
+    console.log('TIP功能使用的providerId:', providerId, '原始defaultProviderId:', defaultProviderId.value)
     const streamId = `tip_${Date.now()}`
-
-    // 用于累积流式内容
-    let rawResult = ''
 
     // 监听流式返回
     const { listen } = await import('@tauri-apps/api/event')
@@ -3198,6 +3288,7 @@ async function processTip(_originalText: string, prompt: string) {
       if (payload.error) {
         console.error('AI stream error from backend:', payload.error)
         tipResultContent.value = `<p class="text-error">TIP生成失败: ${payload.error}</p>`
+        tipResultRawContent.value = `TIP生成失败: ${payload.error}`
         isTipProcessing.value = false
         cleanupTipStream()
         return
@@ -3206,8 +3297,10 @@ async function processTip(_originalText: string, prompt: string) {
       if (payload.chunk) {
         // 首个chunk到达即关闭loading
         isTipProcessing.value = false
-        rawResult += payload.chunk
-        tipResultContent.value = await renderInlineMarkdown(rawResult)
+        // 累积原始内容
+        tipResultRawContent.value += payload.chunk
+        // 渲染HTML内容用于显示
+        tipResultContent.value = await renderInlineMarkdown(tipResultRawContent.value)
       }
 
       if (payload.done) {
@@ -3235,10 +3328,9 @@ async function processTip(_originalText: string, prompt: string) {
 // 复制TIP结果
 async function copyTipResult() {
   try {
-    const temp = document.createElement('div')
-    temp.innerHTML = tipResultContent.value
-    const textContent = temp.textContent || ''
-    await navigator.clipboard.writeText(textContent)
+    // 使用原始内容并移除think标签
+    const cleanText = tipResultRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+    await navigator.clipboard.writeText(cleanText)
   } catch (err) {
     console.error('复制TIP结果失败:', err)
     await showAlert('复制失败，请手动选择并复制', { title: '复制失败' })
@@ -3250,23 +3342,19 @@ function insertTipResultToContent() {
   const textarea = editorTextarea.value
   if (!textarea) return
 
-  // 提取纯文本
-  const temp = document.createElement('div')
-  temp.innerHTML = tipResultContent.value
-  const textContent = temp.textContent || ''
-
+  // 使用原始内容并移除think标签
+  const cleanText = tipResultRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+  
   const cursorPos = textarea.selectionEnd
 
-  const newContent =
+  localNote.value.content =
     localNote.value.content.substring(0, cursorPos) +
-    '\n\n' + textContent + '\n\n' +
+    '\n\n' + cleanText + '\n\n' +
     localNote.value.content.substring(cursorPos)
-
-  localNote.value.content = newContent
 
   nextTick(() => {
     textarea.focus()
-    textarea.selectionStart = textarea.selectionEnd = cursorPos + textContent.length + 4
+    textarea.selectionStart = textarea.selectionEnd = cursorPos + cleanText.length + 4
   })
 
   // 保存

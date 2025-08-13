@@ -195,6 +195,14 @@ export const defaultProviders: Record<string, AIProvider> = {
     default_model: 'grok-3',
     models: []
   },
+  ollama: {
+    id: 'ollama',
+    provider: 'ollama',
+    name: 'Ollama',
+    enabled: true,
+    default_model: 'llama3.2:latest',
+    models: []
+  },
   custom: {
     id: 'custom',
     provider: 'custom',

@@ -10,7 +10,7 @@
         </select>
         <span v-if="isLoading" class="loading loading-spinner loading-xs"></span>
       </div>
-      <textarea v-model="localPrompt" class="textarea textarea-bordered w-full h-32 tip-prompt-textarea"></textarea>
+      <textarea v-model="localPrompt" class="textarea textarea-bordered w-full h-32 tip-prompt-textarea" @keydown="handleTextareaKeydown"></textarea>
       <div class="mt-2 text-xs text-right text-base-content/60">{{ $t('tipInputDialog.charCount', { count: localPrompt.length }) }}</div>
       <div class="mt-4 flex justify-end gap-2">
         <button class="btn btn-sm btn-secondary" @click="reset">{{ $t('common.reset') }}</button>
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineProps, defineEmits, onMounted } from 'vue';
+import { ref, watch, defineProps, defineEmits, onMounted, onBeforeUnmount } from 'vue';
 import { useTipTemplateStore } from '../../stores/tipTemplateStore';
 
 
@@ -43,6 +43,35 @@ const selectedTemplate = ref<string>('');
 
 onMounted(() => {
   loadTemplates();
+});
+
+// Enter 确认（避免在 textarea 内触发）
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter') return;
+  if ((e.target as HTMLElement)?.closest('textarea, [contenteditable="true"]')) return;
+  e.preventDefault();
+  confirm();
+}
+
+// Textarea内的键盘事件处理
+function handleTextareaKeydown(e: KeyboardEvent) {
+  // Ctrl+Enter 或 Cmd+Enter 确认
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    confirm();
+  }
+}
+
+watch(() => props.visible, (v) => {
+  if (v) {
+    window.addEventListener('keydown', handleKeydown);
+  } else {
+    window.removeEventListener('keydown', handleKeydown);
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown);
 });
 
 function applyTemplate() {

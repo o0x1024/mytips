@@ -8,7 +8,7 @@
           <span class="label-text">{{ $t('aiSettings.defaultModel') }}</span>
         </label>
         <div class="relative">
-          <select v-model="aiProviders[selectedConfigModel].default_model" class="select select-bordered w-full pr-10"
+          <select v-model="globalDefaultModelName" class="select select-bordered w-full pr-10"
             @change="saveDefaultAIModel">
             <option disabled value="">{{ $t('aiSettings.defaultModelPlaceholder') }}</option>
             <option v-for="model in availableModelOptions" :key="model" :value="model">{{ model }}</option>
@@ -23,105 +23,127 @@
         </div>
       </div>
 
-      <div class="tabs tabs-boxed mb-4 flex-wrap gap-2">
-        <a v-for="(provider, id) in aiProviders" :key="id" class="tab"
-          :class="{ 'tab-active': selectedConfigModel === id }" @click="selectedConfigModel = id">
-          {{ provider.name }}
-        </a>
+      <!-- 提供商选择网格 -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-4">
+        <button v-for="(provider, id) in aiProviders" :key="id" 
+          class="btn btn-sm text-xs h-auto py-2 px-3"
+          :class="selectedConfigModel === id ? 'btn-primary' : 'btn-outline'"
+          @click="selectedConfigModel = id">
+          <span class="truncate">{{ provider.name }}</span>
+        </button>
       </div>
 
-      <div v-if="selectedConfigModel" class="border rounded-lg p-4 mb-4">
-        <h3 class="font-bold mb-2">{{ $t('aiSettings.configTitle', { name: aiProviders[selectedConfigModel]?.name }) }}
-        </h3>
-
-        <div class="form-control mb-2">
-          <label class="label">
-            <span class="label-text">{{ $t('aiSettings.apiKey') }}</span>
-          </label>
-          <input type="password" v-model="aiProviders[selectedConfigModel].api_key"
-            :placeholder="$t('aiSettings.apiKeyPlaceholder')" class="input input-bordered w-full" />
+      <!-- 配置区域 -->
+      <div v-if="selectedConfigModel" class="bg-base-50 border border-base-300 rounded-lg p-4 mb-4">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-3 h-3 rounded-full bg-primary"></div>
+          <h3 class="font-bold text-lg">{{ $t('aiSettings.configTitle', { name: aiProviders[selectedConfigModel]?.name }) }}</h3>
         </div>
 
-        <div class="form-control mb-2" v-if="selectedConfigModel === 'openai' || selectedConfigModel === 'custom'">
-          <label class="label">
-            <span class="label-text">{{ $t('aiSettings.apiEndpoint') }}</span>
-          </label>
-          <input type="text" v-model="aiProviders[selectedConfigModel].api_base"
-            :placeholder="$t('aiSettings.apiEndpointPlaceholder')" class="input input-bordered w-full" />
+        <!-- 使用紧凑的网格布局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <!-- API密钥 -->
+          <div class="form-control" v-if="selectedConfigModel !== 'ollama'">
+            <label class="label py-1">
+              <span class="label-text text-sm">{{ $t('aiSettings.apiKey') }}</span>
+            </label>
+            <input type="password" v-model="aiProviders[selectedConfigModel].api_key"
+              :placeholder="$t('aiSettings.apiKeyPlaceholder')" 
+              class="input input-bordered input-sm w-full" />
+          </div>
+
+          <!-- API端点 -->
+          <div class="form-control" v-if="selectedConfigModel === 'openai' || selectedConfigModel === 'ollama' || selectedConfigModel === 'custom'">
+            <label class="label py-1">
+              <span class="label-text text-sm">{{ $t('aiSettings.apiEndpoint') }}</span>
+            </label>
+            <input type="text" v-model="aiProviders[selectedConfigModel].api_base"
+              :placeholder="selectedConfigModel === 'ollama' ? 'http://localhost:11434' : $t('aiSettings.apiEndpointPlaceholder')" 
+              class="input input-bordered input-sm w-full" />
+          </div>
+
+          <!-- 组织ID -->
+          <div class="form-control" v-if="selectedConfigModel === 'openai'">
+            <label class="label py-1">
+              <span class="label-text text-sm">{{ $t('aiSettings.orgId') }}</span>
+            </label>
+            <input type="text" v-model="aiProviders[selectedConfigModel].organization"
+              :placeholder="$t('aiSettings.orgIdPlaceholder')" 
+              class="input input-bordered input-sm w-full" />
+          </div>
+
+          <!-- 模型名称 -->
+          <div class="form-control">
+            <label class="label py-1">
+              <span class="label-text text-sm">
+                {{ selectedConfigModel === 'custom' ? $t('aiSettings.modelName') : $t('aiSettings.defaultModelLabel') }}
+              </span>
+            </label>
+            <input type="text" v-model="aiProviders[selectedConfigModel].default_model"
+              :list="selectedConfigModel !== 'custom' ? `models-${selectedConfigModel}` : undefined"
+              :placeholder="selectedConfigModel === 'custom' ? $t('aiSettings.modelNamePlaceholder') : $t('aiSettings.defaultModelPlaceholder')"
+              class="input input-bordered input-sm w-full" />
+            <datalist v-if="selectedConfigModel !== 'custom'" :id="`models-${selectedConfigModel}`">
+              <option v-for="model in aiProviders[selectedConfigModel].models" :key="model.name" :value="model.name" />
+            </datalist>
+          </div>
         </div>
 
-        <div class="form-control mb-2" v-if="selectedConfigModel === 'openai'">
-          <label class="label">
-            <span class="label-text">{{ $t('aiSettings.orgId') }}</span>
-          </label>
-          <input type="text" v-model="aiProviders[selectedConfigModel].organization"
-            :placeholder="$t('aiSettings.orgIdPlaceholder')" class="input input-bordered w-full" />
-        </div>
-
-        <div class="form-control mb-2" v-if="selectedConfigModel === 'custom'">
-          <label class="label">
-            <span class="label-text">{{ $t('aiSettings.modelName') }}</span>
-          </label>
-          <input type="text" v-model="aiProviders[selectedConfigModel].default_model"
-            :placeholder="$t('aiSettings.modelNamePlaceholder')" class="input input-bordered w-full" />
-        </div>
-
-        <!-- 输入框 + datalist，同时支持手动输入和下拉选择 -->
-        <div class="form-control mb-4" v-else>
-          <label class="label">
-            <span class="label-text">{{ $t('aiSettings.defaultModelLabel') }}</span>
-          </label>
-          <input type="text" v-model="aiProviders[selectedConfigModel].default_model"
-            :list="`models-${selectedConfigModel}`" :placeholder="$t('aiSettings.defaultModelPlaceholder')"
-            class="input input-bordered w-full" />
-          <datalist :id="`models-${selectedConfigModel}`">
-            <option v-for="model in aiProviders[selectedConfigModel].models" :key="model.name" :value="model.name" />
-          </datalist>
-        </div>
-
-        <div class="flex justify-between">
-          <button class="btn btn-primary" :disabled="isTestingApi"
+        <!-- 操作按钮 -->
+        <div class="flex flex-wrap gap-2 justify-end">
+          <button class="btn btn-primary btn-sm" :disabled="isTestingApi"
             @click="() => testApiConnection(selectedConfigModel)">
+            <svg v-if="isTestingApi" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
             <span v-if="isTestingApi">{{ $t('aiSettings.testing') }}</span>
             <span v-else>{{ $t('aiSettings.testConnection') }}</span>
           </button>
 
-          <button class="btn btn-accent" :disabled="isSavingApiConfig" @click="saveAIProviderConfig">
+          <button class="btn btn-accent btn-sm" :disabled="isSavingApiConfig" @click="saveAIProviderConfig">
+            <svg v-if="isSavingApiConfig" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
             <span v-if="isSavingApiConfig">{{ $t('aiSettings.saving') }}</span>
             <span v-else>{{ $t('aiSettings.saveConfig') }}</span>
           </button>
         </div>
       </div>
 
-      <div class="divider">{{ $t('aiSettings.usageStats') }}</div>
-
-      <div class="stats stats-vertical lg:stats-horizontal shadow w-full">
-        <div class="stat">
-          <div class="stat-title">{{ $t('aiSettings.totalConversations') }}</div>
-          <div class="stat-value">{{ aiStats.conversations }}</div>
+      <!-- 使用统计 -->
+      <div class="bg-base-50 border border-base-300 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-base">{{ $t('aiSettings.usageStats') }}</h3>
+          <button class="btn btn-xs btn-ghost" @click="refreshAIStats">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span class="ml-1 hidden sm:inline">{{ $t('aiSettings.refreshStats') }}</span>
+          </button>
         </div>
 
-        <div class="stat">
-          <div class="stat-title">{{ $t('aiSettings.totalMessages') }}</div>
-          <div class="stat-value">{{ aiStats.messages }}</div>
-        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-white rounded-lg p-3 border border-base-200">
+            <div class="text-xs text-base-content/60 mb-1">{{ $t('aiSettings.totalConversations') }}</div>
+            <div class="text-xl font-bold text-primary">{{ aiStats.conversations }}</div>
+          </div>
 
-        <div class="stat">
-          <div class="stat-title">{{ $t('aiSettings.totalTokens') }}</div>
-          <div class="stat-value">{{ aiStats.tokens.total }}</div>
-          <div class="stat-desc">{{ $t('aiSettings.tokenUsage', {
-            input: aiStats.tokens.input, output:
-              aiStats.tokens.output }) }}</div>
+          <div class="bg-white rounded-lg p-3 border border-base-200">
+            <div class="text-xs text-base-content/60 mb-1">{{ $t('aiSettings.totalMessages') }}</div>
+            <div class="text-xl font-bold text-secondary">{{ aiStats.messages }}</div>
+          </div>
+
+          <div class="bg-white rounded-lg p-3 border border-base-200">
+            <div class="text-xs text-base-content/60 mb-1">{{ $t('aiSettings.totalTokens') }}</div>
+            <div class="text-xl font-bold text-accent">{{ aiStats.tokens.total }}</div>
+            <div class="text-xs text-base-content/50 mt-1">{{ $t('aiSettings.tokenUsage', {
+              input: aiStats.tokens.input, output: aiStats.tokens.output }) }}</div>
+          </div>
         </div>
       </div>
-
-      <button class="btn btn-sm btn-ghost mt-2" @click="refreshAIStats">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {{ $t('aiSettings.refreshStats') }}
-      </button>
     </div>
   </div>
 
@@ -257,7 +279,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 // import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import { showToast } from '../../services/notification'
@@ -283,6 +305,7 @@ const providerMapping: Record<string, string> = {
   'claude': 'anthropic',
   'doubao': 'doubao',
   'grok': 'xai',
+  'ollama': 'ollama',
   'custom': 'custom'
 }
 
@@ -290,6 +313,10 @@ const selectedConfigModel = ref('openai')
 const aiProviders = ref<Record<string, AIProvider>>(structuredClone(defaultProviders))
 const isTestingApi = ref(false)
 const isSavingApiConfig = ref(false)
+const isInitialLoad = ref(true)
+const chatModels = ref<ReturnType<typeof Array.prototype.slice> & { [index: number]: any }>([])
+// 全局默认模型名（仅用于顶部下拉显示和修改）
+const globalDefaultModelName = ref('')
 const aiStats = ref({
   conversations: 0,
   messages: 0,
@@ -305,21 +332,43 @@ const aiStats = ref({
 async function saveDefaultAIModel() {
   try {
     // 使用当前配置面板选择的提供商作为最终 providerId
-    const providerId = selectedConfigModel.value
-    const providerConfig = aiProviders.value[providerId]
-    if (!providerConfig) {
-      console.error(`Provider config not found for: ${providerId}`)
-      showToast(t('aiSettings.notifications.providerNotFound', { providerId }), 'error')
+    const modelName = globalDefaultModelName.value
+    if (!modelName) {
+      showToast(t('aiSettings.notifications.defaultModelSaveFailed', { error: 'model is empty' }), 'error')
       return
     }
-    // 从对应提供商配置中读取默认模型
+    // 先以当前tab指示的 provider 作为候选
+    const providerId = selectedConfigModel.value
+    console.log('saveDefaultAIModel - selectedConfigModel.value:', providerId)
+    console.log('saveDefaultAIModel - modelName:', modelName)
     let providerForBackend = providerId // 默认按当前选中的提供商
-    const modelName = providerConfig.default_model
 
-    // 若所选模型来自自定义模型（如 Ollama: qwen3:4b），将 provider 映射为 custom_<id>
-    const matchedCustom = customModels.value.find(m => m.model_name === modelName)
-    if (matchedCustom) {
-      providerForBackend = `custom_${matchedCustom.id}`
+    // 智能推断用户想要的提供商
+    // 1. 检查是否为ollama模型格式 (包含冒号，如 qwen3:4b)
+    if (modelName.includes(':') && !modelName.startsWith('http')) {
+      providerForBackend = 'ollama'
+      console.log(`模型名称 ${modelName} 包含冒号，推断为ollama模型`)
+    }
+    // 2. 如果当前是custom选项卡，查找自定义模型
+    else if (providerId === 'custom') {
+      const matchedCustom = customModels.value.find(m => m.model_name === modelName)
+      if (matchedCustom) {
+        providerForBackend = `custom_${matchedCustom.id}`
+        console.log(`在custom选项卡找到自定义模型: ${matchedCustom.id}`)
+      }
+    }
+    // 3. 从后端返回的聊天模型列表中查找匹配的提供商
+    else {
+      const matchedModel = chatModels.value.find((m: any) => m?.name === modelName)
+      if (matchedModel && matchedModel.provider) {
+        providerForBackend = matchedModel.provider
+        console.log(`从聊天模型列表找到模型 ${modelName} 属于提供商: ${matchedModel.provider}`)
+      } else {
+        // 4. 最后使用当前选项卡对应的提供商
+        const backendProviderId = providerMapping[providerId] || providerId
+        providerForBackend = backendProviderId
+        console.log(`使用当前选项卡 ${providerId} 对应的提供商: ${providerForBackend}`)
+      }
     }
 
     if (!providerForBackend) {
@@ -329,12 +378,14 @@ async function saveDefaultAIModel() {
     }
 
     // 调用后端将全局默认模型存入数据库
+    console.log(`保存默认AI模型: provider=${providerForBackend}, model=${modelName}`)
     await aiStore.updateDefaultChatModel(providerForBackend, modelName)
 
     // 发出全局设置变更通知
     await emit('global-settings-changed', { key: 'defaultAIModel' })
 
     showToast(t('aiSettings.notifications.defaultModelSaved'), 'success')
+    console.log(`默认AI模型已保存: ${providerForBackend} / ${modelName}`)
 
   } catch (error) {
     console.error('Failed to save default AI model:', error)
@@ -350,8 +401,14 @@ async function testApiConnection(providerId: string): Promise<void> {
 
   const provider = aiProviders.value[providerId]
 
-  // 对于非自定义模型，至少需要API Key
-  if (providerId !== 'custom' && !provider.api_key) {
+  // Ollama不需要API Key，但需要endpoint
+  if (providerId === 'ollama') {
+    if (!provider.api_base) {
+      provider.api_base = 'http://localhost:11434'
+    }
+  }
+  // 对于非自定义模型和非Ollama，至少需要API Key
+  else if (providerId !== 'custom' && !provider.api_key) {
     showToast(t('aiSettings.notifications.apiKeyRequired'), 'warning')
     return
   }
@@ -444,7 +501,12 @@ async function loadAIProvidersConfig() {
     }
 
     // 加载聊天模型列表
-    await getChatModels()
+    try {
+      chatModels.value = await getChatModels()
+    } catch (e) {
+      console.warn('Failed to load chat models, using empty list:', e)
+      chatModels.value = []
+    }
 
     // 获取服务状态
     const statuses = await getAIServiceStatus()
@@ -453,6 +515,20 @@ async function loadAIProvidersConfig() {
       if (providerKey && aiProviders.value[providerKey]) {
         aiProviders.value[providerKey].enabled = status.is_available
       }
+    }
+    // 同步全局默认模型显示
+    try {
+      await aiStore.loadDefaultChatModel()
+      globalDefaultModelName.value = aiStore.defaultChatModel || ''
+      
+      // 只在首次加载时自动设置选项卡，后续保存操作不要自动切换
+      if (isInitialLoad.value) {
+        // 当 provider 是 custom_<id> 时，高亮 custom 页签
+        selectedConfigModel.value = aiStore.defaultChatProvider?.startsWith('custom_') ? 'custom' : (aiStore.defaultChatProvider || 'openai')
+        isInitialLoad.value = false
+      }
+    } catch (e) {
+      console.warn('Failed to sync default chat model from store:', e)
     }
     updateAvailableModelOptions()
   } catch (error) {
@@ -593,14 +669,19 @@ const availableModelOptions = ref<string[]>([])
 
 // 更新全局默认AI模型下拉选项，只包含 getAIConfig 和 listCustomModelConfigs 返回的模型
 function updateAvailableModelOptions() {
-  // provider.models 里的 name
-  const providerModels = Object.values(aiProviders.value)
-    .flatMap(p => Array.isArray(p.models) ? p.models.map((m: any) => m.name) : [])
+  // 合并所有来源，允许选择任意可用模型
+  const providerModelsAll = Object.values(aiProviders.value)
+    .flatMap(p => Array.isArray(p.models) ? p.models.map((m: any) => m?.name) : [])
     .filter(Boolean)
-  // customModels 里的 model_name
+  const backendModelsAll = (chatModels.value || []).map((m: any) => m?.name).filter(Boolean)
   const customModelNames = customModels.value.map(m => m.model_name).filter(Boolean)
-  availableModelOptions.value = [...new Set([...providerModels, ...customModelNames])].sort()
+  availableModelOptions.value = [...new Set([...providerModelsAll, ...backendModelsAll, ...customModelNames])].sort()
 }
+
+// 切换提供商时，刷新可选模型
+watch(selectedConfigModel, () => {
+  updateAvailableModelOptions()
+})
 
 // 组件挂载时加载自定义模型
 onMounted(async () => {

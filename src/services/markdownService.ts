@@ -14,6 +14,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import emoji from 'remark-emoji';
 import rehypeMermaid from 'rehype-mermaid'
+import rehypeRaw from 'rehype-raw'
 
 // 定义TOC条目类型
 export interface TocItem {
@@ -70,6 +71,63 @@ function rehypeNormalizeCodeLanguage() {
       }
     })
   }
+}
+
+
+/**
+ * 将自定义的 <think> 标签转换为可折叠的 details/summary 结构
+ * 用于隐藏模型的思考过程，避免干扰主要回复内容
+ */
+function rehypeTransformThinkTag() {
+  return (tree: HastRoot) => {
+    visit(tree, 'element', (node: Element) => {
+      if (node.tagName === 'think') {
+        const originalChildren = Array.isArray(node.children) ? node.children : []
+
+        // 用 <details class="think-block"> 包裹，并提供一个 summary 说明
+        const transformed: Element = {
+          type: 'element',
+          tagName: 'details',
+          properties: { className: ['think-block'], open: true },
+          children: [
+            {
+              type: 'element',
+              tagName: 'summary',
+              properties: {},
+              children: [
+                { type: 'text', value: '🤔 已深度思考（点击收起）' }
+              ]
+            },
+            ...originalChildren
+          ]
+        }
+
+        // 将当前节点替换为转换后的节点
+        Object.assign(node, transformed)
+      }
+    })
+  }
+}
+
+/**
+ * 在进入 unified 流水线之前，对 <think>...</think> 进行稳健的字符串级替换。
+ * 使用跨行正则，包裹为 <details><summary>...</summary><pre class="think-content">...</pre></details>
+ * 支持流式渲染中的不完整think标签
+ */
+function preprocessThinkBlocks(input: string): string {
+  if (!input) return ''
+  
+  // 处理完整的think标签
+  let result = input.replace(/<think\b[^>]*>([\s\S]*?)<\/think>/gi, (_m, inner: string) => {
+    return `<details class="think-block" open><summary>🤔 已深度思考（点击收起）</summary><pre class="think-content">${inner}</pre></details>`
+  })
+  
+  // 处理不完整的think标签（用于流式渲染）
+  result = result.replace(/<think\b[^>]*>([\s\S]*?)$/gi, (_m, inner: string) => {
+    return `<details class="think-block" open><summary>🤔 正在深度思考...</summary><pre class="think-content">${inner}</pre></details>`
+  })
+  
+  return result
 }
 
 /**
@@ -152,12 +210,17 @@ function rehypeLocalAudio() {
  */
 export async function renderMarkdown(markdown: string, images: Record<string, string> = {}): Promise<{ html: string; toc: TocItem[] }> {
   const toc: TocItem[] = []
+  // 在进入解析前，将 <think> 标签替换为可折叠的 details/summary 结构
+  const preprocessed = preprocessThinkBlocks(markdown || '')
 
   const file = await unified()
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkMath)
     .use(remarkRehype, { allowDangerousHtml: true, math: true })
+    // 解析 Markdown 中的原始 HTML（例如预处理产生的 <details>）
+    .use(rehypeRaw)
+    .use(rehypeTransformThinkTag)
     .use(rehypeLocalImages, images)
     .use(rehypeLocalAudio)
     .use(rehypeSlug)
@@ -189,7 +252,7 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
       },
       tagNames: [
         ...(defaultSchema.tagNames || []),
-        'audio', 'source',
+        'audio', 'source', 'details', 'summary',
         // KaTeX / MathML tags
         'span', 'math', 'annotation', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'ms', 'mtext'
       ],
@@ -233,13 +296,16 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
         ignoreMissing: true
      })
     .use(rehypeStringify, { allowDangerousHtml: true })
-    .process(markdown)
+    .process(preprocessed)
 
   return {
     html: String(file),
     toc: toc,
   }
 }
+
+
+
 
 /**
  * 渲染一个简化的、行内的Markdown字符串，主要用于弹窗等场景。
@@ -249,21 +315,41 @@ export async function renderMarkdown(markdown: string, images: Record<string, st
  * @returns 渲染后的HTML字符串.
  */
 export async function renderInlineMarkdown(markdown: string): Promise<string> {
+    const preprocessed = preprocessThinkBlocks(markdown || '')
+    // console.log(`[renderInlineMarkdown] Original: "${markdown}"`);
+    // console.log(`[renderInlineMarkdown] Preprocessed: "${preprocessed}"`);
+
     const file = await unified()
       .use(remarkParse)
       .use(remarkGfm)
       // 移除 remarkMarkmap 使用
       // .use(remarkMarkmap)
       .use(remarkRehype, { allowDangerousHtml: true })
+      // 解析 Markdown 中的原始 HTML（例如预处理产生的 <details>）
+      .use(rehypeRaw)
+      .use(rehypeTransformThinkTag)
       .use(rehypeSanitize, {
         ...defaultSchema,
+        tagNames: [
+          ...(defaultSchema.tagNames || []),
+          'details', 'summary', 'pre'
+        ],
         attributes: {
             ...defaultSchema.attributes,
+            '*': [
+              ...((defaultSchema.attributes?.['*'] as any[]) || []),
+              'class'
+            ],
             a: ['href', 'target', 'rel'],
+            details: ['class'],
+            summary: [],
+            pre: ['class']
         }
       })
-      .use(rehypeStringify)
-      .process(markdown);
+      .use(rehypeStringify, { allowDangerousHtml: true })
+      .process(preprocessed);
   
-    return String(file);
+    const result = String(file);
+    // console.log(`[renderInlineMarkdown] Final result: "${result}"`);
+    return result;
 } 

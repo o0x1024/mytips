@@ -131,12 +131,12 @@
         <div class="chat-container bg-base-200 rounded-lg p-2 md:p-4 flex-1 flex flex-col overflow-hidden">
           <!-- 消息显示区域 -->
           <div class="flex-grow overflow-y-auto mb-4 flex flex-col-reverse" ref="messagesContainer"
-            @mouseup="handleTextSelection" @contextmenu.prevent="handleContextMenu" @scroll="handleScroll">
+            @mouseup="handleTextSelection" @contextmenu.prevent="handleContextMenu">
 
             <!-- 加载中指示器和流式输出 - 在反向布局中显示在顶部 -->
             <div class="space-y-4">
-              <!-- 加载中指示器 - 优化显示条件 -->
-              <div v-if="isLoading || (isStreaming && !streamingContent)" class="chat chat-start">
+              <!-- 加载中指示器 - 只在真正加载时显示 -->
+              <div v-if="isLoading && !streamingContent" class="chat chat-start">
                 <div class="chat-image avatar">
                   <div class="w-10 rounded-full bg-base-300 overflow-hidden">
                     <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
@@ -155,7 +155,7 @@
               </div>
 
               <!-- 流式输出响应 -->
-              <div v-if="isStreaming && streamingContent" class="chat chat-start">
+              <div v-if="streamingContent" class="chat chat-start">
                 <div class="chat-image avatar">
                   <div class="w-10 rounded-full bg-base-300 overflow-hidden">
                     <img :src="getModelAvatarPath(selectedModel)" :alt="getSelectedModelName()" />
@@ -1010,6 +1010,9 @@ let themeObserver: MutationObserver | null = null
 const reloadAIConfig = async () => {
   console.log('Reloading AI config...')
   try {
+    // 保存当前选择的模型
+    const currentSelectedModel = selectedModel.value
+    
     const config = await getAIConfig()
     if (config && config.providers) {
       aiConfigs.value = config.providers
@@ -1017,6 +1020,22 @@ const reloadAIConfig = async () => {
     }
     await checkApiKey()
     await loadCustomModels() // 重新加载自定义模型列表
+    
+    // 恢复之前选择的模型（如果仍然有效）
+    if (currentSelectedModel && availableModels.value.some((m: any) => m.id === currentSelectedModel)) {
+      selectedModel.value = currentSelectedModel
+      console.log('Restored selected model:', currentSelectedModel)
+    } else if (!selectedModel.value) {
+      // 如果没有选择的模型，从localStorage恢复或使用第一个可用模型
+      const savedModel = localStorage.getItem('ai-selected-model')
+      if (savedModel && availableModels.value.some((m: any) => m.id === savedModel)) {
+        selectedModel.value = savedModel
+        console.log('Restored model from localStorage:', savedModel)
+      } else if (availableModels.value.length > 0) {
+        selectedModel.value = availableModels.value[0].id
+        console.log('Using first available model:', selectedModel.value)
+      }
+    }
   } catch (error) {
     console.error('Failed to reload AI config:', error)
   }
@@ -1058,17 +1077,12 @@ const isLoadingMessages = ref(false)
 const { selectedModel } = storeToRefs(aiStore)
 const hasApiKey = ref(true)
 const aiConfigs = ref<Record<string, any>>({})
+const customModelConfigs = ref<Record<string, any>>({})
 const userInput = ref('')
 const isLoading = ref(false)
 const messagesContainer = ref<HTMLElement | null>(null)
 
-// 滚动控制相关 - 适配反向布局
-const isAtBottom = ref(true)
-const shouldAutoScroll = ref(true)
-const intersectionObserver = ref<IntersectionObserver | null>(null)
-const lastScrollTop = ref(0)
-const isScrollingUp = ref(false)
-const scrollThreshold = ref(50) // 滚动阈值，用于判断是否接近底部
+// 移除自动滚动相关变量
 
 // 流式输出相关
 const isStreaming = ref(false)
@@ -1154,13 +1168,14 @@ const uploadedFiles = ref<Array<{
 
 // 可用的AI模型
 const availableModels = ref([
-  { id: 'chatgpt', name: 'OpenAI ChatGPT' },
-  { id: 'gemini', name: 'Google Gemini' },
+  { id: 'chatgpt', name: 'OpenAI' },
+  { id: 'gemini', name: ' Gemini' },
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'qwen', name: 'Qwen' },
-  { id: 'claude', name: 'Anthropic Claude' },
+  { id: 'claude', name: 'Anthropic' },
   { id: 'doubao', name: 'Doubao' },
   { id: 'grok', name: 'Grok' },
+  { id: 'ollama', name: 'Ollama' },
 ])
 
 // 加载自定义模型列表
@@ -1177,6 +1192,7 @@ async function loadCustomModels(): Promise<void> {
 
     // 清除之前的自定义模型
     availableModels.value = availableModels.value.filter(m => !m.id.startsWith('custom_'))
+    customModelConfigs.value = {}
 
     // 添加新的自定义模型
     customModelList.forEach(model => {
@@ -1184,6 +1200,7 @@ async function loadCustomModels(): Promise<void> {
         id: `custom_${model.id}`,
         name: `${model.name} (${t('ai.custom')})`
       })
+      customModelConfigs.value[`custom_${model.id}`] = model
     })
 
     console.log('加载了自定义模型:', customModelList.length, '个')
@@ -1294,14 +1311,7 @@ async function loadMessages(conversationId: string) {
     console.log(`加载到 ${messages.value.length} 条消息`)
 
     // 加载消息后滚动到底部 - 适配反向布局
-    await nextTick()
-    if (messagesContainer.value && messages.value.length > 0) {
-      // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-      messagesContainer.value.scrollTop = 0
-      // 确保滚动状态正确
-      shouldAutoScroll.value = true
-      isAtBottom.value = true
-    }
+    // 移除自动滚动逻辑
   } catch (error) {
     console.error(`加载消息失败:`, error)
     messages.value = []
@@ -1321,10 +1331,7 @@ async function createNewConversation() {
   await loadMessages(newConversation.id)
   showConversationsDrawer.value = false
 
-  // 新建对话后确保滚动状态正确 - 适配反向布局
-  await nextTick()
-  shouldAutoScroll.value = true
-  isAtBottom.value = true
+  // 移除自动滚动逻辑
 }
 
 // 切换对话
@@ -1333,11 +1340,7 @@ async function switchConversation(conversationId: string) {
   await loadMessages(conversationId)
   showConversationsDrawer.value = false
 
-  // 切换对话后强制滚动到底部 - 适配反向布局
-  await nextTick()
-  setTimeout(() => {
-    forceScrollToBottom()
-  }, 100)
+  // 移除自动滚动逻辑
 }
 
 // 删除对话
@@ -1380,14 +1383,13 @@ const setupStreamListeners = async () => {
 
         const finalContentToSave = streamingContent.value;
 
-        // 1. 立即重置流状态，以便可以立即开始新的流
+        // 1. 重置流状态，但保留streamingContent直到消息加载完成
         isStreaming.value = false;
-        streamingContent.value = '';
         currentStreamingId.value = null;
         isLoading.value = false;
 
         console.log('setupStreamListeners isLoading', isLoading.value)
-        // 2. 然后在后台执行耗时的数据库和加载操作
+        // 2. 然后在后台执行耗时的数据库保存操作（不重新加载以避免重复显示）
         try {
           // 如果有选中的角色，在消息内容中添加角色信息标记
           let finalContentWithRole = finalContentToSave;
@@ -1397,18 +1399,21 @@ const setupStreamListeners = async () => {
 
           if (finalContentToSave.trim()) { // 只有在有内容时才保存
              await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
+             // 重新加载消息以显示保存的内容
+             await loadMessages(activeConversationId.value);
+             // 消息加载完成后清空流式内容
+             streamingContent.value = '';
+             formattedStreamingContent.value = '';
+          } else {
+             // 即使没有内容也要清空流式内容
+             streamingContent.value = '';
+             formattedStreamingContent.value = '';
           }
-
-          // 重新加载消息列表
-          await loadMessages(activeConversationId.value);
-          await nextTick();
-          scrollToBottom();
         } catch(e) {
             console.error("Error while finalizing stream:", e);
-        } finally {
-            // 滚动到底部
-            await nextTick();
-            scrollToBottom();
+            // 即使出错也要清空流式内容
+            streamingContent.value = '';
+            formattedStreamingContent.value = '';
         }
       } else {
         // 收到内容chunk，累加到流式内容中
@@ -1419,10 +1424,7 @@ const setupStreamListeners = async () => {
           isLoading.value = false;
         }
 
-        // 如果在底部且用户没有在滚动，自动滚动
-        if (shouldAutoScroll.value && !isUserScrolling.value) {
-          scrollToBottom();
-        }
+        // 移除自动滚动逻辑
       }
     });
   } catch (error) {
@@ -1467,6 +1469,17 @@ async function sendMessage(resendMessage?: any) {
 
     // 先移除旧的失败消息
     if (resendIndex !== -1) messages.value.splice(resendIndex, 1)
+
+    // 乐观渲染重新发送的用户消息，确保前端立即可见
+    messages.value.push({
+      role: 'user',
+      content: messageToSend,
+      timestamp: Date.now(),
+      attachments: attachments,
+      referencedNotes: resendMessage.referencedNotes || [],
+      // 预格式化以保持与正常发送一致的显示
+      formattedContent: await renderInlineMarkdown(messageToSend)
+    })
   } else {
     // 正常发送新消息
     if (!userInput.value.trim() || !selectedModel.value || (!selectedModel.value.startsWith('custom_') && !hasApiKey.value)) {
@@ -1579,10 +1592,7 @@ async function sendMessage(resendMessage?: any) {
     // 立即设置加载状态，让用户看到机器人正在思考
     isLoading.value = true
 
-    await nextTick()
-    // 确保在开始生成时滚动到底部
-    shouldAutoScroll.value = true
-    forceScrollToBottom()
+    // 移除自动滚动逻辑
   }
 
   // 设置加载状态
@@ -1613,11 +1623,11 @@ async function sendMessage(resendMessage?: any) {
     console.log(customModelName)
 
     if (selectedModel.value.startsWith('custom_')) {
-      const config = aiConfigs.value[selectedModel.value]
+      const config = customModelConfigs.value[selectedModel.value]
       if (config && config.model_name) {
         customModelName = config.model_name
       } else {
-        console.warn(`未找到自定义模型 ${selectedModel.value} 的配置`)
+        console.warn(`Custom model config not found for ${selectedModel.value}`)
       }
     }
 
@@ -1659,10 +1669,10 @@ async function sendMessage(resendMessage?: any) {
       failed: true,
       attachments: attachments
     })
-    await nextTick()
-    forceScrollToBottom()
+    // 移除自动滚动逻辑
     isStreaming.value = false
     streamingContent.value = ''
+    formattedStreamingContent.value = ''
     currentStreamingId.value = null
     isLoading.value = false
     return
@@ -1677,7 +1687,7 @@ const checkApiKey = async () => {
   }
 
   // 对于自定义模型，允许空的 API 密钥（或在自己的端点中处理）
-  if (selectedModel.value.startsWith('custom_')) {
+  if (selectedModel.value.startsWith('custom_') || selectedModel.value === 'ollama') {
     hasApiKey.value = true
     return
   }
@@ -1690,38 +1700,9 @@ const checkApiKey = async () => {
   console.log(`检查 ${providerId} API Key: ${hasApiKey.value}`)
 }
 
-// 监听消息变化，自动滚动到底部
-watch(messages, async (newMessages, oldMessages) => {
-  // 如果有新消息且用户在底部且没有在手动滚动，自动滚动
-  if (newMessages.length > (oldMessages?.length || 0) && shouldAutoScroll.value && !isUserScrolling.value) {
-    console.log('shouldAutoScroll', shouldAutoScroll.value)
-    console.log('isUserScrolling', isUserScrolling.value)
-    await nextTick()
-    scrollToBottom()
-  }
+// 移除消息变化自动滚动监听
 
-  // 如果是第一次加载消息或消息数量从0变为有消息，强制滚动到底部 - 适配反向布局
-  if ((oldMessages?.length || 0) === 0 && newMessages.length > 0) {
-    await nextTick()
-    setTimeout(() => {
-      if (messagesContainer.value) {
-        // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-        messagesContainer.value.scrollTop = 0
-        shouldAutoScroll.value = true
-        isAtBottom.value = true
-      }
-    }, 50)
-  }
-}, { deep: false })
-
-// 监听流式内容变化，确保在底部时自动滚动
-watch(streamingContent, async () => {
-  console.log('shouldAutoScroll:', shouldAutoScroll.value, "  isUserScrolling:", isUserScrolling.value)
-  if (shouldAutoScroll.value && !isUserScrolling.value) {
-    await nextTick()
-    scrollToBottom()
-  }
-})
+// 移除流式内容变化自动滚动监听
 
 // 监听模型选择变化
 watch(selectedModel, async (newModel) => {
@@ -2153,105 +2134,9 @@ function setupCodeCopyFeature() {
   })
 }
 
-// 滚动事件防抖
-let scrollTimeout: number | null = null
-let isUserScrolling = ref(false)
+// 移除滚动相关变量
 let unlistenStream: (() => void) | null = null;
 
-// 处理滚动事件 - 适配反向布局
-const handleScroll = () => {
-  if (!messagesContainer.value) return
-
-  const container = messagesContainer.value
-  const currentScrollTop = container.scrollTop
-
-  // 在反向布局中，scrollTop = 0 表示在最底部（最新消息）
-  // scrollTop > 0 表示向上滚动查看历史消息
-  const distanceFromBottom = currentScrollTop
-
-  // 检测滚动方向
-  isScrollingUp.value = currentScrollTop > lastScrollTop.value
-  lastScrollTop.value = currentScrollTop
-
-  // 判断是否在底部附近（显示最新消息的位置）
-  const nearBottom = distanceFromBottom <= scrollThreshold.value
-  isAtBottom.value = nearBottom
-
-  // 标记用户正在滚动
-  isUserScrolling.value = true
-
-  // 如果用户向上滚动查看历史消息，禁用自动滚动
-  if (isScrollingUp.value && distanceFromBottom > scrollThreshold.value) {
-    shouldAutoScroll.value = false
-  }
-
-  // 如果用户滚动回底部附近，恢复自动滚动
-  if (nearBottom) {
-    shouldAutoScroll.value = true
-  }
-
-  // 清除之前的定时器
-  if (scrollTimeout) {
-    clearTimeout(scrollTimeout)
-  }
-
-
-}
-
-
-
-// 清理 IntersectionObserver
-const cleanupIntersectionObserver = () => {
-  if (intersectionObserver.value) {
-    intersectionObserver.value.disconnect()
-    intersectionObserver.value = null
-  }
-}
-
-// 智能滚动到底部 - 适配反向布局
-const scrollToBottom = () => {
-  if (!messagesContainer.value || !shouldAutoScroll.value || isUserScrolling.value) return
-
-  const container = messagesContainer.value
-
-  // 使用 requestAnimationFrame 优化性能
-  requestAnimationFrame(() => {
-    // 再次检查用户是否在滚动，避免干扰用户操作
-    if (isUserScrolling.value) return
-
-    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-    container.scrollTo({
-      top: 0,
-      behavior: isAtBottom.value ? 'smooth' : 'auto'
-    })
-  })
-}
-
-// 强制滚动到底部（用于新消息） - 适配反向布局
-const forceScrollToBottom = () => {
-  if (!messagesContainer.value) return
-
-  const container = messagesContainer.value
-
-  // 重置所有滚动状态
-  shouldAutoScroll.value = true
-  isUserScrolling.value = false
-  isScrollingUp.value = false
-  isAtBottom.value = true
-
-  requestAnimationFrame(() => {
-    // 在反向布局中，scrollTop = 0 表示最底部（最新消息）
-    container.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-
-    // 更新最后滚动位置
-    setTimeout(() => {
-      lastScrollTop.value = container.scrollTop
-    }, 100)
-  })
-}
 
 // 生成唯一ID
 const generateUniqueId = () => {
@@ -2279,17 +2164,12 @@ const clearMessages = async () => {
     await loadMessages(activeConversationId.value);
     console.log('消息重新加载完成');
 
-    // 清空后确保滚动状态正确 - 适配反向布局
-    await nextTick()
-    shouldAutoScroll.value = true
-    isAtBottom.value = true
+    // 移除自动滚动逻辑
   } catch (error) {
     console.error('清空对话失败:', error);
     // 即使后端调用失败，也尝试清空前端显示的消息
     messages.value = [];
-    // 确保滚动状态正确 - 适配反向布局
-    shouldAutoScroll.value = true
-    isAtBottom.value = true
+    // 移除自动滚动逻辑
   }
 }
 
@@ -2457,12 +2337,7 @@ onBeforeUnmount(() => {
   localStorage.setItem('ai-note-title', noteTitle.value)
   localStorage.setItem('ai-note-content', noteContent.value)
 
-  // 清理滚动观察器和定时器
-  cleanupIntersectionObserver()
-  if (scrollTimeout) {
-    window.clearTimeout(scrollTimeout)
-    scrollTimeout = null
-  }
+
 
   // 清理性能优化相关的缓存
   messageRenderCache.value.clear()
@@ -2534,6 +2409,7 @@ const cancelGeneration = async () => {
     // 重置状态
     isStreaming.value = false;
     streamingContent.value = '';
+    formattedStreamingContent.value = '';
     currentStreamingId.value = null;
     isLoading.value = false;
   } catch (error) {
@@ -2642,17 +2518,20 @@ const addToNote = (content: string) => {
     showNotePanel.value = true
   }
 
+  // 移除think标签和details标签内容
+  const cleanContent = content.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+
   // 如果笔记内容为空，直接设置；否则添加到末尾
   if (!noteContent.value) {
-    noteContent.value = content
+    noteContent.value = cleanContent
   } else {
-    noteContent.value += '\n\n' + content
+    noteContent.value += '\n\n' + cleanContent
   }
 
   // 如果标题为空且内容不为空，尝试生成一个标题
-  if (!noteTitle.value && content) {
+  if (!noteTitle.value && cleanContent) {
     // 尝试从内容的第一行或前50个字符生成标题
-    const firstLine = content.split('\n')[0].trim()
+    const firstLine = cleanContent.split('\n')[0].trim()
     noteTitle.value = firstLine.length > 50 ? firstLine.substring(0, 50) + '...' : firstLine
   }
 }
@@ -3275,7 +3154,9 @@ const copyToClipboardWithFeedback = async (content: string, event: Event) => {
 
   try {
     copyingStates.value[key] = 'copying'
-    await navigator.clipboard.writeText(content)
+    // 移除think标签和details标签内容
+    const cleanContent = content.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
+    await navigator.clipboard.writeText(cleanContent)
     copyingStates.value[key] = 'success'
 
     // 2秒后重置状态
@@ -3317,9 +3198,7 @@ const resendMessage = async (originalMessage: any) => {
 
   await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
 
-  // 滚动到底部
-  await nextTick()
-  forceScrollToBottom()
+  // 移除自动滚动逻辑
 
   // 发送AI请求
   await sendAIRequest(originalMessage.content, newMessage.attachments || [])
@@ -3354,11 +3233,11 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
     let customModelName = ''
     console.log(customModelName)
     if (selectedModel.value.startsWith('custom_')) {
-      const config = aiConfigs.value[selectedModel.value]
+      const config = customModelConfigs.value[selectedModel.value]
       if (config && config.model_name) {
         customModelName = config.model_name
       } else {
-        console.warn(`未找到自定义模型 ${selectedModel.value} 的配置`)
+        console.warn(`Custom model config not found for ${selectedModel.value}`)
       }
     }
 
@@ -3403,6 +3282,7 @@ const sendAIRequest = async (messageContent: string, attachments: any[] = []) =>
     console.error('AI响应失败:', error)
     isStreaming.value = false
     streamingContent.value = ''
+    formattedStreamingContent.value = ''
     currentStreamingId.value = null
     isLoading.value = false
   }
@@ -3438,21 +3318,35 @@ watch(noteContent, (newValue) => {
   console.log('笔记内容变化，新长度:', newValue.length)
 })
 
+// 保存当前选择的模型状态
+let modelBeforeConfig = ref('')
+
 // 处理模型选择变化
 const handleModelChange = () => {
   const currentValue = selectedModel.value
   if (currentValue === '__configure__') {
-    // 恢复到上一个选择的模型（如果有的话）
-    const lastModel = localStorage.getItem('ai-selected-model')
-    if (lastModel && lastModel !== '__configure__' && availableModels.value.some((m: any) => m.id === lastModel)) {
-      selectedModel.value = lastModel
+    // 保存当前选择，用于从设置页面返回时恢复
+    const currentModel = localStorage.getItem('ai-selected-model') || availableModels.value[0]?.id
+    if (currentModel) {
+      modelBeforeConfig.value = currentModel
+    }
+    
+    // 恢复到上一个有效的模型
+    if (modelBeforeConfig.value && availableModels.value.some((m: any) => m.id === modelBeforeConfig.value)) {
+      selectedModel.value = modelBeforeConfig.value
     } else if (availableModels.value.length > 0) {
       selectedModel.value = availableModels.value[0].id
     } else {
       selectedModel.value = ''
     }
+    
     // 跳转到设置页面的AI助手部分
     goToAISettings()
+  } else {
+    // 保存当前选择的模型
+    if (currentValue && currentValue !== '__configure__') {
+      localStorage.setItem('ai-selected-model', currentValue)
+    }
   }
 }
 
@@ -3517,6 +3411,14 @@ watch(streamingContent, async (newContent) => {
   overflow-x: auto;
 }
 
+/* Auto wrap for <details> think content wrapped in <pre> */
+:deep(pre) {
+  white-space: pre-wrap;      /* keep newlines but allow wrapping */
+  word-wrap: break-word;      /* legacy compatibility */
+  overflow-wrap: anywhere;    /* modern wrapping for long words */
+  max-width: 100%;
+}
+
 :deep(.chat-bubble code) {
   background-color: rgba(0, 0, 0, 0.1);
   padding: 0.2rem 0.4rem;
@@ -3524,7 +3426,7 @@ watch(streamingContent, async (newContent) => {
 }
 
 :deep(.chat-bubble p) {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
 }
 
 :deep(.chat-bubble ul, .chat-bubble ol) {

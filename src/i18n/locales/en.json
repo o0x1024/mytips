@@ -923,6 +923,7 @@
       "deepseek": "DeepSeek",
       "qwen": "Qwen (Alibaba)",
       "doubao": "Doubao",
+      "ollama": "Ollama (Local)",
       "grok": "Grok (xAI)",
       "custom": "Custom Model"
     },
@@ -1354,6 +1355,11 @@
     "lastError": "Last Error"
   },
   "ai": {
+    "create_new_conversation":"Create New Conversation",
+    "no_conversation_record":"No conversation record",
+    "loading_conversations":"Loading conversations...",
+    "copy_selected_content":"Copy Selected Content",
+    "no_title_conversation":"No title conversation",
     "click_to_view_details":"Click to view details",
     "no_matching_notes":"No matching notes found",
     "no_notes_please_create_some_notes":"No notes yet, please create some first.",

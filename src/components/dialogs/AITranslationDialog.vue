@@ -20,18 +20,18 @@
       </div>
 
       <div class="p-4 border-t border-base-300 flex justify-end gap-2">
-        <button class="btn btn-sm" @click="emit('copy')">{{ t('common.copy') }}</button>
-        <button class="btn btn-sm btn-primary" @click="emit('insert')">{{ t('aiTranslationDialog.insertIntoNote') }}</button>
+        <button class="btn btn-sm" @click="emit('copy')" :disabled="loading">{{ t('common.copy') }}</button>
+        <button class="btn btn-sm btn-primary" @click="emit('insert')" :disabled="loading">{{ t('aiTranslationDialog.insertIntoNote') }}</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue'
+import { defineProps, defineEmits, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-defineProps({
+const props = defineProps({
   visible: Boolean,
   loading: Boolean,
   content: String,
@@ -43,10 +43,39 @@ const { t } = useI18n()
 const closeDialog = () => {
   emit('close')
 }
+
+// Enter 触发插入
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key !== 'Enter') return
+  if (!props.visible || props.loading) return
+  if ((e.target as HTMLElement)?.closest('textarea, [contenteditable="true"], input')) return
+  e.preventDefault()
+  emit('insert')
+}
+
+watch(() => props.visible, (v) => {
+  if (v) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>
 .prose {
   max-width: none;
 }
+
+:deep(pre) {
+  white-space: pre-wrap;      /* keep newlines but allow wrapping */
+  word-wrap: break-word;      /* legacy compatibility */
+  overflow-wrap: anywhere;    /* modern wrapping for long words */
+  max-width: 100%;
+}
+
 </style> 

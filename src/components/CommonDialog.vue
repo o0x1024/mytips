@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits, ref, watchEffect } from 'vue'
+import { defineProps, defineEmits, ref, watchEffect, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { renderInlineMarkdown } from '../services/markdownService'
 
@@ -41,6 +41,32 @@ watchEffect(async () => {
 const confirm = () => emit('confirm')
 const cancel = () => emit('cancel')
 const close = () => emit('close')
+
+// Enter 确认
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    confirm()
+  }
+}
+
+onMounted(() => {
+  if (props.visible) {
+    window.addEventListener('keydown', handleKeydown)
+  }
+})
+
+watch(() => props.visible, (visible) => {
+  if (visible) {
+    window.addEventListener('keydown', handleKeydown)
+  } else {
+    window.removeEventListener('keydown', handleKeydown)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>

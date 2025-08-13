@@ -856,8 +856,6 @@ async function deleteNote(id: string) {
       // 调用后端API删除笔记
       await tipsStore.deleteTip(id);
       
-
-      
       // 如果笔记有分类，直接在前端更新笔记本树的计数
       if (categoryId) {
         updateNotebookTreeCount(categoryId, -1); // 减少计数
@@ -868,6 +866,27 @@ async function deleteNote(id: string) {
         selectedNoteId.value = null;
         selectedNote.value = null;
       }
+
+      // 根据当前视图状态刷新数据
+      if (selectedNotebookId.value) {
+        // 当前在分类浏览模式下，刷新当前分类
+        console.log('[MainLayout] 删除笔记后刷新分类浏览数据')
+        await tipsStore.browseCategory(selectedNotebookId.value)
+      } else if (selectedTags.value.length > 0) {
+        // 当前在标签浏览模式下，刷新标签数据
+        console.log('[MainLayout] 删除笔记后刷新标签浏览数据')
+        await tipsStore.fetchTipsByTag(selectedTags.value.join(','))
+      } else if (navSearchQuery.value || listSearchQuery.value) {
+        // 当前在搜索模式下，重新执行搜索
+        console.log('[MainLayout] 删除笔记后重新执行搜索')
+        const searchQuery = navSearchQuery.value || listSearchQuery.value
+        await tipsStore.searchTips(searchQuery)
+      } else {
+        // 默认情况，刷新全部笔记
+        console.log('[MainLayout] 删除笔记后刷新全部笔记')
+        await tipsStore.fetchAllTipSummaries()
+      }
+      
     } catch (error) {
       console.error('删除笔记失败:', error);
     }

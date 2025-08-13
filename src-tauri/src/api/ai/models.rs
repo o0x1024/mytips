@@ -3,7 +3,7 @@ use base64::{engine::general_purpose, Engine as _};
 use futures::{Stream, StreamExt, FutureExt};
 use genai::{
     adapter::AdapterKind,
-    chat::{ChatMessage, ChatRequest, ContentPart, ImageSource, MessageContent, StreamChunk},
+    chat::{ChatMessage, ChatRequest, ContentPart, ImageSource, MessageContent},
     resolver::{AuthData, Endpoint, ServiceTargetResolver},
     Client, ModelIden, ServiceTarget,
 };
@@ -12,8 +12,6 @@ use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
 use serde::{Deserialize, Serialize};
-use tauri::State;
-use std::collections::HashMap;
 
 // 自定义模型配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -36,10 +34,10 @@ pub struct CustomModelConfig {
     pub api_key: Option<String>,
 }
 
-// Function to create a genai client
+
 pub async fn create_genai_client(
     api_key: String,
-    provider: &str,
+    _provider: &str,
     db_manager: &UnifiedDbManager,
 ) -> Result<genai::Client, String> {
     // 获取代理设置
@@ -73,10 +71,7 @@ pub async fn create_genai_client(
                     service_target.auth = AuthData::from_single(key);
                     // 强制使用 OpenAI 适配器，避免被误判为 Ollama
                     service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
-                } else if model_name.starts_with("grok") {
-                    service_target.endpoint = Endpoint::from_static("https://api.x.ai/v1/");
-                    service_target.auth = AuthData::from_single(key);
-                } else if model_name.starts_with("qwen") {
+                }  else if model_name.starts_with("qwen") {
                     // 阿里云百炼，兼容 OpenAI 协议
                     service_target.endpoint = Endpoint::from_static(
                         "https://dashscope.aliyuncs.com/compatible-mode/v1/",
@@ -85,7 +80,7 @@ pub async fn create_genai_client(
                     // 强制使用 OpenAI 适配器
                     service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 } else {
-                    // 其余未知模型统一按 OpenAI 兼容处理，避免被自动识别为 Ollama
+                    // 其余未知模型统一按 OpenAI 兼容处理
                     service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
                 }
                 Ok::<_, genai::resolver::Error>(service_target)
@@ -127,18 +122,7 @@ pub fn get_model_name(model_id: &str, custom_model_name: Option<&str>) -> String
         return name.to_string();
     }
 
-    // 否则使用默认映射
-    match model_id {
-        "chatgpt" => "gpt-3.5-turbo".to_string(),
-        "gemini" => "gemini-2.0-flash".to_string(),
-        "deepseek" => "deepseek-chat".to_string(),
-        "claude" => "claude-3.5-sonnet".to_string(),
-        "qwen" => "qwen3-coder-plus".to_string(), // 千问暂时不支持，可能需要自定义实现
-        "doubao" => "doubao-1.5-pro-32k".to_string(), // 豆包默认模型
-        "grok" => "grok-lpu".to_string(),      // Grok默认模型
-        "custom" => "gpt-3.5-turbo".to_string(), // 自定义默认使用OpenAI格式
-        _ => model_id.to_string(),
-    }
+    "".to_string()
 }
 
 // 处理AI错误响应的辅助函数，将错误格式化为可以显示的回答

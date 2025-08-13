@@ -94,6 +94,7 @@ pub async fn test_ai_connection(
         "qwen" => test_qwen_connection(request, db_manager).await,
         "doubao" => test_doubao_connection(request, db_manager).await,
         "xai" => test_xai_connection(request, db_manager).await,
+        "ollama" => test_ollama_connection(request, db_manager).await,
         "custom" => test_custom_connection(request, db_manager).await,
         _ => Err(format!("Unsupported provider: {}", request.provider)),
     }
@@ -213,7 +214,7 @@ async fn test_gemini_connection(
     let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
 
     // 使用GenAI库测试连接
-    let client = match create_genai_client(api_key.clone(), "gemini", &db_manager).await {
+    let _client = match create_genai_client(api_key.clone(), "gemini", &db_manager).await {
         Ok(client) => client,
         Err(e) => {
             return Ok(TestConnectionResponse {
@@ -522,6 +523,56 @@ pub async fn delete_custom_model_config(
 }
 
 // 测试自定义模型连接
+// 测试Ollama连接
+async fn test_ollama_connection(
+    request: TestConnectionRequest,
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<TestConnectionResponse, String> {
+    let api_base = request
+        .api_base
+        .unwrap_or_else(|| "http://localhost:11434".to_string());
+
+    let client = get_client_with_proxy(&db_manager).await?;
+
+    // 测试Ollama API - 获取模型列表
+    let response = client
+        .get(format!("{}/api/tags", api_base))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to request Ollama API: {}", e))?;
+
+    if !response.status().is_success() {
+        let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        return Ok(TestConnectionResponse {
+            success: false,
+            message: format!("Ollama API connection test failed: {}", error),
+            models: None,
+        });
+    }
+
+    let models_response: serde_json::Value = response.json().await
+        .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
+
+    let models = models_response["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_else(|| vec![
+            "llama3.2:latest".to_string(),
+            "gemma2:latest".to_string(),
+            "qwen2.5:latest".to_string(),
+        ]);
+
+    Ok(TestConnectionResponse {
+        success: true,
+        message: format!("Ollama API connection successful, found {} models", models.len()),
+        models: Some(models),
+    })
+}
+
 async fn test_custom_connection(
     request: TestConnectionRequest,
     db_manager: State<'_, UnifiedDbManager>,
@@ -574,44 +625,6 @@ async fn test_custom_connection(
                 models: Some(models),
             })
         },
-        "ollama" => {
-            // Ollama API测试
-            let response = client
-                .get(format!("{}/api/tags", endpoint))
-                .send()
-                .await
-                .map_err(|e| format!("Failed to request Ollama API: {}", e))?;
-
-            if !response.status().is_success() {
-                let error = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                return Ok(TestConnectionResponse {
-                    success: false,
-                    message: format!("Ollama API connection test failed: {}", error),
-                    models: None,
-                });
-            }
-
-            let models_response: serde_json::Value = response.json().await
-                .map_err(|e| format!("Failed to parse Ollama response: {}", e))?;
-
-            let models = models_response["models"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_else(|| vec![
-                    "llama3".to_string(),
-                    "mistral".to_string(),
-                ]);
-
-            Ok(TestConnectionResponse {
-                success: true,
-                message: "Ollama API connection successful".to_string(),
-                models: Some(models),
-            })
-        },
         _ => {
             // 通用测试 - 简单尝试访问端点
             let response = client
@@ -643,76 +656,8 @@ async fn test_custom_connection(
 pub async fn get_ai_chat_models(
 ) -> Result<Vec<ModelInfo>, String> {
     // 返回预定义的聊天模型列表
-    let models = vec![
-        ModelInfo {
-            name: "gpt-4o".to_string(),
-            provider: "openai".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "gpt-4-turbo".to_string(),
-            provider: "openai".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "gpt-3.5-turbo".to_string(),
-            provider: "openai".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "claude-3.5-sonnet".to_string(),
-            provider: "anthropic".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "claude-3-opus".to_string(),
-            provider: "anthropic".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "gemini-2.0-flash".to_string(),
-            provider: "gemini".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "gemini-1.5-pro".to_string(),
-            provider: "gemini".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "deepseek-chat".to_string(),
-            provider: "deepseek".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "qwen3-coder-plus".to_string(),
-            provider: "qwen".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "doubao-seed-1.6".to_string(),
-            provider: "doubao".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-        ModelInfo {
-            name: "grok-3".to_string(),
-            provider: "xai".to_string(),
-            is_chat: true,
-            is_embedding: false,
-        },
-    ];
 
-    Ok(models)
+    Ok(vec![])
 }
 
 // 获取嵌入模型列表
@@ -806,7 +751,7 @@ pub async fn get_ai_config(
 pub async fn save_ai_config(
     config: SaveAiConfigRequest,
     db_manager: State<'_, UnifiedDbManager>,
-    app: AppHandle,
+    _app: AppHandle,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
 
@@ -868,7 +813,7 @@ pub async fn get_ai_usage_stats(
 // 重新加载AI服务
 #[tauri::command]
 pub async fn reload_ai_services(
-    app: AppHandle,
+    _app: AppHandle,
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<(), String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
@@ -909,6 +854,36 @@ pub async fn get_ai_service_status(
             provider: "gemini".to_string(),
             is_available: true,
             models_count: 2,
+            active_conversations: 0,
+        },
+        AiServiceStatusResponse {
+            provider: "deepseek".to_string(),
+            is_available: true,
+            models_count: 1,
+            active_conversations: 0,
+        },
+        AiServiceStatusResponse {
+            provider: "qwen".to_string(),
+            is_available: true,
+            models_count: 1,
+            active_conversations: 0,
+        },
+        AiServiceStatusResponse {
+            provider: "doubao".to_string(),
+            is_available: true,
+            models_count: 2,
+            active_conversations: 0,
+        },
+        AiServiceStatusResponse {
+            provider: "xai".to_string(),
+            is_available: true,
+            models_count: 3,
+            active_conversations: 0,
+        },
+        AiServiceStatusResponse {
+            provider: "ollama".to_string(),
+            is_available: true,
+            models_count: 0,
             active_conversations: 0,
         },
     ];

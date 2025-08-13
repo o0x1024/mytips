@@ -20,7 +20,6 @@ use genai::chat::{ChatMessage, ChatRequest, ChatRole};
 // use genai::Client;
 use roles::get_ai_role_internal;
 use conversations::list_ai_messages_internal;
-use crate::api::settings::get_client_with_proxy;
 
 
 // 系统提示词常量
@@ -75,7 +74,7 @@ pub async fn send_ai_message(
             db_manager.inner(),
         ).await?;
         (client, m.model_name)
-    } else {
+    }  else {
         let config_json = db::get_setting(&conn, "ai_providers_config")
             .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
         let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
@@ -184,6 +183,11 @@ pub async fn send_ai_message(
     Ok(serde_json::json!({ "reply": result_str }))
 }
 
+fn is_supported_provider(provider_id: &str) -> bool {
+    let supported_providers = vec!["openai", "anthropic", "gemini", "grok", "ollama", "groq", "deepseek", "cohere", "zhipu"];
+    supported_providers.contains(&provider_id.to_lowercase().as_str())
+}
+
 // 流式发送AI消息
 #[tauri::command]
 pub async fn send_ai_message_stream(
@@ -280,15 +284,26 @@ async fn handle_stream_request(
             &db_manager,
         ).await?;
         (client, m.model_name.clone())
-    } else {
+    }  else {
         let config_json = db::get_setting(&conn, "ai_providers_config")
             .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
         let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
         let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
-        let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+        let mut api_key= String::new();
+        if provider_id.to_lowercase().contains("ollama") {
+            api_key = String::new();
+        }else{
+            api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+        }
         let model_name = provider_config.default_model.clone();
 
-        let client = models::create_genai_client(api_key, &provider_id, &db_manager).await?;
+        //如果provider_id是genai支持的库则使用Client::default();创建否则使用create_genai_client创建
+        //genai支持的提供商有 OpenAI, Anthropic, Gemini, XAI/Grok, Ollama, Groq, DeepSeek  Cohere Zhipu
+        let client = if is_supported_provider(&provider_id) {
+            genai::Client::default()
+        } else {
+            models::create_genai_client(api_key, &provider_id, &db_manager).await?
+        };
         (client, model_name)
     };
 
@@ -431,20 +446,6 @@ async fn handle_stream_request(
             },
             Ok(genai::chat::ChatStreamEvent::End(end)) => {
                 println!("Received End event: {:?}", end);
-                // 处理End事件中可能包含的内容
-                if let Some(contents) = end.captured_content {
-                    for content in contents {
-                        if let genai::chat::MessageContent::Text(text) = content {
-                            if !text.is_empty() {
-                                println!("Sending captured content: {}", text);
-                                app.emit(
-                                    "ai-stream-chunk",
-                                    serde_json::json!({ "id": stream_id, "chunk": text, "done": false }),
-                                ).ok();
-                            }
-                        }
-                    }
-                }
             },
             Ok(other_event) => {
                 println!("Received non-chunk event: {:?}", other_event);
@@ -559,101 +560,6 @@ async fn handle_custom_model_as_stream(
             content: message.clone().into(),
             options: Default::default(),
         });
-    }
-
-    // 如果是 Ollama，直接使用 /api/generate 进行流式输出
-    if m.adapter_type.to_lowercase() == "ollama" {
-        use serde_json::json;
-        let client = get_client_with_proxy(&db_manager)
-            .await
-            .map_err(|e| e.to_string())?;
-        let base = m
-            .endpoint
-            .trim_end_matches('/')
-            .trim_end_matches("/v1")
-            .trim_end_matches("/api")
-            .to_string();
-        let url = format!("{}/api/generate", base);
-        println!("[Custom Stream][Ollama] POST {} (stream)", url);
-
-        let mut req = client.post(&url).header("Content-Type", "application/json");
-        if let Some(ref key) = m.api_key {
-            if !key.is_empty() {
-                req = req.header("Authorization", format!("Bearer {}", key));
-            }
-        }
-
-        let payload = json!({
-            "model": m.model_name,
-            "prompt": message,
-            "stream": true
-        });
-
-        let resp = req
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| format!("Ollama stream request failed: {}", e))?;
-
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let body_text = resp.text().await.unwrap_or_default();
-            return Err(format!("Ollama HTTP {}: {}", status, body_text));
-        }
-
-        let mut byte_stream = resp.bytes_stream();
-        let mut buffer = String::new();
-
-        while let Some(item) = byte_stream.next().await {
-            if should_cancel.load(Ordering::SeqCst) {
-                println!("Stream {} cancelled.", stream_id);
-                break;
-            }
-
-            let chunk = item.map_err(|e| format!("Ollama stream read failed: {}", e))?;
-            let s = String::from_utf8_lossy(&chunk);
-            buffer.push_str(&s);
-
-            // 逐行解析 JSON 行
-            loop {
-                if let Some(pos) = buffer.find('\n') {
-                    let line = buffer[..pos].trim().to_string();
-                    buffer.drain(..=pos);
-                    if line.is_empty() { continue; }
-
-                    match serde_json::from_str::<serde_json::Value>(&line) {
-                        Ok(v) => {
-                            // done 标记
-                            if v.get("done").and_then(|b| b.as_bool()) == Some(true) {
-                                println!("[Custom Stream][Ollama] Done received");
-                                break;
-                            }
-
-                            if let Some(text) = v.get("response").and_then(|t| t.as_str()) {
-                                if !text.is_empty() {
-                                    app.emit(
-                                        "ai-stream-chunk",
-                                        serde_json::json!({ "id": stream_id, "chunk": text, "done": false }),
-                                    ).ok();
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            // 如果不是标准 JSON 行，作为纯文本输出
-                            app.emit(
-                                "ai-stream-chunk",
-                                serde_json::json!({ "id": stream_id, "chunk": line, "done": false }),
-                            ).ok();
-                        }
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        println!("[Custom Stream][Ollama] Stream finished for id: {}", stream_id);
-        return Ok(());
     }
 
     // 客户端与选项（非 Ollama 适配器走 genai 流式）

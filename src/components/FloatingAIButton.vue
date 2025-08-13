@@ -1848,6 +1848,39 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
+/* Think block styles */
+.markdown-content details.think-block {
+  margin: 0.5rem 0;
+  border: 1px dashed hsl(var(--b3));
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--b2));
+}
+
+.markdown-content details.think-block > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: hsl(var(--p));
+  list-style: none;
+}
+.markdown-content details.think-block .think-content {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content details.think-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.markdown-content details.think-block > summary::before {
+  content: '💭 ';
+}
+
+.markdown-content details.think-block[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3,

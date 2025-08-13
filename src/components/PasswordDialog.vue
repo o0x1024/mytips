@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -265,6 +265,9 @@ watch(() => props.show, (newShow) => {
     nextTick(() => {
       passwordInput.value?.focus()
     })
+    window.addEventListener('keydown', handleGlobalEnter)
+  } else {
+    window.removeEventListener('keydown', handleGlobalEnter)
   }
 })
 
@@ -275,6 +278,20 @@ watch(confirmPassword, () => {
   } else {
     confirmError.value = ''
   }
+})
+
+// Enter 触发确认（避免输入框内重复触发）
+function handleGlobalEnter(e: KeyboardEvent) {
+  if (e.key !== 'Enter') return
+  const target = e.target as HTMLElement | null
+  if (target && target.closest('input, textarea, [contenteditable="true"]')) return
+  if (!props.show || !canConfirm.value || props.loading) return
+  e.preventDefault()
+  handleConfirm()
+}
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleGlobalEnter)
 })
 </script>
 

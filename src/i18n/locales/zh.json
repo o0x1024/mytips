@@ -929,6 +929,7 @@
       "deepseek": "DeepSeek",
       "qwen": "通义千问 (阿里巴巴)",
       "doubao": "豆包",
+      "ollama": "Ollama (本地)",
       "grok": "Grok (xAI)",
       "custom": "自定义模型"
     },
@@ -1361,6 +1362,11 @@
     "lastError": "最后错误"
   },
   "ai": {
+    "create_new_conversation":"创建新对话",
+    "no_conversation_record":"暂无对话记录",
+    "loading_conversations":"加载对话...",
+    "copy_selected_content":"复制选中内容",
+    "no_title_conversation":"无标题对话",
     "click_to_view_details":"点击查看详情",
     "no_matching_notes":"没有找到匹配的笔记",
     "no_notes_please_create_some_notes":"暂无笔记，请先创建一些笔记",
