@@ -340,7 +340,7 @@ async fn test_doubao_connection(
         .bearer_auth(request.api_key.ok_or("Missing API key")?)
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({
-            "model": "Doubao-pro-4k", // a known model for testing
+            "model": "doubao-seed-1-6-250615", // a known model for testing
             "messages": [{"role": "user", "content": "hello"}]
         }))
         .send()

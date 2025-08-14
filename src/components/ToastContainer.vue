@@ -4,9 +4,24 @@
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        :class="['alert', alertClass(toast.type), 'shadow-lg', 'mb-2', 'max-w-xs']"
+        :class="[
+          'alert',
+          alertClass(toast.type),
+          'shadow-lg',
+          'mb-2',
+          'items-start',
+          'gap-2',
+          'min-w-0',
+          'w-auto',
+          'max-w-[90vw]',
+          'sm:max-w-md',
+          'md:max-w-lg',
+          'lg:max-w-xl',
+          'overflow-y-auto',
+          'max-h-[50vh]'
+        ]"
       >
-        <span class="flex-1">{{ toast.message }}</span>
+        <span class="flex-1 break-words break-all whitespace-pre-wrap">{{ toast.message }}</span>
         <button class="btn btn-xs btn-ghost" @click="close(toast.id)">✕</button>
       </div>
     </TransitionGroup>
