@@ -2,7 +2,7 @@ use crate::db::UnifiedDbManager;
 use chrono::Utc;
 use libsql::params;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::State;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -169,6 +169,20 @@ pub async fn add_ai_message(
     db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<Message, String> {
     let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    
+    // First check if the conversation exists
+    let mut rows = conn
+        .query(
+            "SELECT id FROM ai_conversations WHERE id = ?",
+            params![conversation_id.clone()]
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    if rows.next().await.map_err(|e| e.to_string())?.is_none() {
+        return Err(format!("Conversation with id '{}' does not exist", conversation_id));
+    }
+    
     let now = Utc::now().timestamp_millis();
     let message = Message {
         id: Uuid::new_v4().to_string(),
@@ -177,6 +191,7 @@ pub async fn add_ai_message(
         content,
         timestamp: now,
     };
+    
     conn.execute(
         "INSERT INTO ai_messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
         params![

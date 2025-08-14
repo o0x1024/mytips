@@ -7,6 +7,8 @@ import './assets/main.css'
 import { useUIStore, applyThemeEarly } from './stores/uiStore'
 import { initializeApp } from './services/appInitializer'
 import i18n from './i18n'
+import { listen } from '@tauri-apps/api/event'
+import { showToast } from './services/notification'
 
 // 在应用初始化前尽早应用主题设置
 applyThemeEarly()
@@ -132,6 +134,19 @@ async function startApp() {
     hideLoadingScreen()
     
     console.log('Application started successfully')
+
+    // 注册 AI 流错误事件监听，显示右上角提示
+    try {
+      await listen<{ id?: string; error?: string }>('ai-stream-error', (event) => {
+        const payload = event.payload || {}
+        const idPart = payload.id ? ` [${payload.id}]` : ''
+        const message = payload.error ? `AI stream error${idPart}: ${payload.error}` : `AI stream error${idPart}`
+        showToast(message, 'error', 6000)
+        console.error('[AI Stream] Error event:', payload)
+      })
+    } catch (e) {
+      console.warn('Failed to register ai-stream-error listener:', e)
+    }
   } catch (error) {
     console.error('Failed to start application:', error)
     updateLoadingStatus('启动失败，正在重试...')

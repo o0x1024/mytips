@@ -1398,12 +1398,29 @@ const setupStreamListeners = async () => {
           }
 
           if (finalContentToSave.trim()) { // 只有在有内容时才保存
-             await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
-             // 重新加载消息以显示保存的内容
-             await loadMessages(activeConversationId.value);
-             // 消息加载完成后清空流式内容
-             streamingContent.value = '';
-             formattedStreamingContent.value = '';
+             try {
+               await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
+               // 重新加载消息以显示保存的内容
+               await loadMessages(activeConversationId.value);
+               // 消息加载完成后清空流式内容
+               streamingContent.value = '';
+               formattedStreamingContent.value = '';
+             } catch (err) {
+               console.error('Failed to save assistant message:', err)
+               // 如果是因为对话不存在导致的错误，尝试创建新对话
+               if (String(err).includes('does not exist')) {
+                 console.log('Conversation does not exist, creating new one...')
+                 try {
+                   await createNewConversation()
+                   await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: finalContentWithRole });
+                   await loadMessages(activeConversationId.value);
+                   streamingContent.value = '';
+                   formattedStreamingContent.value = '';
+                 } catch (createErr) {
+                   console.error('Failed to create new conversation and save assistant message:', createErr)
+                 }
+               }
+             }
           } else {
              // 即使没有内容也要清空流式内容
              streamingContent.value = '';
@@ -1582,6 +1599,16 @@ async function sendMessage(resendMessage?: any) {
       await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
     } catch (err) {
       console.error('Failed to save user message:', err)
+      // 如果是因为对话不存在导致的错误，尝试创建新对话
+      if (String(err).includes('does not exist')) {
+        console.log('Conversation does not exist, creating new one...')
+        try {
+          await createNewConversation()
+          await invokeWithRetry('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+        } catch (createErr) {
+          console.error('Failed to create new conversation and save message:', createErr)
+        }
+      }
       // 不中断发送流程，UI 仍保留乐观消息
     }
 
@@ -2402,8 +2429,23 @@ const cancelGeneration = async () => {
 
     // 如果已经有一些内容，将其添加为完整消息
     if (streamingContent.value.trim()) {
-      await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: streamingContent.value + ' [已取消]' })
-      await loadMessages(activeConversationId.value)
+      try {
+        await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: streamingContent.value + ' [已取消]' })
+        await loadMessages(activeConversationId.value)
+      } catch (err) {
+        console.error('Failed to save cancelled message:', err)
+        // 如果是因为对话不存在导致的错误，尝试创建新对话
+        if (String(err).includes('does not exist')) {
+          console.log('Conversation does not exist, creating new one...')
+          try {
+            await createNewConversation()
+            await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'assistant', content: streamingContent.value + ' [已取消]' })
+            await loadMessages(activeConversationId.value)
+          } catch (createErr) {
+            console.error('Failed to create new conversation and save cancelled message:', createErr)
+          }
+        }
+      }
     }
 
     // 重置状态
@@ -3196,7 +3238,21 @@ const resendMessage = async (originalMessage: any) => {
     messageContent += `\n\n__REFERENCED_NOTES__:${notesJson}`
   }
 
-  await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+  try {
+    await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+  } catch (err) {
+    console.error('Failed to save user message in sendNoteAsMessage:', err)
+    // 如果是因为对话不存在导致的错误，尝试创建新对话
+    if (String(err).includes('does not exist')) {
+      console.log('Conversation does not exist, creating new one...')
+      try {
+        await createNewConversation()
+        await invoke('add_ai_message', { conversationId: activeConversationId.value, role: 'user', content: messageContent })
+      } catch (createErr) {
+        console.error('Failed to create new conversation and save user message:', createErr)
+      }
+    }
+  }
 
   // 移除自动滚动逻辑
 

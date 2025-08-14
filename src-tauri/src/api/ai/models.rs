@@ -1,6 +1,6 @@
 use crate::{api::settings::get_client_with_proxy, db::UnifiedDbManager};
 use base64::{engine::general_purpose, Engine as _};
-use futures::{Stream, StreamExt, FutureExt};
+use futures::{FutureExt, Stream, StreamExt};
 use genai::{
     adapter::AdapterKind,
     chat::{ChatMessage, ChatRequest, ContentPart, ImageSource, MessageContent},
@@ -8,10 +8,10 @@ use genai::{
     Client, ModelIden, ServiceTarget,
 };
 use reqwest::Proxy;
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use tokio::sync::mpsc;
 use tokio::time::{sleep, Duration};
-use serde::{Deserialize, Serialize};
 
 // 自定义模型配置
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -34,7 +34,6 @@ pub struct CustomModelConfig {
     pub api_key: Option<String>,
 }
 
-
 pub async fn create_genai_client(
     api_key: String,
     _provider: &str,
@@ -42,74 +41,71 @@ pub async fn create_genai_client(
 ) -> Result<genai::Client, String> {
     // 获取代理设置
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
-    
-    // 如果代理启用，设置环境变量（这会影响reqwest，而GenAI库内部使用reqwest）
-    let proxy_url = if proxy_settings.enabled {
-        // 构建代理URL
-        format!(
-            "{}://{}:{}",
-            proxy_settings.protocol, proxy_settings.host, proxy_settings.port
-        )
-    }else{
-        "".to_string()
-    };
 
-    // 为不同的闭包准备单独的 api_key 克隆，避免多次移动
-    let api_key_for_resolver = api_key.clone();
-
+    let api_key_clone = api_key.clone();
     // 创建 ServiceTargetResolver
-    let service_target_resolver = ServiceTargetResolver::from_resolver_async_fn(
-        move |mut service_target: ServiceTarget| {
-            let key = api_key_for_resolver.clone();
-            async move {
-                let model_name = service_target.model.model_name.to_string();
-                if model_name.starts_with("doubao") {
-                    // 豆包 Ark 平台，兼容 OpenAI 协议
-                    service_target.endpoint = Endpoint::from_static(
-                        "https://ark.cn-beijing.volces.com/api/v3/",
-                    );
-                    service_target.auth = AuthData::from_single(key);
-                    // 强制使用 OpenAI 适配器，避免被误判为 Ollama
-                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
-                }  else if model_name.starts_with("qwen") {
-                    // 阿里云百炼，兼容 OpenAI 协议
-                    service_target.endpoint = Endpoint::from_static(
-                        "https://dashscope.aliyuncs.com/compatible-mode/v1/",
-                    );
-                    service_target.auth = AuthData::from_single(key);
-                    // 强制使用 OpenAI 适配器
-                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
-                } else {
-                    // 其余未知模型统一按 OpenAI 兼容处理
-                    service_target.model = ModelIden::new(AdapterKind::OpenAI, &model_name);
-                }
-                Ok::<_, genai::resolver::Error>(service_target)
+    let service_target_resolver = ServiceTargetResolver::from_resolver_fn(
+        move |service_target: ServiceTarget| -> Result<ServiceTarget, genai::resolver::Error> {
+            let model_name = service_target.model.model_name.to_string();
+            let mut endpoint = service_target.endpoint;
+            let mut auth = service_target.auth;
+            let mut model = service_target.model;
+            if model_name.starts_with("doubao") {
+                endpoint = Endpoint::from_static("https://ark.cn-beijing.volces.com/api/v3");
+                auth = AuthData::from_single(api_key_clone.clone());
+                model = ModelIden::new(AdapterKind::OpenAI, &model_name);
+            } else if model_name.starts_with("qwen") {
+                endpoint = Endpoint::from_static("https://dashscope.aliyuncs.com/compatible-mode/v1/");
+                auth = AuthData::from_single(api_key_clone.clone());
+                model = ModelIden::new(AdapterKind::OpenAI, &model_name);
+            } else {
+                model = ModelIden::new(AdapterKind::OpenAI, &model_name);
             }
-            .boxed()
+            Ok(ServiceTarget {
+                auth,
+                model,
+                endpoint,
+            })
         },
     );
 
-    println!("proxy_url: {}", proxy_url);
-    let reqwest_client = match Proxy::all(&proxy_url) {
-        Ok(proxy) => reqwest::Client::builder()
-            .proxy(proxy)
-            .build()
-            .unwrap_or_else(|e| {
-                println!("Failed to build client with proxy: {}", e);
-                reqwest::Client::new()
-            }),
-        Err(e) => {
-            println!("Failed to create proxy: {}", e);
-            reqwest::Client::new()
+    // 创建带代理的reqwest客户端
+    let mut client_builder = reqwest::Client::builder();
+    
+    if proxy_settings.enabled {
+        // 构建代理URL
+        let proxy_url = format!(
+            "{}://{}:{}",
+            proxy_settings.protocol, proxy_settings.host, proxy_settings.port
+        );
+        
+        println!("AI Client using proxy: {}", proxy_url);
+        
+        match Proxy::all(&proxy_url) {
+            Ok(proxy) => {
+                client_builder = client_builder.proxy(proxy);
+                println!("Proxy configured successfully for AI client");
+            }
+            Err(e) => {
+                println!("Failed to create proxy for AI client: {}", e);
+            }
         }
-    };
-
+    } else {
+        println!("AI Client not using proxy");
+    }
+    
+    let reqwest_client = client_builder
+        .build()
+        .unwrap_or_else(|e| {
+            println!("Failed to build reqwest client: {}", e);
+            reqwest::Client::new()
+        });
 
     // 创建带有认证和自定义解析器的客户端构建器
     let client = Client::builder()
         .with_reqwest(reqwest_client)
         .with_service_target_resolver(service_target_resolver)
-        .with_auth_resolver_fn(move |_| Ok(Some(AuthData::from_single(api_key.clone()))))
+        // .with_auth_resolver_fn(move |_| Ok(Some(AuthData::from_single(api_key.clone()))))
         .build();
 
     Ok(client)
@@ -129,8 +125,6 @@ pub fn get_model_name(model_id: &str, custom_model_name: Option<&str>) -> String
 pub fn format_ai_error(error: &str) -> String {
     format!("抱歉，发生了错误：{}", error)
 }
-
-
 
 // 流式API响应类型
 pub type TextStream = Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>;
@@ -312,67 +306,6 @@ pub async fn stream_chat_with_history(
     Ok(Box::pin(stream) as TextStream)
 }
 
-// 豆包模型专门实现
-pub async fn send_to_doubao(
-    api_key: String,
-    message: String,
-    custom_model_name: Option<&str>,
-    db_manager: &UnifiedDbManager,
-) -> Result<String, String> {
-    use serde_json::{json, Value};
-
-    let client = get_client_with_proxy(db_manager).await?;
-
-    // 豆包API端点
-    let endpoint = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-
-    // 获取模型名称
-    let model_name = custom_model_name.unwrap_or("doubao-1.5-pro-32k");
-
-    let payload = json!({
-        "model": model_name,
-        "messages": [
-            {
-                "role": "user",
-                "content": message
-            }
-        ],
-        "temperature": 0.7,
-        "max_tokens": 2000,
-        "stream": false
-    });
-
-    let response = client
-        .post(endpoint)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("豆包API请求失败: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response.text().await.unwrap_or_default();
-        return Err(format!("豆包API返回错误 {}: {}", status, error_text));
-    }
-
-    let response_json: Value = response
-        .json()
-        .await
-        .map_err(|e| format!("解析豆包API响应失败: {}", e))?;
-
-    // 提取响应内容
-    if let Some(choices) = response_json["choices"].as_array() {
-        if let Some(first_choice) = choices.first() {
-            if let Some(content) = first_choice["message"]["content"].as_str() {
-                return Ok(content.to_string());
-            }
-        }
-    }
-
-    Err("无法从豆包API响应中提取内容".to_string())
-}
 
 // 支持图片的AI消息发送（非流式）
 pub async fn send_message_with_images_to_ai(
@@ -460,11 +393,11 @@ pub async fn stream_message_with_images_from_ai(
     };
 
     let chat_req = ChatRequest::new(vec![message]);
-    
+
     // 创建请求选项，启用内容捕获
     let mut request_options = genai::chat::ChatOptions::default();
     request_options.capture_content = Some(true);
-    
+
     let chat_stream_response = client
         .exec_chat_stream(&model_name, chat_req, Some(&request_options))
         .await
@@ -475,7 +408,7 @@ pub async fn stream_message_with_images_from_ai(
     tokio::spawn(async move {
         let mut stream = chat_stream_response.stream;
         let mut has_content = false;
-        
+
         while let Some(event) = stream.next().await {
             match event {
                 Ok(genai::chat::ChatStreamEvent::Chunk(chunk)) => {
@@ -492,8 +425,14 @@ pub async fn stream_message_with_images_from_ai(
                             if let genai::chat::MessageContent::Text(text) = content {
                                 if !text.is_empty() {
                                     has_content = true;
-                                    println!("Sending captured content from image stream: {}", 
-                                        if text.len() > 50 { format!("{}...", &text[..50]) } else { text.clone() });
+                                    println!(
+                                        "Sending captured content from image stream: {}",
+                                        if text.len() > 50 {
+                                            format!("{}...", &text[..50])
+                                        } else {
+                                            text.clone()
+                                        }
+                                    );
                                     let _ = tx.send(Ok(text)).await;
                                 }
                             }
@@ -509,7 +448,7 @@ pub async fn stream_message_with_images_from_ai(
                 } // 记录其他事件类型但不处理
             }
         }
-        
+
         // 如果整个流程结束后没有收到任何内容，发送一个后备消息
         if !has_content {
             println!("No content received from image stream, sending fallback message");
@@ -520,7 +459,6 @@ pub async fn stream_message_with_images_from_ai(
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
     Ok(Box::pin(stream) as TextStream)
 }
-
 
 // 创建自定义GenAI客户端，使用ServiceTargetResolver
 pub async fn create_custom_genai_client(
@@ -533,33 +471,40 @@ pub async fn create_custom_genai_client(
 ) -> Result<Client, String> {
     // 获取代理设置，并在本地端点时绕过代理（避免对 127.0.0.1/localhost 的代理导致 404）
     let proxy_settings = crate::api::settings::get_proxy_settings_internal(db_manager).await?;
-    // let is_local_endpoint = endpoint_url.contains("127.0.0.1")
-    //     || endpoint_url.contains("localhost")
-    //     || endpoint_url.contains("::1");
+    
+    // 检查是否为本地端点
+    let is_local_endpoint = endpoint_url.contains("127.0.0.1")
+        || endpoint_url.contains("localhost")
+        || endpoint_url.contains("::1");
 
-    let proxy_url = if proxy_settings.enabled {
-        format!(
+    let mut client_builder = reqwest::Client::builder();
+    
+    if proxy_settings.enabled && !is_local_endpoint {
+        let proxy_url = format!(
             "{}://{}:{}",
             proxy_settings.protocol, proxy_settings.host, proxy_settings.port
-        )
+        );
+        
+        println!("[Custom Client] Using proxy: {}", proxy_url);
+        
+        match reqwest::Proxy::all(&proxy_url) {
+            Ok(proxy) => {
+                client_builder = client_builder.proxy(proxy);
+                println!("[Custom Client] Proxy configured successfully");
+            }
+            Err(e) => {
+                println!("[Custom Client] Failed to create proxy: {}", e);
+            }
+        }
+    } else if is_local_endpoint {
+        println!("[Custom Client] Bypassing proxy for local endpoint: {}", endpoint_url);
     } else {
-        "".to_string()
-    };
-    
-    println!(
-        "[Custom Client] Configuring proxy: {} ",
-        if proxy_url.is_empty() { "None" } else { &proxy_url },
-    );
+        println!("[Custom Client] Not using proxy");
+    }
 
-    let reqwest_client = if !proxy_url.is_empty() {
-        let proxy = reqwest::Proxy::all(&proxy_url).map_err(|e| format!("Invalid proxy URL: {}", e))?;
-        reqwest::Client::builder()
-            .proxy(proxy)
-            .build()
-            .map_err(|e| format!("Failed to build client with proxy: {}", e))?
-    } else {
-        reqwest::Client::new()
-    };
+    let reqwest_client = client_builder
+        .build()
+        .map_err(|e| format!("Failed to build reqwest client: {}", e))?;
 
     // 解析适配器类型
     let adapter_kind = match adapter_type.to_lowercase().as_str() {
@@ -571,12 +516,14 @@ pub async fn create_custom_genai_client(
         _ => AdapterKind::OpenAI, // 默认使用OpenAI格式
     };
 
-    println!("[Custom Client] Creating client: endpoint={}, model={}, adapter={:?}",
-             endpoint_url, model_name, adapter_kind);
+    println!(
+        "[Custom Client] Creating client: endpoint={}, model={}, adapter={:?}",
+        endpoint_url, model_name, adapter_kind
+    );
 
     // 创建ServiceTargetResolver
-    let target_resolver = ServiceTargetResolver::from_resolver_async_fn(
-        move |mut service_target: ServiceTarget| {
+    let target_resolver =
+        ServiceTargetResolver::from_resolver_async_fn(move |mut service_target: ServiceTarget| {
             let endpoint_url = endpoint_url.clone();
             let api_key = api_key.clone();
             let model_name = model_name.clone();
@@ -616,30 +563,34 @@ pub async fn create_custom_genai_client(
                         AdapterKind::OpenAI => {
                             // OpenAI 格式通常是 "Bearer {api_key}"
                             AuthData::from_single(api_key)
-                        },
+                        }
                         AdapterKind::Anthropic => {
                             // Anthropic 可能使用 "x-api-key" 头
                             AuthData::from_single(api_key)
-                        },
+                        }
                         AdapterKind::Gemini => {
                             // Gemini 可能有不同的认证方式
                             AuthData::from_single(api_key)
-                        },
-                        _ => AuthData::from_single(api_key)
+                        }
+                        _ => AuthData::from_single(api_key),
                     }
                 };
-                
+
                 // 创建模型标识符
                 service_target.model = ModelIden::new(adapter_kind, &model_name);
-                
+
                 // 打印更多调试信息
-                println!("[Custom Client] Resolved target: endpoint={}, model={}, adapter={:?}",
-                    service_target.endpoint.base_url(), service_target.model.model_name, service_target.model.adapter_kind);
+                println!(
+                    "[Custom Client] Resolved target: endpoint={}, model={}, adapter={:?}",
+                    service_target.endpoint.base_url(),
+                    service_target.model.model_name,
+                    service_target.model.adapter_kind
+                );
 
                 Ok(service_target)
-            }.boxed()
-        },
-    );
+            }
+            .boxed()
+        });
 
     // 构建客户端
     let client = Client::builder()
@@ -673,8 +624,7 @@ pub async fn send_message_to_custom_ai(
         let url = format!("{}/api/chat", base);
         println!("[Custom AI][Ollama] POST {}", url);
 
-        let mut req = client.post(&url)
-            .header("Content-Type", "application/json");
+        let mut req = client.post(&url).header("Content-Type", "application/json");
         if !api_key.is_empty() {
             req = req.header("Authorization", format!("Bearer {}", api_key));
         }
@@ -690,16 +640,28 @@ pub async fn send_message_to_custom_ai(
             "stream": false
         });
 
-        let resp = req.json(&payload).send().await
+        let resp = req
+            .json(&payload)
+            .send()
+            .await
             .map_err(|e| format!("Ollama request failed: {}", e))?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body_text = resp.text().await.unwrap_or_default();
-            return Ok(format_ai_error(&format!("Ollama HTTP {}: {}", status, body_text)));
+            return Ok(format_ai_error(&format!(
+                "Ollama HTTP {}: {}",
+                status, body_text
+            )));
         }
-        let v: serde_json::Value = resp.json().await
+        let v: serde_json::Value = resp
+            .json()
+            .await
             .map_err(|e| format!("Ollama parse json failed: {}", e))?;
-        if let Some(content) = v.get("message").and_then(|m| m.get("content")).and_then(|c| c.as_str()) {
+        if let Some(content) = v
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_str())
+        {
             return Ok(content.to_string());
         }
         return Ok(format_ai_error("无法解析 Ollama 响应"));
@@ -713,7 +675,8 @@ pub async fn send_message_to_custom_ai(
         adapter_type,
         custom_headers,
         db_manager,
-    ).await?;
+    )
+    .await?;
 
     let chat_req = ChatRequest::new(vec![ChatMessage::user(message)]);
     println!("[Custom AI] Executing chat request...");
@@ -729,6 +692,6 @@ pub async fn send_message_to_custom_ai(
     println!("[Custom AI] Chat request successful, processing response...");
     match chat_res.first_text() {
         Some(content) => Ok(content.to_string()),
-        None => Ok(format_ai_error("无法获取自定义AI响应内容"))
+        None => Ok(format_ai_error("无法获取自定义AI响应内容")),
     }
 }

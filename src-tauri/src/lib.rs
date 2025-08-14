@@ -299,6 +299,7 @@ pub fn run() -> anyhow::Result<()> {
             api::settings::save_proxy_settings,
             api::settings::get_proxy_settings,
             api::settings::test_proxy_connection,
+            api::settings::debug_proxy_settings,
             // Export and backup APIs
             api::export::backup_database,
             api::export::restore_database,

@@ -87,19 +87,37 @@ pub async fn get_client_with_proxy(db_manager: &UnifiedDbManager) -> Result<Clie
     let mut client_builder = Client::builder().timeout(Duration::from_secs(30));
 
     if proxy_settings.enabled {
+        // Upgrade socks5 to socks5h to ensure DNS resolution happens via proxy
+        let protocol = if proxy_settings.protocol.eq_ignore_ascii_case("socks5") {
+            "socks5h"
+        } else {
+            proxy_settings.protocol.as_str()
+        };
+
         let proxy_url = format!(
             "{}://{}:{}",
-            proxy_settings.protocol, proxy_settings.host, proxy_settings.port
+            protocol, proxy_settings.host, proxy_settings.port
         );
 
-        let proxy = Proxy::all(&proxy_url).map_err(|e| format!("创建代理失败: {}", e))?;
+        println!("[HTTP Client] Using proxy: {}", proxy_url);
+
+        let proxy = Proxy::all(&proxy_url).map_err(|e| {
+            println!("[HTTP Client] Failed to create proxy: {}", e);
+            format!("创建代理失败: {}", e)
+        })?;
 
         client_builder = client_builder.proxy(proxy);
+        println!("[HTTP Client] Proxy configured successfully");
+    } else {
+        println!("[HTTP Client] Not using proxy");
     }
 
     let client = client_builder
         .build()
-        .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
+        .map_err(|e| {
+            println!("[HTTP Client] Failed to build client: {}", e);
+            format!("创建HTTP客户端失败: {}", e)
+        })?;
 
     Ok(client)
 }
@@ -126,14 +144,22 @@ pub async fn get_proxy_settings_internal(db_manager: &UnifiedDbManager) -> Resul
                 .unwrap_or("http") // 如果两者都不存在，则默认为 "http"
                 .to_string();
 
-            Ok(ProxySettings {
+            let settings = ProxySettings {
                 enabled: v.get("enabled").and_then(Value::as_bool).unwrap_or(false),
                 protocol,
                 host: v.get("host").and_then(Value::as_str).unwrap_or("").to_string(),
                 port: v.get("port").and_then(Value::as_u64).unwrap_or(0) as u16,
-            })
+            };
+            println!("[Proxy Settings] Loaded: enabled={}, protocol={}, host={}, port={}", 
+                settings.enabled, settings.protocol, settings.host, settings.port);
+            Ok(settings)
         }
-        Ok(None) => Ok(ProxySettings::default()),
+        Ok(None) => {
+            let default_settings = ProxySettings::default();
+            println!("[Proxy Settings] Using default settings: enabled={}, protocol={}, host={}, port={}", 
+                default_settings.enabled, default_settings.protocol, default_settings.host, default_settings.port);
+            Ok(default_settings)
+        }
         Err(e) => Err(e.to_string()),
     }
 }
@@ -166,22 +192,75 @@ pub async fn test_proxy_connection(
         return Err("代理未启用".to_string());
     }
 
+    println!("[Proxy Test] Testing proxy connection: {}://{}:{}", 
+        proxy_settings.protocol, proxy_settings.host, proxy_settings.port);
+
     // 先保存设置
     save_proxy_settings(db_manager.clone(), proxy_settings.clone()).await?;
 
     // 获取带有代理的客户端
     let client = get_client_with_proxy(&db_manager).await?;
 
-    // 测试连接
-    let response = client
-        .get("https://www.google.com")
-        .send()
-        .await
-        .map_err(|e| format!("连接测试失败: {}", e))?;
+    // 测试多个URL以确保代理工作正常
+    let test_urls = vec![
+        "https://httpbin.org/ip",
+        "https://www.google.com",
+        "https://api.openai.com/v1/models"
+    ];
 
-    if response.status().is_success() {
-        Ok("代理连接测试成功".to_string())
-    } else {
-        Err(format!("代理连接测试失败，状态码: {}", response.status()))
+    let mut results = Vec::new();
+    
+    for url in test_urls {
+        println!("[Proxy Test] Testing URL: {}", url);
+        match client.get(url).send().await {
+            Ok(response) => {
+                let status = response.status();
+                println!("[Proxy Test] {} -> Status: {}", url, status);
+                if status.is_success() {
+                    if url.contains("httpbin.org/ip") {
+                        // 尝试获取IP信息
+                        if let Ok(text) = response.text().await {
+                            results.push(format!("✓ {} (Status: {}) - Response: {}", url, status, text.trim()));
+                        } else {
+                            results.push(format!("✓ {} (Status: {})", url, status));
+                        }
+                    } else {
+                        results.push(format!("✓ {} (Status: {})", url, status));
+                    }
+                } else {
+                    results.push(format!("⚠ {} (Status: {})", url, status));
+                }
+            }
+            Err(e) => {
+                println!("[Proxy Test] {} -> Error: {}", url, e);
+                results.push(format!("✗ {} - Error: {}", url, e));
+            }
+        }
     }
+
+    let result_text = format!("代理测试结果:\n{}", results.join("\n"));
+    println!("[Proxy Test] Final result: {}", result_text);
+    Ok(result_text)
+}
+
+// 添加一个简单的代理调试命令
+#[tauri::command]
+pub async fn debug_proxy_settings(
+    db_manager: State<'_, UnifiedDbManager>,
+) -> Result<String, String> {
+    let proxy_settings = get_proxy_settings_internal(&db_manager).await?;
+    
+    let debug_info = format!(
+        "当前代理设置:\n- 启用: {}\n- 协议: {}\n- 主机: {}\n- 端口: {}\n- 代理URL: {}://{}:{}",
+        proxy_settings.enabled,
+        proxy_settings.protocol,
+        proxy_settings.host,
+        proxy_settings.port,
+        proxy_settings.protocol,
+        proxy_settings.host,
+        proxy_settings.port
+    );
+    
+    println!("[Proxy Debug] {}", debug_info);
+    Ok(debug_info)
 }

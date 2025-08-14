@@ -266,6 +266,11 @@ async fn handle_stream_request(
         }
     }
 
+    // 豆包特殊处理：使用直接HTTP请求而不是genai库
+    if provider_id == "doubao" {
+        return handle_doubao_stream(app, message, stream_id, provider_id, role_id, conversation_id, db_manager, should_cancel).await;
+    }
+
     let (client, model_name) = if provider_id.starts_with("custom_") {
         let id = provider_id.strip_prefix("custom_").unwrap();
         let cfg_json = db::get_setting(&conn, "custom_ai_models")
@@ -289,12 +294,11 @@ async fn handle_stream_request(
             .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
         let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
         let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
-        let mut api_key= String::new();
-        if provider_id.to_lowercase().contains("ollama") {
-            api_key = String::new();
-        }else{
-            api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
-        }
+        let api_key = if provider_id.to_lowercase().contains("ollama") {
+            String::new()
+        } else {
+            provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?
+        };
         let model_name = provider_config.default_model.clone();
 
         //如果provider_id是genai支持的库则使用Client::default();创建否则使用create_genai_client创建
@@ -1281,6 +1285,167 @@ pub async fn summarize_clipboard_entries(
         None,
         db_manager,
     ).await
+}
+
+// 豆包专用流式处理函数
+async fn handle_doubao_stream(
+    app: AppHandle,
+    message: String,
+    stream_id: String,
+    provider_id: String,
+    role_id: Option<String>,
+    conversation_id: Option<String>,
+    db_manager: UnifiedDbManager,
+    should_cancel: Arc<AtomicBool>,
+) -> Result<(), String> {
+    use futures_util::StreamExt;
+    use serde_json::json;
+    
+    println!("[Doubao Stream] Starting stream for ID: {}", stream_id);
+    
+    let conn = db_manager.get_conn().await.map_err(|e| e.to_string())?;
+    
+    // 获取豆包配置
+    let config_json = crate::db::get_setting(&conn, "ai_providers_config")
+        .await.map_err(|e| e.to_string())?.ok_or_else(|| "AI configuration not found".to_string())?;
+    let ai_config: SaveAiConfigRequest = serde_json::from_str(&config_json).map_err(|e| format!("Failed to parse AI config: {}", e))?;
+    let provider_config = ai_config.providers.get(&provider_id).ok_or_else(|| format!("Provider '{}' not found in config", provider_id))?;
+    let api_key = provider_config.api_key.clone().ok_or_else(|| format!("API key for '{}' not found", provider_id))?;
+    let model_name = provider_config.default_model.clone();
+
+    // 构建消息历史
+    let mut chat_messages = Vec::new();
+    
+    // 添加角色描述
+    if let Some(ref role_id) = role_id {
+        if let Ok(Some(role_json)) = crate::db::get_setting(&conn, "ai_roles").await {
+            if let Ok(roles) = serde_json::from_str::<Vec<crate::db::models::AIRole>>(&role_json) {
+                if let Some(role) = roles.iter().find(|r| r.id == *role_id) {
+                    chat_messages.push(json!({
+                        "role": "system",
+                        "content": role.description
+                    }));
+                }
+            }
+        }
+    }
+
+    // 添加对话历史
+    if let Some(ref conv_id) = conversation_id {
+        if let Ok(history) = crate::api::ai::conversations::list_ai_messages_internal(conv_id.clone(), db_manager.clone()).await {
+            for msg in history {
+                if msg.content != message {
+                    chat_messages.push(json!({
+                        "role": msg.role,
+                        "content": msg.content
+                    }));
+                }
+            }
+        }
+    }
+
+    // 添加当前用户消息
+    chat_messages.push(json!({
+        "role": "user",
+        "content": message
+    }));
+
+    // 构建请求体
+    let request_body = json!({
+        "model": model_name,
+        "messages": chat_messages,
+        "stream": true,
+        "temperature": 0.7,
+        "max_tokens": 2000
+    });
+
+    println!("[Doubao Stream] Request body: {}", serde_json::to_string_pretty(&request_body).unwrap_or_default());
+
+    // 使用统一的代理客户端
+    let client = crate::api::settings::get_client_with_proxy(&db_manager).await?;
+
+    // 发送流式请求
+    let response = client
+        .post("https://ark.cn-beijing.volces.com/api/v3/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .header("Accept", "text/event-stream")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    println!("[Doubao Stream] Request sent, status: {}", response.status());
+
+    let status = response.status();
+    if !status.is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        return Err(format!("HTTP error {}: {}", status, error_text));
+    }
+
+    // 处理流式响应
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+
+    while let Some(chunk_result) = stream.next().await {
+        if should_cancel.load(std::sync::atomic::Ordering::SeqCst) {
+            println!("[Doubao Stream] Stream {} cancelled.", stream_id);
+            break;
+        }
+
+        match chunk_result {
+            Ok(chunk) => {
+                let chunk_str = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&chunk_str);
+
+                // 处理SSE格式的数据
+                while let Some(line_end) = buffer.find('\n') {
+                    let line = buffer[..line_end].trim().to_string();
+                    buffer.drain(..line_end + 1);
+
+                    if line.is_empty() {
+                        continue;
+                    }
+
+                    if line.starts_with("data: ") {
+                        let data = &line[6..]; // 移除 "data: " 前缀
+                        
+                        if data == "[DONE]" {
+                            println!("[Doubao Stream] Received [DONE] signal");
+                            return Ok(());
+                        }
+
+                        // 解析JSON数据
+                        if let Ok(json_data) = serde_json::from_str::<serde_json::Value>(data) {
+                            if let Some(choices) = json_data.get("choices").and_then(|c| c.as_array()) {
+                                if let Some(choice) = choices.first() {
+                                    if let Some(delta) = choice.get("delta") {
+                                        if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
+                                            if !content.is_empty() {
+                                                println!("[Doubao Stream] Received chunk: {}", content);
+                                                app.emit(
+                                                    "ai-stream-chunk",
+                                                    json!({ "id": stream_id, "chunk": content, "done": false }),
+                                                ).ok();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                println!("[Doubao Stream] Stream error: {}", e);
+                app.emit("ai-stream-error", json!({ "id": stream_id, "error": e.to_string() })).ok();
+                break;
+            }
+        }
+    }
+
+    println!("[Doubao Stream] Stream completed for ID: {}", stream_id);
+    Ok(())
 }
 
 // 导出service模块的命令
