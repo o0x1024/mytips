@@ -409,6 +409,10 @@ pub fn run() -> anyhow::Result<()> {
             api::tips::list_latest_tip_summaries,
             api::tips::search_tips_for_selector,
             api::tips::get_tip_by_title,
+
+            api::export::export_as_pdf,
+            api::export::export_as_markdown,
+            api::export::export_as_html,
         ])
         .build(tauri::generate_context!())?
         .run(|_app_handle, event| {
