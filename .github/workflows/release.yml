@@ -59,6 +59,17 @@ jobs:
         echo "y" | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393"
         echo "NDK_HOME=${ANDROID_HOME}/ndk/25.1.8937393" >> $GITHUB_ENV
 
+    - name: Install OpenSSL for Android
+      if: matrix.platform == 'android'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pkg-config libssl-dev
+        # 设置 OpenSSL 环境变量供 Android NDK 使用
+        echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
+        echo "OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu" >> $GITHUB_ENV
+        echo "OPENSSL_INCLUDE_DIR=/usr/include" >> $GITHUB_ENV
+        echo "OPENSSL_STATIC=1" >> $GITHUB_ENV
+
     - name: Set up Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -240,8 +251,11 @@ jobs:
         OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
         OPENSSL_LIB_DIR: ${{ env.OPENSSL_LIB_DIR }}
         OPENSSL_INCLUDE_DIR: ${{ env.OPENSSL_INCLUDE_DIR }}
-        VCPKG_ROOT: ${{ env.VCPKG_ROOT }}
         OPENSSL_STATIC: ${{ env.OPENSSL_STATIC }}
+        # 为 Android NDK 编译器设置 OpenSSL 头文件路径
+        CFLAGS: -I/usr/include
+        CPPFLAGS: -I/usr/include
+        LD_LIBRARY_PATH: /usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
     - name: Upload Desktop artifact
       if: matrix.platform != 'android'
