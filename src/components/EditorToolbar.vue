@@ -1,145 +1,591 @@
 <template>
-  <div class="p-2 border-b border-base-300 bg-base-100 flex items-center justify-between text-base-content text-sm" ref="toolbarContainer">
-    <div class="flex items-center gap-2 flex-wrap" ref="toolbarLeft">
-      <!-- 模式切换 -->
-      <div class="flex items-center gap-1 rounded-md p-0.5">
-        <button
-          @click="emitCommand('set-edit-mode', 'editOnly')"
-          class="btn btn-xs btn-ghost"
-          :class="{ 'btn-active': isEditOnly }"
-          :title="t('noteEditor.editModeTooltip')"
-          data-priority="1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-        </button>
-        <button
-          @click="emitCommand('set-edit-mode', 'split')"
-          class="btn btn-xs btn-ghost"
-          :class="{ 'btn-active': isSplitMode }"
-          :title="t('noteEditor.splitModeTooltip')"
-          data-priority="1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="12" y1="3" x2="12" y2="21"></line><path d="M7 8h2M7 12h2M16 8h1M16 12h1M16 16h1M7 16h2"></path></svg>
-        </button>
-        <button
-          @click="emitCommand('set-edit-mode', 'preview')"
-          class="btn btn-xs btn-ghost"
-          :class="{ 'btn-active': isPreviewMode }"
-          :title="t('noteEditor.previewModeTooltip')"
-          data-priority="1"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        </button>
-      </div>
+  <div class="editor-toolbar bg-base-100 border-b border-base-300" ref="toolbarContainer" @click.self="closeDropdown">
+    <div class="toolbar-content">
+      <!-- 左侧编辑工具组 -->
+      <div class="toolbar-group">
+        <!-- 撤销/重做 -->
+        <div class="toolbar-section">
+          <button class="toolbar-btn" @click="emitCommand('undo')" :title="t('noteEditor.undoTooltip')"
+            aria-label="Undo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+              <path
+                d="M5.82843 6.99955L8.36396 9.53509L6.94975 10.9493L2 5.99955L6.94975 1.0498L8.36396 2.46402L5.82843 4.99955H13C17.4183 4.99955 21 8.58127 21 12.9996C21 17.4178 17.4183 20.9996 13 20.9996H4V18.9996H13C16.3137 18.9996 19 16.3133 19 12.9996C19 9.68584 16.3137 6.99955 13 6.99955H5.82843Z">
+              </path>
+            </svg> </button>
+          <button class="toolbar-btn" @click="emitCommand('redo')" :title="t('noteEditor.redoTooltip')"
+            aria-label="Redo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+              <path
+                d="M18.1716 6.99955H11C7.68629 6.99955 5 9.68584 5 12.9996C5 16.3133 7.68629 18.9996 11 18.9996H20V20.9996H11C6.58172 20.9996 3 17.4178 3 12.9996C3 8.58127 6.58172 4.99955 11 4.99955H18.1716L15.636 2.46402L17.0503 1.0498L22 5.99955L17.0503 10.9493L15.636 9.53509L18.1716 6.99955Z">
+              </path>
+            </svg> </button>
+        </div>
+        <div class="tiptap-separator" data-orientation="vertical" role="none"></div>
 
-      <div class="divider divider-horizontal mx-1"></div>
-      
-      <!-- Markdown编辑工具 -->
-      <div class="flex items-center gap-1 flex-wrap">
-        <!-- 加粗 -->
-        <button @click="emitCommand('insert-markdown', '**', '**')" class="btn btn-xs btn-ghost" :title="t('noteEditor.boldTooltip')" data-priority="2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path></svg>
-        </button>
-        <!-- 斜体 -->
-        <button @click="emitCommand('insert-markdown', '*', '*')" class="btn btn-xs btn-ghost" :title="t('noteEditor.italicTooltip')" data-priority="2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="4" x2="10" y2="4"></line><line x1="14" y1="20" x2="5" y2="20"></line><line x1="15" y1="4" x2="9" y2="20"></line></svg>
-        </button>
-        <!-- 删除线 -->
-        <button @click="emitCommand('insert-markdown', '~~', '~~')" class="btn btn-xs btn-ghost" :title="t('noteEditor.strikethroughTooltip')" data-priority="3">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4H9a3 3 0 0 0-2.83 4"></path><path d="M14 12a4 4 0 0 1 0 8H6"></path><line x1="4" y1="12" x2="20" y2="12"></line></svg>
-        </button>
-        <!-- 任务列表 -->
-        <button @click="emitCommand('insert-markdown', '- [ ] ')" class="btn btn-xs btn-ghost" :title="t('noteEditor.taskListTooltip')" data-priority="4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l-3-3 3-3"></path><path d="M15 18l3-3-3-3"></path><path d="M21 6H3"></path><path d="M21 12H3"></path><path d="M21 18H3"></path></svg>
-        </button>
+
+
+        <!-- 列表和代码 -->
+        <div class="toolbar-section">
+          <!-- 标题和文本 -->
+          <div class="toolbar-section">
+            <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'heading' }">
+              <button class="toolbar-btn dropdown-toggle" @click="toggleDropdown('heading', $event)"
+                :title="t('noteEditor.headingTooltip')" aria-label="Heading" ref="headingButton">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                  <path d="M17 11V4H19V21H17V13H7V21H5V4H7V11H17Z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- 列表 -->
+          <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'list' }">
+            <button class="toolbar-btn dropdown-toggle" @click="toggleDropdown('list', $event)"
+              :title="t('noteEditor.listTooltip') || 'Lists'" aria-label="List" ref="listButton">
+              <i class="ri-list-unordered"></i>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z"></path></svg>
+            </button>
+          </div>
+          <!-- 引用 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-blockquote')" :title="t('noteEditor.quoteTooltip')"
+            aria-label="Blockquote">
+            <i class="ri-double-quotes-l"></i>
+          </button>
+          <!-- 代码块 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-codeblock')" :title="t('noteEditor.codeBlockTooltip')"
+            aria-label="Code Block">
+            <i class="ri-code-block"></i>
+          </button>
+        </div>
+
+        <div class="tiptap-separator" data-orientation="vertical" role="none"></div>
+
+        <!-- 文本样式 -->
+        <div class="toolbar-section">
+          <!-- 粗体 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-bold')" :title="t('noteEditor.boldTooltip')"
+            aria-label="Bold">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path
+                d="M8 11H12.5C13.8807 11 15 9.88071 15 8.5C15 7.11929 13.8807 6 12.5 6H8V11ZM18 15.5C18 17.9853 15.9853 20 13.5 20H6V4H12.5C14.9853 4 17 6.01472 17 8.5C17 9.70431 16.5269 10.7981 15.7564 11.6058C17.0979 12.3847 18 13.837 18 15.5ZM8 13V18H13.5C14.8807 18 16 16.8807 16 15.5C16 14.1193 14.8807 13 13.5 13H8Z">
+              </path>
+            </svg> </button>
+          <!-- 斜体 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-italic')" :title="t('noteEditor.italicTooltip')"
+            aria-label="Italic">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M15 20H7V18H9.92661L12.0425 6H9V4H17V6H14.0734L11.9575 18H15V20Z"></path>
+            </svg>
+          </button>
+          <!-- 删除线 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-strike')"
+            :title="t('noteEditor.strikethroughTooltip')" aria-label="Strikethrough">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path
+                d="M17.1538 14C17.3846 14.5161 17.5 15.0893 17.5 15.7196C17.5 17.0625 16.9762 18.1116 15.9286 18.867C14.8809 19.6223 13.4335 20 11.5862 20C9.94674 20 8.32335 19.6185 6.71592 18.8555V16.6009C8.23538 17.4783 9.7908 17.917 11.3822 17.917C13.9333 17.917 15.2128 17.1846 15.2208 15.7196C15.2208 15.0939 15.0049 14.5598 14.5731 14.1173C14.5339 14.0772 14.4939 14.0381 14.4531 14H3V12H21V14H17.1538ZM13.076 11H7.62908C7.4566 10.8433 7.29616 10.6692 7.14776 10.4778C6.71592 9.92084 6.5 9.24559 6.5 8.45207C6.5 7.21602 6.96583 6.165 7.89749 5.299C8.82916 4.43299 10.2706 4 12.2219 4C13.6934 4 15.1009 4.32808 16.4444 4.98426V7.13591C15.2448 6.44921 13.9293 6.10587 12.4978 6.10587C10.0187 6.10587 8.77917 6.88793 8.77917 8.45207C8.77917 8.87172 8.99709 9.23796 9.43293 9.55079C9.86878 9.86362 10.4066 10.1135 11.0463 10.3004C11.6665 10.4816 12.3431 10.7148 13.076 11H13.076Z">
+              </path>
+            </svg> </button>
+          <!-- 代码 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-code')" :title="t('noteEditor.codeTooltip')"
+            aria-label="Code">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path
+                d="M24 12L18.3431 17.6569L16.9289 16.2426L21.1716 12L16.9289 7.75736L18.3431 6.34315L24 12ZM2.82843 12L7.07107 16.2426L5.65685 17.6569L0 12L5.65685 6.34315L7.07107 7.75736L2.82843 12ZM9.78845 21H7.66009L14.2116 3H16.3399L9.78845 21Z">
+              </path>
+            </svg>
+          </button>
+          <!-- 下划线 -->
+          <button class="toolbar-btn" @click="emitCommand('tiptap-underline')" :title="t('noteEditor.underlineTooltip')"
+            aria-label="Underline">
+            <i class="ri-underline"></i>
+          </button>
+        </div>
+
+        <!-- 高亮和颜色 -->
+        <div class="toolbar-section">
+          <button class="toolbar-btn" @click="emitCommand('toggle-highlight')" :title="t('noteEditor.highlightTooltip')"
+            aria-label="Highlight">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path
+                d="M5 18.89H6.41421L15.7279 9.57627L14.3137 8.16206L5 17.4758V18.89ZM21 20.89H3V16.6473L16.435 3.21231C16.8256 2.82179 17.4587 2.82179 17.8492 3.21231L20.6777 6.04074C21.0682 6.43126 21.0682 7.06443 20.6777 7.45495L9.24264 18.89H21V20.89ZM15.7279 6.74785L17.1421 8.16206L18.5563 6.74785L17.1421 5.33363L15.7279 6.74785Z">
+              </path>
+            </svg></button>
+        </div>
+
         <!-- 链接 -->
-        <button @click="emitCommand('insert-markdown', '[', `](${t('noteEditor.linkUrlPlaceholder')})`)" class="btn btn-xs btn-ghost" :title="t('noteEditor.linkTooltip')" data-priority="5">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-        </button>
-        <!-- 引用 -->
-        <button @click="emitCommand('insert-markdown', '> ')" class="btn btn-xs btn-ghost" :title="t('noteEditor.quoteTooltip')" data-priority="6">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"></path><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"></path></svg>
-        </button>
-        <!-- 代码块 -->
-        <button @click="emitCommand('insert-markdown', '```\\n', '\\n```')" class="btn btn-xs btn-ghost" :title="t('noteEditor.codeBlockTooltip')" data-priority="7">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-        </button>
-        <!-- 表格 -->
-        <button @click="emitCommand('insert-table')" class="btn btn-xs btn-ghost" :title="t('noteEditor.tableTooltip')" data-priority="9">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
-        </button>
+        <div class="toolbar-section">
+          <button class="toolbar-btn" @click="emitCommand('toggle-link')" :title="t('noteEditor.linkTooltip')"
+            aria-label="link">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path
+                d="M13.0607 8.11097L14.4749 9.52518C17.2086 12.2589 17.2086 16.691 14.4749 19.4247L14.1214 19.7782C11.3877 22.5119 6.95555 22.5119 4.22188 19.7782C1.48821 17.0446 1.48821 12.6124 4.22188 9.87874L5.6361 11.293C3.68348 13.2456 3.68348 16.4114 5.6361 18.364C7.58872 20.3166 10.7545 20.3166 12.7072 18.364L13.0607 18.0105C15.0133 16.0578 15.0133 12.892 13.0607 10.9394L11.6465 9.52518L13.0607 8.11097ZM19.7782 14.1214L18.364 12.7072C20.3166 10.7545 20.3166 7.58872 18.364 5.6361C16.4114 3.68348 13.2456 3.68348 11.293 5.6361L10.9394 5.98965C8.98678 7.94227 8.98678 11.1081 10.9394 13.0607L12.3536 14.4749L10.9394 15.8891L9.52518 14.4749C6.79151 11.7413 6.79151 7.30911 9.52518 4.57544L9.87874 4.22188C12.6124 1.48821 17.0446 1.48821 19.7782 4.22188C22.5119 6.95555 22.5119 11.3877 19.7782 14.1214Z">
+              </path>
+            </svg>
+          </button>
+        </div>
+
+        <div class="tiptap-separator" data-orientation="vertical" role="none"></div>
+
+
       </div>
 
-    </div>
+      <!-- 右侧工具组 -->
+      <div class="toolbar-group ml-auto">
+        <!-- 音频 -->
+        <div class="toolbar-section">
+          <button class="toolbar-btn" @click="emitCommand('toggle-audio-recording')"
+            :title="t('noteEditor.audioRecordingTooltip')" aria-label="Audio Recording">
+            <i class="ri-mic-line"></i>
+          </button>
+          <button class="toolbar-btn" @click="emitCommand('toggle-audio-player')"
+            :title="t('noteEditor.audioPlayerTooltip')" aria-label="Audio Player">
+            <i class="ri-music-2-line"></i>
+          </button>
+        </div>
 
-    <div class="flex items-center gap-2" ref="toolbarRight">
-      <!-- 目录 -->
-      <button @click="emitCommand('toggle-toc')" class="btn btn-xs btn-ghost" :class="{ 'btn-active': showToc }" :title="t('noteEditor.toggleTocTooltip')" data-priority="10">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-      </button>
+        <!-- 目录 -->
+        <div class="toolbar-section">
+          <button class="toolbar-btn" :class="{ active: showToc }" @click="emitCommand('toggle-toc')"
+            :title="t('noteEditor.toggleTocTooltip')" aria-label="Table of Contents">
+            <i class="ri-list-check"></i>
+          </button>
+        </div>
 
-      <!-- 音频录制 -->
-      <button @click="emitCommand('toggle-audio-recording')" class="btn btn-xs btn-ghost" :title="t('noteEditor.audioRecordingTooltip')" data-priority="11">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
-      </button>
+        <!-- 主题和显示 -->
+        <div class="toolbar-section">
+          <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'theme' }">
+            <button class="toolbar-btn dropdown-toggle" @click="toggleDropdown('theme', $event)"
+              :title="t('noteEditor.themeTooltip')" aria-label="Theme" ref="themeButton">
+              <i class="ri-palette-line"></i>
+              <i class="ri-arrow-down-s-line text-xs"></i>
+            </button>
+          </div>
 
-      <!-- 音频播放列表 -->
-      <button @click="emitCommand('toggle-audio-player')" class="btn btn-xs btn-ghost" :title="t('noteEditor.audioPlayerTooltip')" data-priority="12">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
-      </button>
-
-      <div class="divider divider-horizontal mx-1"></div>
-
-      <!-- 主题选择 -->
-      <div class="dropdown dropdown-end">
-        <label tabindex="0" class="btn btn-xs btn-ghost" :title="t('noteEditor.themeTooltip')">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
-        </label>
-        <ul tabindex="0" class="dropdown-content menu p-2 shadow bg-base-200 rounded-box w-52 z-20">
-          <li class="menu-title"><span>{{ t('noteEditor.codeTheme') }}</span></li>
-          <li><a @click="emitCommand('set-highlight-theme', 'default')" :class="{'active': currentHighlightTheme === 'default'}">Default</a></li>
-          <li><a @click="emitCommand('set-highlight-theme', 'okaidia')" :class="{'active': currentHighlightTheme === 'okaidia'}">Okaidia</a></li>
-          <li><a @click="emitCommand('set-highlight-theme', 'twilight')" :class="{'active': currentHighlightTheme === 'twilight'}">Twilight</a></li>
-          <li><a @click="emitCommand('set-highlight-theme', 'solarized-light')" :class="{'active': currentHighlightTheme === 'solarized-light'}">Solarized Light</a></li>
-          <li><a @click="emitCommand('set-highlight-theme', 'tomorrow-night')" :class="{'active': currentHighlightTheme === 'tomorrow-night'}">Tomorrow Night</a></li>
-        </ul>
+          <!-- 全屏 -->
+          <button class="toolbar-btn" @click="emitCommand('toggle-fullscreen')"
+            :title="isFullscreen ? t('noteEditor.exitFullscreenTooltip') : t('noteEditor.enterFullscreenTooltip')"
+            aria-label="Fullscreen">
+            <i v-if="!isFullscreen" class="ri-fullscreen-line"></i>
+            <i v-else class="ri-fullscreen-exit-line"></i>
+          </button>
+        </div>
       </div>
-
-      <!-- 全屏切换 -->
-      <button @click="emitCommand('toggle-fullscreen')" class="btn btn-xs btn-ghost" :title="isFullscreen ? t('noteEditor.exitFullscreenTooltip') : t('noteEditor.enterFullscreenTooltip')" data-priority="12">
-        <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 0-2-2h-3M3 16h3a2 2 0 0 0 2 2v3"></path></svg>
-      </button>
     </div>
   </div>
+
+  <!-- 使用 Teleport 将下拉菜单挪到 body，避免被父容器遮挡 -->
+  <Teleport to="body">
+    <div v-if="openDropdown === 'heading' && headingButtonRect" class="dropdown-menu dropdown-menu-teleport" :style="{
+      position: 'fixed',
+      top: (headingButtonRect.bottom + 4) + 'px',
+      left: headingButtonRect.left + 'px',
+      zIndex: 99999
+    }" @click.stop>
+      <button @click="emitCommand('tiptap-h1')" class="dropdown-item">
+        <i class="ri-h-1"></i> H1
+      </button>
+      <button @click="emitCommand('tiptap-h2')" class="dropdown-item">
+        <i class="ri-h-2"></i> H2
+      </button>
+      <button @click="emitCommand('tiptap-h3')" class="dropdown-item">
+        <i class="ri-h-3"></i> H3
+      </button>
+      <button @click="emitCommand('tiptap-paragraph')" class="dropdown-item">
+        <i class="ri-text"></i> Paragraph
+      </button>
+    </div>
+  </Teleport>
+
+  <!-- 列表下拉菜单 Teleport -->
+  <Teleport to="body">
+    <div v-if="openDropdown === 'list' && listButtonRect" class="dropdown-menu dropdown-menu-teleport" :style="{
+      position: 'fixed',
+      top: (listButtonRect.bottom + 4) + 'px',
+      left: listButtonRect.left + 'px',
+      zIndex: 99999
+    }" @click.stop>
+      <button @click="emitCommand('tiptap-bulletlist')" class="dropdown-item">
+        <i class="ri-list-unordered"></i> Bullet List
+      </button>
+      <button @click="emitCommand('tiptap-orderedlist')" class="dropdown-item">
+        <i class="ri-list-ordered"></i> Ordered List
+      </button>
+      <button @click="emitCommand('tiptap-tasklist')" class="dropdown-item">
+        <i class="ri-checkbox-line"></i> Task List
+      </button>
+    </div>
+  </Teleport>
+
+  <!-- 主题下拉菜单 Teleport -->
+  <Teleport to="body">
+    <div v-if="openDropdown === 'theme' && themeButtonRect" class="dropdown-menu dropdown-menu-teleport" :style="{
+      position: 'fixed',
+      top: (themeButtonRect.bottom + 4) + 'px',
+      left: themeButtonRect.left + 'px',
+      zIndex: 99999
+    }" @click.stop>
+      <div class="dropdown-label">{{ t('noteEditor.codeTheme') }}</div>
+      <button @click="emitCommand('set-highlight-theme', 'default')" class="dropdown-item"
+        :class="{ 'active': currentHighlightTheme === 'default' }">
+        <i class="ri-check-line" v-if="currentHighlightTheme === 'default'"></i>
+        Default
+      </button>
+      <button @click="emitCommand('set-highlight-theme', 'okaidia')" class="dropdown-item"
+        :class="{ 'active': currentHighlightTheme === 'okaidia' }">
+        <i class="ri-check-line" v-if="currentHighlightTheme === 'okaidia'"></i>
+        Okaidia
+      </button>
+      <button @click="emitCommand('set-highlight-theme', 'twilight')" class="dropdown-item"
+        :class="{ 'active': currentHighlightTheme === 'twilight' }">
+        <i class="ri-check-line" v-if="currentHighlightTheme === 'twilight'"></i>
+        Twilight
+      </button>
+      <button @click="emitCommand('set-highlight-theme', 'solarized-light')" class="dropdown-item"
+        :class="{ 'active': currentHighlightTheme === 'solarized-light' }">
+        <i class="ri-check-line" v-if="currentHighlightTheme === 'solarized-light'"></i>
+        Solarized Light
+      </button>
+      <button @click="emitCommand('set-highlight-theme', 'tomorrow-night')" class="dropdown-item"
+        :class="{ 'active': currentHighlightTheme === 'tomorrow-night' }">
+        <i class="ri-check-line" v-if="currentHighlightTheme === 'tomorrow-night'"></i>
+        Tomorrow Night
+      </button>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { defineProps, defineEmits } from 'vue';
+import { defineProps, defineEmits, ref, onMounted, onBeforeUnmount } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 
 defineProps({
   isFullscreen: Boolean,
-  isEditOnly: Boolean,
-  isPreviewMode: Boolean,
-  isSplitMode: Boolean,
   showToc: Boolean,
   currentHighlightTheme: String,
   currentMarkdownTheme: String,
+  isEditOnly: Boolean,
+  isPreviewMode: Boolean,
+  isSplitMode: Boolean,
 });
 
 const emit = defineEmits(['command']);
 
+// 下拉菜单状态
+const openDropdown = ref<string | null>(null);
+const headingButton = ref<HTMLElement | null>(null);
+const listButton = ref<HTMLElement | null>(null);
+const themeButton = ref<HTMLElement | null>(null);
+const headingButtonRect = ref<DOMRect | null>(null);
+const listButtonRect = ref<DOMRect | null>(null);
+const themeButtonRect = ref<DOMRect | null>(null);
+
 const emitCommand = (command: string, ...args: any[]) => {
   emit('command', command, ...args);
+  openDropdown.value = null; // 选择后关闭下拉菜单
 };
+
+const toggleDropdown = (dropdownName: string, event?: Event) => {
+  event?.stopPropagation();
+
+  if (dropdownName === 'heading' && headingButton.value) {
+    headingButtonRect.value = headingButton.value.getBoundingClientRect();
+  } else if (dropdownName === 'list' && listButton.value) {
+    listButtonRect.value = listButton.value.getBoundingClientRect();
+  } else if (dropdownName === 'theme' && themeButton.value) {
+    themeButtonRect.value = themeButton.value.getBoundingClientRect();
+  }
+
+  openDropdown.value = openDropdown.value === dropdownName ? null : dropdownName;
+};
+
+const closeDropdown = () => {
+  openDropdown.value = null;
+};
+
+// 点击外部关闭下拉菜单
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  if (!target.closest('.dropdown') && !target.closest('.dropdown-menu-teleport')) {
+    closeDropdown();
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
 </script>
 
-<style scoped>
-/* 可以在这里添加一些工具栏的特定样式 */
-.toolbar-item {
-  flex-shrink: 0;
+<style lang="scss" scoped>
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-base-100);
+  border-bottom: 1px solid var(--color-base-300);
+  min-height: 48px;
+  overflow-x: auto;
+  overflow-y: visible;
+  position: relative;
+  z-index: 9999;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-base-300);
+    border-radius: 2px;
+
+    &:hover {
+      background: var(--color-base-400);
+    }
+  }
 }
-</style> 
+
+.toolbar-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+  border-right: 1px solid var(--color-base-300);
+  position: static;
+  overflow: visible;
+
+  &:last-child {
+    border-right: none;
+  }
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--color-base-content);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  position: relative;
+
+  i {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: var(--color-base-200);
+    color: var(--color-primary);
+  }
+
+  &:active:not(:disabled) {
+    background-color: var(--color-base-300);
+    transform: scale(0.95);
+  }
+
+  &.active {
+    background-color: var(--color-primary);
+    color: var(--color-primary-content);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.dropdown-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+
+    .ri-arrow-down-s-line {
+      transition: transform 0.2s ease;
+    }
+  }
+
+  &:focus {
+    outline: none;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}
+
+.tiptap-button-dropdown-small {
+  width: .625rem;
+  height: .625rem;
+
+}
+
+// 下拉菜单
+.dropdown {
+  position: relative;
+  display: inline-block;
+  z-index: 999999;
+
+  .dropdown-toggle::after {
+    content: '';
+  }
+}
+
+.dropdown-menu {
+  position: fixed !important;
+  min-width: 200px;
+  background: var(--color-base-100, #ffffff) !important;
+  border: 1px solid var(--color-base-300, #e5e7eb);
+  border-radius: 6px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  z-index: 99999 !important;
+  margin-top: 4px;
+  padding: 0.5rem;
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  animation: dropdown-fade-in 0.15s ease-out;
+}
+
+@keyframes dropdown-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-left {
+  .dropdown-menu {
+    left: auto;
+    right: 0;
+  }
+}
+
+.dropdown-label {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-base-content);
+  opacity: 0.6;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--color-base-content);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  text-align: left;
+
+  i {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    font-size: 0.875rem;
+  }
+
+  &:hover {
+    background-color: var(--color-base-200);
+    color: var(--color-primary);
+  }
+
+  &.active {
+    background-color: var(--color-primary);
+    color: var(--color-primary-content);
+
+    i {
+      color: currentColor;
+    }
+  }
+
+  &:first-of-type {
+    margin-top: 0;
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .editor-toolbar {
+    padding: 0.5rem;
+  }
+
+  .toolbar-section {
+    padding: 0 0.125rem;
+    border-right-width: 0;
+  }
+
+  .toolbar-btn {
+    min-width: 28px;
+    height: 28px;
+    padding: 0 0.25rem;
+    font-size: 0.875rem;
+  }
+
+  .dropdown-menu {
+    min-width: 160px;
+  }
+}
+
+@media (max-width: 480px) {
+  .toolbar-section {
+    padding: 0;
+  }
+
+  .toolbar-btn {
+    min-width: 24px;
+    height: 24px;
+    font-size: 0.75rem;
+  }
+}
+
+.tiptap-separator {
+  height: 1.5rem;
+  width: 1px;
+  flex-shrink: 0;
+  background-color: var(--tt-link-border-color);
+  --tt-link-border-color: var(--tt-gray-light-a-200);
+}
+</style>

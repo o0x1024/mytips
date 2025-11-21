@@ -1,8 +1,8 @@
 git add .
-git commit -m "udpate:add ollam"
+git commit -m "udpate:tiptap"
 git push 
-git tag -d v1.1.7
-git push origin -d v1.1.7
+git tag -d v1.1.8
+git push origin -d v1.1.8
 
-git tag v1.1.7
-git push origin v1.1.7
+git tag v1.1.8
+git push origin v1.1.8

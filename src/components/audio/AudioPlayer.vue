@@ -2,7 +2,7 @@
   <div class="audio-player">
     <!-- 播放器面板 -->
     <div v-if="showPlayerPanel" 
-         class="player-panel fixed top-20 right-4 bg-base-100 rounded-lg shadow-lg border border-base-300 p-4 z-50"
+         class="player-panel fixed top-36 right-4 bg-base-100 rounded-lg shadow-lg border border-base-300 p-4 z-50"
          style="width: 350px;">
       
       <!-- 面板标题 -->

@@ -189,9 +189,16 @@ pub async fn test_libsql_connection(
 
     info!("Testing LibSQL connection to: {}", remote_url);
 
+    // 确保auth_token包含完整的认证头格式 (scheme + token)
+    let full_auth_token = match auth_token {
+        Some(token) if token.contains(' ') => token.to_string(),
+        Some(token) => format!("Bearer {}", token),
+        None => String::new(),
+    };
+
     let builder = Builder::new_remote(
         remote_url.to_string(),
-        auth_token.unwrap_or_default().to_string(),
+        full_auth_token,
     );
 
     match builder.build().await {

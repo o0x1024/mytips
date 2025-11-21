@@ -4,6 +4,7 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
 import './assets/main.css'
+import './assets/globals.scss'
 import { useUIStore, applyThemeEarly } from './stores/uiStore'
 import { initializeApp } from './services/appInitializer'
 import i18n from './i18n'
@@ -62,10 +63,10 @@ pinia.use(piniaPluginPersistedstate)
 const app = createApp(App)
 
 // 全局禁用浏览器默认右键菜单
-document.addEventListener('contextmenu', event => {
-  event.preventDefault()
-  return false
-}, { capture: true })
+// document.addEventListener('contextmenu', event => {
+//   event.preventDefault()
+//   return false
+// }, { capture: true })
 
 // 创建并挂载应用
 app.use(pinia)

@@ -2,7 +2,7 @@
   <div class="audio-recorder">
     <!-- 录制控制面板 -->
     <div v-if="showRecordingPanel" 
-         class="recording-panel fixed top-20 right-4 bg-base-100 rounded-lg shadow-lg border border-base-300 p-4 z-50"
+         class="recording-panel fixed top-36 right-4 bg-base-100 rounded-lg shadow-lg border border-base-300 p-4 z-50"
          style="width: 320px;">
       
       <!-- 面板标题 -->

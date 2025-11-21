@@ -360,8 +360,15 @@ async fn test_remote_connection(remote_url: &str, auth_token: &str) -> Result<()
     
     info!("Testing remote database connection to: {}", remote_url);
     
+    // 确保auth_token包含完整的认证头格式 (scheme + token)
+    let full_auth_token = if auth_token.contains(' ') {
+        auth_token.to_string()
+    } else {
+        format!("Bearer {}", auth_token)
+    };
+    
     // 尝试创建远程连接
-    let database = Builder::new_remote(remote_url.to_string(), auth_token.to_string())
+    let database = Builder::new_remote(remote_url.to_string(), full_auth_token)
         .build()
         .await
         .map_err(|e| format!("Failed to create remote connection: {}", e))?;

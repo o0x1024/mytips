@@ -3,7 +3,7 @@ use crate::db::{self, UnifiedDbManager};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tauri::{AppHandle, State};
-use crate::api::ai::models::{create_genai_client, CustomModelConfig};
+use crate::api::ai::rig_client::RigProvider;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiServiceInfo {
@@ -78,6 +78,16 @@ pub struct ModelConfig {
     pub name: String,
     pub provider: String,
     pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomModelConfig {
+    pub id: String,
+    pub name: String,
+    pub endpoint: String,
+    pub model_name: String,
+    pub adapter_type: String,
+    pub api_key: Option<String>,
 }
 
 // 测试AI连接
@@ -209,13 +219,13 @@ async fn test_anthropic_connection(
 
 async fn test_gemini_connection(
     request: TestConnectionRequest,
-    db_manager: State<'_, UnifiedDbManager>,
+    _db_manager: State<'_, UnifiedDbManager>,
 ) -> Result<TestConnectionResponse, String> {
     let api_key = request.api_key.ok_or_else(|| "API key is missing".to_string())?;
 
-    // 使用GenAI库测试连接
-    let _client = match create_genai_client(api_key.clone(), "gemini", &db_manager).await {
-        Ok(client) => client,
+    // 使用rig-core测试连接
+    let _client = match RigProvider::new("gemini", api_key.clone(), None) {
+        Ok(provider) => provider,
         Err(e) => {
             return Ok(TestConnectionResponse {
                 success: false,

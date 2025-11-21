@@ -141,10 +141,11 @@ function rehypeLocalImages(images: Record<string, string>) {
         const imageId = node.properties.src.replace('local://', '')
         if (images[imageId]) {
           node.properties.src = images[imageId]
+          console.log(`Image ${imageId} replaced with base64 data`)
         } else {
-          console.warn(`Image with id "${imageId}" not found in provided images map.`)
-          // 可选：设置一个占位符图片或移除该图片
-          node.properties.src = ''
+          // Don't set to empty string - leave the local:// URL as-is
+          // This will be replaced later by Tiptap's DOM replacement handlers or when images are loaded
+          console.warn(`Image with id "${imageId}" not found in images map yet, will be replaced later`)
         }
       }
     })

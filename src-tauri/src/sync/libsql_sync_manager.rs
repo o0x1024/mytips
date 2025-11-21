@@ -149,10 +149,17 @@ impl LibSqlSyncManager {
 
         let local_path_str = self.local_path.to_string_lossy().to_string();
 
+        // 确保auth_token包含完整的认证头格式 (scheme + token)
+        let full_auth_token = match &self.auth_token {
+            Some(token) if token.contains(' ') => token.clone(),
+            Some(token) => format!("Bearer {}", token),
+            None => String::new(),
+        };
+
         let mut builder = Builder::new_remote_replica(
             local_path_str,
             self.remote_url.clone(),
-            self.auth_token.clone().unwrap_or_default(),
+            full_auth_token,
         );
 
         // 配置同步间隔
@@ -177,9 +184,16 @@ impl LibSqlSyncManager {
     async fn create_remote_connection(&self) -> Result<Database> {
         info!("Creating remote database connection");
 
+        // 确保auth_token包含完整的认证头格式 (scheme + token)
+        let full_auth_token = match &self.auth_token {
+            Some(token) if token.contains(' ') => token.clone(),
+            Some(token) => format!("Bearer {}", token),
+            None => String::new(),
+        };
+
         let db = Builder::new_remote(
             self.remote_url.clone(),
-            self.auth_token.clone().unwrap_or_default(),
+            full_auth_token,
         )
         .build()
         .await

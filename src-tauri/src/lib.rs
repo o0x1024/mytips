@@ -244,7 +244,6 @@ pub fn run() -> anyhow::Result<()> {
             send_ai_message_stream,
             send_ai_message_with_images,
             send_ai_message_with_images_stream,
-            migrate_config_to_database,
             // AI conversation database APIs
             list_ai_conversations,
             list_ai_messages,
@@ -357,11 +356,8 @@ pub fn run() -> anyhow::Result<()> {
             api::encryption::encrypt_data_cmd,
             api::encryption::clear_session_unlocks,
             // Custom model config APIs
-            list_legacy_custom_model_configs,
             add_custom_model_config,
             update_custom_model_config,
-            delete_legacy_custom_model_config,
-            test_custom_model_connection,
             summarize_clipboard_entries,
             // Database path management APIs
             api::database::get_current_database_path,

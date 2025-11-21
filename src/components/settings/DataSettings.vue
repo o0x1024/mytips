@@ -537,6 +537,17 @@
                   <div class="text-sm text-warning">
                     <strong>{{ $t('dataSettings.jwtManagement.expiresAt') }}:</strong> {{ jwtResult.expires_at }}
                   </div>
+                   <div class="text-sm">
+                    <strong>
+                      打开JWT保存目录,运行命令: sqld --http-listen-addr 0.0.0.0:8888 --db-path=mytips.sqld  --auth-jwt-key-file jwt_key.base64 </br>
+                      
+                    </strong> 
+                  </div>
+                   <div class="text-sm">
+                    <strong>
+                      然后复制完全访问令牌或只读访问令牌填入到认证令牌中，远程数据库URL填入http://127.0.0.1:8888，点击测试并保存配置.没问题后切换数据库模式为远程模式
+                    </strong> 
+                  </div>
                 </div>
               </div>
             </div>

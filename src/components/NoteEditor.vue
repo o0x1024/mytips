@@ -44,19 +44,20 @@
 
         <!-- 主要编辑区域容器 -->
         <div class="flex-1 flex overflow-hidden relative">
-          <!-- Markdown 编辑器核心组件 -->
-          <MarkdownEditor
+          <!-- Tiptap 富文本编辑器 -->
+          <TiptapEditor
             :key="note.id"
             v-model="localNote.content"
             @update:modelValue="handleEditorModelUpdate"
-            :rendered-content="renderedContent"
-            :is-split-mode="isSplitMode"
-            :is-preview-mode="isPreviewMode"
-            ref="markdownEditor"
+            :note-id="note.id"
+            :images="localNote.images"
+            :placeholder="t('markdownEditor.placeholder')"
+            mode="editOnly"
+            ref="tiptapEditor"
             @contextmenu="handleContextMenu"
             @paste="handlePaste"
+            @add-image="handleImageAdded"
             @keydown="handleKeyDown"
-            @preview-scroll="handlePreviewScroll"
           />
 
 
@@ -263,7 +264,7 @@ import EncryptedContent from './EncryptedContent.vue'
 import EditorToolbar from './EditorToolbar.vue'
 import EditorTopBar from './EditorTopBar.vue'
 import EditorFooter from './EditorFooter.vue'
-import MarkdownEditor from './MarkdownEditor.vue'
+import TiptapEditor from './TiptapEditor.vue'
 import AIExplanationDialog from './dialogs/AIExplanationDialog.vue'
 import AITranslationDialog from './dialogs/AITranslationDialog.vue'
 import TipInputDialog from './dialogs/TipInputDialog.vue'
@@ -280,7 +281,7 @@ import 'prismjs/plugins/line-numbers/prism-line-numbers.css'
 import 'prismjs/plugins/line-numbers/prism-line-numbers'
 import 'prismjs/plugins/toolbar/prism-toolbar.css'
 import 'prismjs/plugins/toolbar/prism-toolbar'
-import 'prismjs/plugins/copy-to-clipboard/prism-copy-to-clipboard'
+// import 'prismjs/plugins/copy-to-clipboard/prism-copy-to-clipboard' // 禁用复制按钮插件以避免不必要的插入
 // Import prism languages
 import 'prismjs/components/prism-markup-templating'
 import 'prismjs/components/prism-markup'
@@ -297,7 +298,7 @@ import 'prismjs/components/prism-yaml'
 import 'prismjs/components/prism-typescript'
 import 'prismjs/components/prism-php'
 import 'prismjs/components/prism-csharp'
-import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch';
+// import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'; // 不再使用，改用简单的快照式撤销/重做
 import { LRUCache } from 'lru-cache'
 import { useTipTemplateStore } from '../stores/tipTemplateStore'
 import { useLocalStorageStore } from '../stores/localStorageStore'
@@ -372,10 +373,11 @@ const encryptionStore = useEncryptionStore()
 // 状态
 const localNote = ref<Note>({ ...props.note })
 const isPreviewMode = ref(savedMode === 'preview')
-const markdownEditor = ref<{ editorTextarea: HTMLTextAreaElement | null; previewDiv: HTMLDivElement | null; } | null>(null);
-// WYSIWYG editor removed
-const editorTextarea = computed(() => markdownEditor.value?.editorTextarea || null);
-const previewDiv = computed(() => markdownEditor.value?.previewDiv || null);
+const tiptapEditor = ref<any>(null);
+// const noteImages = ref<Record<string, string>>({});
+// Legacy editor references (deprecated, kept for compatibility)
+const editorTextarea = computed(() => null as HTMLTextAreaElement | null);
+const previewDiv = computed(() => null as HTMLDivElement | null);
 const autoSaveTimeout = ref<number | null>(null)
 const renderTimeout = ref<number | null>(null)
 const renderedContent = ref('')
@@ -403,13 +405,9 @@ const imageLoadCache = ref(new LRUCache<string, Record<string, string>>({ max: 5
 const imageLoadTimeouts = ref<Map<string, number>>(new Map())
 
 const hasSelectedText = computed(() => {
-  const textarea = editorTextarea.value
-  if (!textarea) return false
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  return start !== end
+  if (!tiptapEditor.value) return false
+  const selectedText = tiptapEditor.value.getSelectedText?.()
+  return selectedText && selectedText.length > 0
 })
 const showExplanationBox = ref(false)
 const explanationContent = ref('') // 渲染后的HTML内容
@@ -455,9 +453,8 @@ const resizeObserver = ref<ResizeObserver | null>(null)
 let globalUnlisten: (() => void) | null = null; // 全局事件监听器引用
 
 // 优化撤销/重做堆栈
-const dmp = new DiffMatchPatch()
-const undoStack = ref<any[]>([])
-const redoStack = ref<any[]>([])
+const undoStack = ref<string[]>([])
+const redoStack = ref<string[]>([])
 const lastSavedContent = ref<string>('')
 
 // 为自动保存机制引入独立的状态
@@ -735,7 +732,7 @@ function loadImagesAsync(noteId: string) {
   nextTick(async () => {
     const images = await loadNoteImages(noteId, 3000) // 3秒超时
 
-    // 检查当前笔记是否还是目标笔记（避免切换过快导致的状态错乱）
+    // 检查当前笔记是否還是目标笔记（避免切换过快导致的状态错乱）
     if (localNote.value.id === noteId && images && Object.keys(images).length > 0) {
       localNote.value.images = images
       console.log(`异步加载完成，笔记(${noteId})图片已更新到本地状态，触发重新渲染`)
@@ -771,12 +768,28 @@ watch(() => props.note, async (newNote, oldNote) => {
     if (renderTimeout.value) {
         clearTimeout(renderTimeout.value);
     }
-    // 立即渲染
+    
+    // 如果笔记有ID但没有images数据，先同步/异步加载图片（不阻塞界面太久）
+    if (newNote.id && !newNote.images) {
+      // 尝试快速同步加载缓存的图片，否则异步加载
+      const cachedImages = await loadNoteImages(newNote.id, 500) // 500ms快速超时用于缓存
+      if (cachedImages && Object.keys(cachedImages).length > 0) {
+        // 缓存中有图片，立即使用
+        localNote.value.images = cachedImages
+        console.log(`使用缓存的笔记(${newNote.id})图片进行渲染`)
+      } else {
+        // 缓存中没有，设置为空对象，然后异步加载
+        localNote.value.images = {}
+        console.log(`缓存无图片或超时，笔记(${newNote.id})将异步加载图片`)
+      }
+    }
+    
+    // 现在用当前的图片数据进行渲染（可能是缓存的，也可能是空对象）
     render();
 
-    // 如果笔记有ID但没有images数据，异步加载图片（不阻塞界面）
-    if (newNote.id && !newNote.images) {
-      // 立即显示笔记内容，图片稍后异步加载
+    // 如果图片仍然是空的，继续异步加载完整的图片
+    if (newNote.id && (!localNote.value.images || Object.keys(localNote.value.images).length === 0)) {
+      // 在后台继续加载更多/全部图片，完成后会触发第二次渲染
       loadImagesAsync(newNote.id)
     }
 
@@ -939,14 +952,8 @@ function handleKeyDown(event: KeyboardEvent) {
   setTimeout(() => {
     const currentContent = localNote.value.content
     if (currentContent !== lastSavedContent.value) {
-      // 计算差异并添加到撤销堆栈
-      const diff = dmp.diff_main(lastSavedContent.value, currentContent, true);
-      if (diff.length > 2) {
-        dmp.diff_cleanupSemantic(diff);
-      }
-      const patch = dmp.patch_make(lastSavedContent.value, diff);
-      
-      undoStack.value.push(patch)
+      // 保存当前内容状态为一个快照，方便撤销恢复
+      undoStack.value.push(lastSavedContent.value)
       // 清空重做堆栈
       redoStack.value = []
       // 更新最后保存的内容
@@ -962,28 +969,20 @@ function handleKeyDown(event: KeyboardEvent) {
 
 // 撤销函数
 function undo() {
-  if (undoStack.value.length === 0) return
+  if (undoStack.value.length === 0) {
+    console.warn("没有可撤销的操作")
+    return
+  }
 
-  const patch = undoStack.value.pop()
+  // 保存当前内容到重做堆栈
+  const currentContent = localNote.value.content
+  redoStack.value.push(currentContent)
 
-  // 应用补丁回到上一个状态
-  const [previousContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
-
-  // 检查应用是否成功
-  if (results.every((r: boolean) => r)) {
-    // 将当前内容（撤销前）的逆向补丁保存到重做堆栈
-    const redoDiff = dmp.diff_main(previousContent, lastSavedContent.value, true)
-    const redoPatch = dmp.patch_make(previousContent, redoDiff)
-    redoStack.value.push(redoPatch as any)
-
-    // 更新编辑器内容
+  // 恢复到上一个保存的状态
+  const previousContent = undoStack.value.pop()
+  if (previousContent !== undefined) {
     localNote.value.content = previousContent
     lastSavedContent.value = previousContent
-  } else {
-    console.error("撤销失败: 补丁应用不成功", results)
-    // 如果失败，将补丁放回栈中
-    undoStack.value.push(patch)
-    return
   }
 
   // 触发自动保存，但使用延迟，避免频繁保存
@@ -997,27 +996,20 @@ function undo() {
 
 // 重做函数
 function redo() {
-  if (redoStack.value.length === 0) return
+  if (redoStack.value.length === 0) {
+    console.warn("没有可重做的操作")
+    return
+  }
 
-  // 获取下一个状态的补丁
-  const patch = redoStack.value.pop()
+  // 保存当前内容到撤销堆栈
+  const currentContent = localNote.value.content
+  undoStack.value.push(currentContent)
 
-  // 应用补丁
-  const [nextContent, results] = dmp.patch_apply(patch, lastSavedContent.value)
-  
-  if (results.every((r: boolean) => r)) {
-    // 将当前内容（重做前）的逆向补丁保存到撤销堆栈
-    const undoDiff = dmp.diff_main(nextContent, lastSavedContent.value, true)
-    const undoPatch = dmp.patch_make(nextContent, undoDiff)
-    undoStack.value.push(undoPatch as any)
-
-    // 更新编辑器内容
+  // 恢复到下一个状态
+  const nextContent = redoStack.value.pop()
+  if (nextContent !== undefined) {
     localNote.value.content = nextContent
     lastSavedContent.value = nextContent
-  } else {
-    console.error("重做失败: 补丁应用不成功", results)
-    redoStack.value.push(patch)
-    return
   }
 
   // 触发自动保存，但使用延迟，避免频繁保存
@@ -1135,45 +1127,19 @@ function saveNoteToList() {
   lastEmittedContent.value = localNote.value.content
 }
 
-function insertMarkdown(prefix: string, suffix: string = '') {
-  if (isPreviewMode.value) return
-
-  const textarea = editorTextarea.value
-  if (!textarea) return
-
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const selectedText = localNote.value.content.substring(start, end)
-
-  // 插入markdown标记
-  const newText =
-    localNote.value.content.substring(0, start) +
-    prefix + selectedText + suffix +
-    localNote.value.content.substring(end)
-
-  localNote.value.content = newText
-
-  // 更新后重新设置光标位置
-  nextTick(() => {
-    textarea.focus()
-    if (selectedText.length > 0) {
-      textarea.selectionStart = start + prefix.length
-      textarea.selectionEnd = end + prefix.length
-    } else {
-      textarea.selectionStart = textarea.selectionEnd = start + prefix.length
-    }
-  })
-
-  autoSave()
+function insertMarkdown(_prefix: string, _suffix: string = '') {
+  // No longer needed with Tiptap - use toolbar commands instead
+  console.warn('insertMarkdown is deprecated, use Tiptap toolbar commands')
+  return
 }
 
 function handleContextMenu(event: MouseEvent) {
   const textarea = editorTextarea.value
   if (!textarea) return
 
-  // 防止默认菜单显示
-  event.preventDefault()
-  event.stopPropagation() // 阻止事件冒泡
+  // 防止默认菜单显示 - 已注释，允许使用系统右键菜单
+  // event.preventDefault()
+  // event.stopPropagation() // 阻止事件冒泡
 
 
   // 获取鼠标点击相对于编辑器的位置
@@ -1477,22 +1443,17 @@ function setEditMode(mode: string) {
   })
 }
 
-// 添加copySelectedText函数
+// 复制选中的文本
 async function copySelectedText() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
-  // 确保有选择的文本
-  if (start !== end) {
-    const selectedText = localNote.value.content.substring(start, end)
+  const selectedText = tiptapEditor.value.getSelectedText?.()
+  if (selectedText && selectedText.length > 0) {
     try {
       await navigator.clipboard.writeText(selectedText)
       showContextMenu.value = false
     } catch (error) {
-      console.error('复制到剪贴板失败:', error)
+      console.error('Copy to clipboard failed:', error)
     }
   }
 
@@ -1504,6 +1465,17 @@ function setupDocumentClickListener() {
   document.addEventListener('click', () => {
     showContextMenu.value = false
   })
+}
+
+// 处理图片添加事件
+function handleImageAdded({ id, data }: { id: string, data: string }) {
+  if (!localNote.value.images) {
+    localNote.value.images = {}
+  }
+  localNote.value.images[id] = data
+  
+  // 触发自动保存以持久化图片关联（虽然图片本身已保存，但localNote状态需要更新）
+  autoSave()
 }
 
 // 修改handlePaste函数
@@ -1742,30 +1714,16 @@ async function copyExplanation() {
 
 // 将解释内容插入到笔记中
 function insertExplanationToContent() {
-  // 在光标位置或文档末尾插入解释内容
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
   // 使用原始内容并移除think标签
   const cleanText = explanationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
   
-  const prefix = '\n\n> 💡 解释：\n\n'
-  const content = prefix + cleanText
+  const content = '\n\n> 💡 解释：\n\n' + cleanText
 
-  const end = textarea.selectionEnd
-
-  // 插入内容
-  localNote.value.content =
-    localNote.value.content.substring(0, end) +
-    content +
-    localNote.value.content.substring(end)
-
-  // 更新光标位置
-  nextTick(() => {
-    textarea.selectionStart = end + content.length
-    textarea.selectionEnd = end + content.length
-    textarea.focus()
-  })
+  // 插入内容到编辑器
+  tiptapEditor.value.insertAtCursor?.(content)
+  tiptapEditor.value.focus?.()
 
   // 保存笔记
   autoSave()
@@ -1833,7 +1791,7 @@ function setupCodeCopyFeature() {
         const originalHTML = copyButton.innerHTML
         copyButton.innerHTML = `
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            <path d="M5 13l4 4L19 7" />
           </svg>
         `
         copyButton.classList.add('text-success')
@@ -2079,22 +2037,29 @@ function toggleToc() {
 }
 
 function generateToc() {
-  const preview = previewDiv.value;
-  if (!preview) return;
+  // For TiptapEditor, get headings from the editor's DOM
+  const editorElement = tiptapEditor.value?.$el?.querySelector('.ProseMirror') || 
+                        tiptapEditor.value?.$el?.querySelector('.tiptap');
   
-  const headings = preview.querySelectorAll('h1, h2, h3, h4, h5, h6')
+  if (!editorElement) {
+    console.warn('Cannot find editor element for TOC generation');
+    return;
+  }
+  
+  const headings = editorElement.querySelectorAll('h1, h2, h3, h4, h5, h6')
   const newToc: { id: string; level: number; text: string }[] = []
 
-  headings.forEach((heading, index) => {
+  headings.forEach((heading: Element, index: number) => {
     const level = parseInt(heading.tagName.charAt(1))
     const text = (heading.textContent || '').trim()
     if (!text) return
 
-    // 优先使用渲染流程生成的 id（由 rehype-slug 提供）
-    let id = heading.id
+    // Generate or use existing id
+    let id = (heading as HTMLElement).id
     if (!id) {
-      id = `heading-${index}`
-      heading.id = id
+      // Create a URL-friendly id from the text
+      id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${index}`;
+      (heading as HTMLElement).id = id
     }
 
     newToc.push({ id, level, text })
@@ -2116,32 +2081,44 @@ function handleEditorModelUpdate(val: string) {
   // 使用更短的延时确保顺滑
   renderTimeout.value = setTimeout(() => {
     render()
+    // Update TOC if visible
+    if (showToc.value) {
+      nextTick(() => {
+        generateToc()
+      })
+    }
   }, 50) as unknown as number
 }
 
 
 function scrollToHeading(headingId: string) {
-  const preview = previewDiv.value;
-  const heading = preview?.querySelector(`#${headingId}`)
-  if (heading && preview) {
-    // 兼容有吸顶工具栏/偏移
-    const containerRect = preview.getBoundingClientRect()
-    const headingRect = heading.getBoundingClientRect()
-    const safeOffset = 12
-    const scrollTop = preview.scrollTop + headingRect.top - containerRect.top - safeOffset
+  // For TiptapEditor, scroll within the editor container
+  const editorElement = tiptapEditor.value?.$el?.querySelector('.ProseMirror') || 
+                        tiptapEditor.value?.$el?.querySelector('.tiptap');
+  const editorContainer = tiptapEditor.value?.$el?.querySelector('[class*="overflow"]');
+  
+  if (!editorElement) return;
+  
+  const heading = editorElement.querySelector(`#${CSS.escape(headingId)}`);
+  if (heading && editorContainer) {
+    // Calculate scroll position
+    const containerRect = editorContainer.getBoundingClientRect();
+    const headingRect = heading.getBoundingClientRect();
+    const safeOffset = 12;
+    const scrollTop = editorContainer.scrollTop + headingRect.top - containerRect.top - safeOffset;
 
-    // 平滑滚动并高亮
-    preview.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' })
-    activeHeadingId.value = headingId
+    // Smooth scroll and highlight
+    editorContainer.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
+    activeHeadingId.value = headingId;
 
-    // 若 heading 在可视区域之外，先确保其渲染完成后再尝试一次
+    // Ensure accurate positioning after render
     requestAnimationFrame(() => {
-      const headingRect2 = heading.getBoundingClientRect()
-      const newScrollTop = preview.scrollTop + headingRect2.top - containerRect.top - safeOffset
-      if (Math.abs(newScrollTop - preview.scrollTop) > 4) {
-        preview.scrollTo({ top: Math.max(0, newScrollTop), behavior: 'smooth' })
+      const headingRect2 = heading.getBoundingClientRect();
+      const newScrollTop = editorContainer.scrollTop + headingRect2.top - containerRect.top - safeOffset;
+      if (Math.abs(newScrollTop - editorContainer.scrollTop) > 4) {
+        editorContainer.scrollTo({ top: Math.max(0, newScrollTop), behavior: 'smooth' });
       }
-    })
+    });
   }
 }
 
@@ -2191,37 +2168,9 @@ function stopDrag() {
   document.removeEventListener('touchend', stopDrag)
 }
 
-const isScrollingEditor = ref(false)
-const isScrollingPreview = ref(false)
-
-// 处理预览区滚动事件
-function handlePreviewScroll(event: Event) {
-  if (isScrollingEditor.value) return;
-
-  // 标记正在从预览区滚动
-  isScrollingPreview.value = true;
-
-  // 获取滚动元素
-  const preview = event.target as HTMLDivElement;
-  if (!preview || !editorTextarea.value || !isSplitMode.value) return;
-
-  // 计算滚动比例
-  const previewScrollRatio = preview.scrollTop / (preview.scrollHeight - preview.clientHeight);
-
-  // 设置编辑器的滚动位置
-  const editorScrollable = editorTextarea.value.scrollHeight - editorTextarea.value.clientHeight;
-  editorTextarea.value.scrollTop = previewScrollRatio * editorScrollable;
-
-  // 更新目录中的活跃标题
-  if (showToc.value) {
-    updateActiveHeading()
-  }
-
-  // 重置标记，延迟执行防止抖动
-  setTimeout(() => {
-    isScrollingPreview.value = false;
-  }, 100);
-}
+// Legacy scroll sync (deprecated with Tiptap)
+// const _isScrollingEditor = ref(false)
+// const _isScrollingPreview = ref(false)
 
 // 监听内容变化时重新计算滚动同步
 watch(() => localNote.value.content, (newValue, oldValue) => {
@@ -2513,38 +2462,27 @@ async function copyTranslation() {
 
 // 将翻译结果插入到笔记内容
 function insertTranslationToContent() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
   // 使用原始内容并移除think标签
   const cleanText = translationRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
 
-  // 获取当前光标位置
-  const cursorPos = textarea.selectionEnd
-
   // 插入翻译内容
-  const newContent =
-    localNote.value.content.substring(0, cursorPos) +
-    '\n\n' + cleanText + '\n\n' +
-    localNote.value.content.substring(cursorPos)
+  const content = '\n\n' + cleanText + '\n\n'
+  tiptapEditor.value.insertAtCursor?.(content)
 
-  // 更新内容
-  localNote.value.content = newContent
-
-  // 设置新的光标位置
   nextTick(() => {
-    textarea.focus()
-    textarea.selectionStart = textarea.selectionEnd = cursorPos + cleanText.length + 4 // +4 for the newlines
+    tiptapEditor.value.focus?.()
   })
+
+  // 保存
+  autoSave()
 
   // 关闭翻译框
   showTranslationBox.value = false
-
-  // 触发自动保存
-  autoSave()
 }
 
-// TIP对话框相关函数
+// TIP 对话框相关函数
 function closeTipDialog() {
   showTipDialog.value = false
   tipPrompt.value = ''
@@ -2705,6 +2643,7 @@ function onEditorBlur(event: FocusEvent) {
 
 // 全屏模式相关方法
 function toggleFullscreen() {
+  console.log('toggleFullscreen called, current state:', isFullscreen.value)
   if (isFullscreen.value) {
     exitFullscreen()
   } else {
@@ -2715,18 +2654,35 @@ function toggleFullscreen() {
 async function enterFullscreen() {
   try {
     const container = fullscreenContainer.value
-    if (!container) return
-
-    // 使用浏览器原生全屏API
-    if (container.requestFullscreen) {
-      await container.requestFullscreen()
-    } else if ((container as any).webkitRequestFullscreen) {
-      await (container as any).webkitRequestFullscreen()
-    } else if ((container as any).msRequestFullscreen) {
-      await (container as any).msRequestFullscreen()
+    console.log('enterFullscreen: container ref:', container)
+    
+    // 禁用body滚动，防止全屏时出现滚动条
+    document.body.style.overflow = 'hidden'
+    
+    if (container) {
+      // 使用浏览器原生全屏API
+      if (container.requestFullscreen) {
+        await container.requestFullscreen()
+      } else if ((container as any).webkitRequestFullscreen) {
+        await (container as any).webkitRequestFullscreen()
+      } else if ((container as any).msRequestFullscreen) {
+        await (container as any).msRequestFullscreen()
+      } else {
+        console.warn('浏览器不支持全屏API')
+        // 如果浏览器不支持全屏API，使用CSS全屏
+        isFullscreen.value = true
+        console.log('已进入CSS全屏模式')
+      }
+    } else {
+      console.warn('fullscreenContainer ref 未初始化，使用CSS全屏')
+      // 如果ref未初始化，直接使用CSS全屏
+      isFullscreen.value = true
     }
     
-    isFullscreen.value = true
+    // 如果还没有设置，则设置为true
+    if (!isFullscreen.value) {
+      isFullscreen.value = true
+    }
     
     // 全屏后默认设置为分屏模式以获得最佳体验
     if (!isSplitMode.value && !isEditOnly.value && !isPreviewMode.value) {
@@ -2738,23 +2694,32 @@ async function enterFullscreen() {
     console.error('进入全屏失败:', error)
     // 如果原生全屏失败，使用CSS全屏
     isFullscreen.value = true
+    console.log('使用CSS全屏作为备选方案')
   }
 }
 
 async function exitFullscreen() {
   try {
+    console.log('exitFullscreen called')
     if (document.fullscreenElement) {
       await document.exitFullscreen()
     } else if ((document as any).webkitFullscreenElement) {
       await (document as any).webkitExitFullscreen()
     } else if ((document as any).msFullscreenElement) {
       await (document as any).msExitFullscreen()
+    } else {
+      console.log('未检测到浏览器全屏元素，直接退出CSS全屏')
     }
+    
+    // 恢复body滚动
+    document.body.style.overflow = ''
     
     isFullscreen.value = false
     console.log('已退出全屏模式')
   } catch (error) {
     console.error('退出全屏失败:', error)
+    // 恢复body滚动
+    document.body.style.overflow = ''
     // 如果原生退出全屏失败，直接设置状态
     isFullscreen.value = false
   }
@@ -2770,6 +2735,8 @@ function handleFullscreenChange() {
   
   if (!isCurrentlyFullscreen && isFullscreen.value) {
     isFullscreen.value = false
+    // 恢复body滚动
+    document.body.style.overflow = ''
     console.log('检测到退出全屏')
   }
 }
@@ -2928,11 +2895,62 @@ watch(renderedContent, () => {
 // 处理来自工具栏的命令
 function handleToolbarCommand(command: string, ...args: any[]) {
   switch (command) {
-    case 'insert-markdown':
-      insertMarkdown(args[0], args[1])
+    case 'undo':
+      tiptapEditor.value?.execToolbar('undo')
       break
-    case 'insert-table':
-      insertTable()
+    case 'redo':
+      tiptapEditor.value?.execToolbar('redo')
+      break
+    case 'tiptap-bold':
+      tiptapEditor.value?.execToolbar('bold')
+      break
+    case 'tiptap-italic':
+      tiptapEditor.value?.execToolbar('italic')
+      break
+    case 'tiptap-strike':
+      tiptapEditor.value?.execToolbar('strike')
+      break
+    case 'tiptap-underline':
+      tiptapEditor.value?.execToolbar('underline')
+      break
+    case 'tiptap-code':
+      tiptapEditor.value?.execToolbar('code')
+      break
+    case 'toggle-highlight':
+      tiptapEditor.value?.execToolbar('toggleHighlight')
+      break
+    case 'toggle-link':
+      toggleLink()
+      break
+    case 'tiptap-h1':
+      tiptapEditor.value?.execToolbar('heading', { level: 1 })
+      break
+    case 'tiptap-h2':
+      tiptapEditor.value?.execToolbar('heading', { level: 2 })
+      break
+    case 'tiptap-h3':
+      tiptapEditor.value?.execToolbar('heading', { level: 3 })
+      break
+    case 'tiptap-paragraph':
+      tiptapEditor.value?.execToolbar('paragraph')
+      break
+    case 'tiptap-blockquote':
+      tiptapEditor.value?.execToolbar('blockquote')
+      break
+    case 'tiptap-codeblock':
+      tiptapEditor.value?.execToolbar('codeblock')
+      break
+    case 'tiptap-bulletlist':
+      tiptapEditor.value?.execToolbar('bulletList')
+      break
+    case 'tiptap-orderedlist':
+      tiptapEditor.value?.execToolbar('orderedList')
+      break
+    case 'tiptap-tasklist':
+      tiptapEditor.value?.execToolbar('taskList')
+      break
+    case 'tiptap-table':
+      tiptapEditor.value?.execToolbar('table', { rows: 3, cols: 3 })
       break
     case 'toggle-toc':
       toggleToc()
@@ -2945,9 +2963,6 @@ function handleToolbarCommand(command: string, ...args: any[]) {
       break
     case 'set-highlight-theme':
       setHighlightTheme(args[0])
-      break
-    case 'set-edit-mode':
-      setEditMode(args[0])
       break
     case 'toggle-fullscreen':
       toggleFullscreen()
@@ -2977,6 +2992,27 @@ function toggleAudioPlayer() {
   }
   
   showAudioPlayer.value = !showAudioPlayer.value
+}
+
+// 切换链接
+function toggleLink() {
+  // 获取当前选中的文本
+  const selectedText = tiptapEditor.value?.getSelectedText()
+  
+  if (!selectedText || selectedText.trim() === '') {
+    showAlert(t('noteEditor.selectTextForLink') || 'Please select text to add a link', { title: t('common.tip') })
+    return
+  }
+  
+  // 提示用户输入链接
+  const url = prompt(t('noteEditor.enterLinkUrl') || 'Enter the URL:', 'https://')
+  
+  if (url && url.trim()) {
+    tiptapEditor.value?.execToolbar('link', { href: url.trim() })
+  } else if (url === '') {
+    // 如果用户清空了URL，移除链接
+    tiptapEditor.value?.execToolbar('link', { href: null })
+  }
 }
 
 // 处理音频插入完成
@@ -3084,19 +3120,16 @@ function handleTopBarCommand(command: string) {
 
 // AI功能相关
 async function explainWithAI() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
+  const selectedText = tiptapEditor.value.getSelectedText?.()
+  
   // 确保有选择的文本
-  if (start === end) {
+  if (!selectedText || selectedText.length === 0) {
     await showAlert('请先选择一段文本', { title: '提示' })
     return
   }
 
-  const selectedText = localNote.value.content.substring(start, end)
   selectedTextForExplanation.value = selectedText
   explanationContent.value = ''
   showExplanationBox.value = true
@@ -3107,19 +3140,16 @@ async function explainWithAI() {
 }
 
 async function translateWithAI() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
+  const selectedText = tiptapEditor.value.getSelectedText?.()
+  
   // 确保有选择的文本
-  if (start === end) {
+  if (!selectedText || selectedText.length === 0) {
     await showAlert('请先选择一段文本', { title: '提示' })
     return
   }
 
-  const selectedText = localNote.value.content.substring(start, end)
   selectedTextForTranslation.value = selectedText
   translationContent.value = ''
   showTranslationBox.value = true
@@ -3130,28 +3160,20 @@ async function translateWithAI() {
 }
 
 async function tipWithAI() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-
+  const selectedText = tiptapEditor.value.getSelectedText?.()
+  
   // 确保有选择的文本
-  if (start === end) {
+  if (!selectedText || selectedText.length === 0) {
     await showAlert('请先选择一段文本', { title: '提示' })
     return
   }
 
-  const selectedText = localNote.value.content.substring(start, end)
-  
-  // 显示TIP对话框让用户修改提示词，保存选择位置
+  // 显示TIP对话框让用户修改提示词
   selectedTextForTip.value = selectedText
   originalTipPrompt.value = selectedText
   tipPrompt.value = originalTipPrompt.value
-  
-  // 保存选择位置用于后续处理
-  ;(window as any)._tipSelectionStart = start
-  ;(window as any)._tipSelectionEnd = end
   
   showTipDialog.value = true
   showContextMenu.value = false
@@ -3339,22 +3361,16 @@ async function copyTipResult() {
 
 // 将TIP结果插入笔记
 function insertTipResultToContent() {
-  const textarea = editorTextarea.value
-  if (!textarea) return
+  if (!tiptapEditor.value) return
 
   // 使用原始内容并移除think标签
   const cleanText = tipResultRawContent.value.replace(/<think\b[\s\S]*?<\/think>/gi, '').replace(/<details\b[\s\S]*?<\/details>/gi, '').trim()
   
-  const cursorPos = textarea.selectionEnd
-
-  localNote.value.content =
-    localNote.value.content.substring(0, cursorPos) +
-    '\n\n' + cleanText + '\n\n' +
-    localNote.value.content.substring(cursorPos)
+  const content = '\n\n' + cleanText + '\n\n'
+  tiptapEditor.value.insertAtCursor?.(content)
 
   nextTick(() => {
-    textarea.focus()
-    textarea.selectionStart = textarea.selectionEnd = cursorPos + cleanText.length + 4
+    tiptapEditor.value.focus?.()
   })
 
   // 保存
@@ -3516,587 +3532,93 @@ function endPan(event: MouseEvent) {
   document.removeEventListener('mouseup', endPan);
 }
 // --- End: Image Zoom & Pan Functions ---
-
-// Removed: WYSIWYG update handler
-
 </script>
 
-<style scoped>
-
-
-
-
-/* NoteEditor特有的样式 */
-
-/* 编辑器区域特殊样式 */
-:deep(.markdown-editor),
-:deep(.markdown-preview) {
-  flex: 1;
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-@media (max-width: 768px) {
-  :deep(.markdown-preview) {
-    display: none;
-  }
-  .editor-footer {
-    display: none;
-  }
-  :deep(.markdown-editor) {
-    width: 100%;
-  }
-}
-
-:deep(.fullscreen-editor) {
+<style lang="scss" scoped>
+.fullscreen-editor {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   width: 100vw !important;
   height: 100vh !important;
-  z-index: 9999 !important;
-  background: var(--fallback-b1, oklch(var(--b1))) !important;
+  z-index: 9999;
+  background: var(--color-base-100, #ffffff);
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
   margin: 0 !important;
   padding: 0 !important;
   border: none !important;
   border-radius: 0 !important;
-  box-shadow: none !important;
 }
 
-/* 全屏模式下的容器样式 */
-.fullscreen-editor .prose {
-  max-width: none !important;
-  padding: 2rem !important;
+// 防止全屏时编辑器被遮挡，确保之后的兄弟元素也不会显示
+:deep(.fullscreen-editor ~ *) {
+  display: none !important;
 }
 
-/* 全屏模式下的编辑器样式 */
-.fullscreen-editor textarea {
-  font-size: 1.1rem !important;
-  line-height: 1.7 !important;
-  padding: 2rem !important;
+// 顶部栏和工具栏保持正常高度
+:deep(.fullscreen-editor .editor-top-bar) {
+  flex-shrink: 0;
+  height: auto;
+  overflow: visible;
 }
 
-/* 全屏模式下的工具栏样式 */
-.fullscreen-editor .border-b {
-  border-color: var(--fallback-bc, oklch(var(--bc) / 0.2)) !important;
+:deep(.fullscreen-editor .editor-toolbar) {
+  flex-shrink: 0;
+  height: auto;
+  overflow: visible;
 }
 
-/* 全屏模式下的底部区域样式 */
-.fullscreen-editor .border-t {
-  border-color: var(--fallback-bc, oklch(var(--bc) / 0.2)) !important;
+// 主编辑区域填充剩余空间
+:deep(.fullscreen-editor > .flex-1) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: row;
+  
+  // 编辑器占据可用空间
+  > * {
+    flex: 1;
+    overflow: auto;
+  }
 }
 
-/* 全屏模式下隐藏滚动条但保持功能 */
-.fullscreen-editor::-webkit-scrollbar {
-  width: 8px;
+// 富文本编辑器在全屏时的样式
+:deep(.fullscreen-editor .ProseMirror) {
+  height: 100%;
+  max-height: 100%;
 }
 
-.fullscreen-editor::-webkit-scrollbar-track {
-  background: transparent;
+// 目录面板在全屏时的样式
+:deep(.fullscreen-editor .note-toc) {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
-.fullscreen-editor::-webkit-scrollbar-thumb {
-  background: var(--fallback-bc, oklch(var(--bc) / 0.3));
-  border-radius: 4px;
+// 预览面板在全屏时的样式
+:deep(.fullscreen-editor .markdown-preview) {
+  max-height: 100%;
+  overflow-y: auto;
 }
 
-.fullscreen-editor::-webkit-scrollbar-thumb:hover {
-  background: var(--fallback-bc, oklch(var(--bc) / 0.5));
-}
-
-/* 全屏模式下的响应式调整 */
-@media (max-width: 768px) {
-  .fullscreen-editor .prose {
-    padding: 1rem !important;
+// 禁用在全屏编辑器容器内的内部滚动条
+:deep(.fullscreen-editor) {
+  scrollbar-width: thin;
+  
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
   }
   
-  .fullscreen-editor textarea {
-    padding: 1rem !important;
-    font-size: 1rem !important;
+  &::-webkit-scrollbar-track {
+    background: transparent;
   }
   
-  /* 在小屏幕上隐藏快捷键提示 */
-  .fullscreen-editor .hidden.sm\\:block {
-    display: none !important;
+  &::-webkit-scrollbar-thumb {
+    background: var(--color-base-300);
+    border-radius: 4px;
   }
 }
-
-/* 全屏模式动画 */
-.fullscreen-editor {
-  animation: fullscreenFadeIn 0.3s ease-out;
-}
-
-@keyframes fullscreenFadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* 工具栏按钮的特殊样式 */
-.toolbar-btn {
-  padding: 6px 12px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.toolbar-btn:hover {
-  background: var(--background-hover);
-  transform: translateY(-1px);
-}
-
-.toolbar-btn.active {
-  background: var(--primary);
-  color: var(--primary-content);
-}
-
-
-/* Markdown主题相关的基础样式 */
-:deep(.prose) {
-  /* 确保主题变量能够正确应用 */
-  transition: color 0.3s ease, background-color 0.3s ease;
-}
-
-/* 标题样式增强 */
-:deep(.prose h1),
-:deep(.prose h2),
-:deep(.prose h3),
-:deep(.prose h4),
-:deep(.prose h5),
-:deep(.prose h6) {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  letter-spacing: -0.025em;
-  scroll-margin-top: 2rem;
-}
-
-:deep(.prose li) {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-/* 表格样式增强 */
-:deep(.prose table) {
-  border-collapse: collapse;
-  border-spacing: 0;
-  border-radius: 0.5rem;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-:deep(.prose thead th) {
-  background: rgba(var(--prose-th-borders), 0.1);
-  text-align: left;
-}
-
-:deep(.prose tbody tr:nth-child(even)) {
-  background: rgba(var(--prose-td-borders), 0.05);
-}
-
-
-
-/* 确保所有图片都是响应式的 */
-:deep(.prose img) {
-  max-width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  margin: 1rem auto;
-  display: block;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  object-fit: contain;
-}
-
-/* 对于超大图片，设置最大高度以防止占据过多屏幕空间 */
-:deep(.prose img),
-:deep(.embedded-image) {
-  max-height: 70vh;
-  /* 最大高度为视口高度的70% */
-  width: auto;
-  object-fit: contain;
-}
-
-/* 在小屏幕上进一步限制图片大小 */
-@media (max-width: 768px) {
-
-  :deep(.prose img),
-  :deep(.embedded-image),
-  :deep(.responsive-image) {
-    max-height: 50vh;
-    /* 在移动设备上限制为50%视口高度 */
-    margin: 0.5rem auto;
-  }
-}
-
-/* 图片容器样式，确保图片居中显示 */
-:deep(.prose p:has(img)) {
-  text-align: center;
-  margin: 1rem 0;
-}
-
-/* 为图片添加加载状态和错误处理 */
-:deep(.prose img) {
-  transition: opacity 0.3s ease;
-  cursor: zoom-in;
-}
-
-:deep(.prose img:hover) {
-  opacity: 0.9;
-}
-
-/* 图片加载失败时的样式 */
-:deep(.prose img[src=""]),
-:deep(.prose img:not([src])) {
-  display: none;
-}
-
-/* 响应式图片的额外样式 */
-:deep(.responsive-image) {
-  width: 100%;
-  height: auto;
-  max-width: 100%;
-  object-fit: contain;
-  border-radius: 0.5rem;
-  transition: all 0.3s ease;
-}
-
-/* 图片容器的响应式布局 */
-:deep(.prose) {
-  overflow-wrap: break-word;
-  word-wrap: break-word;
-}
-
-/* 确保图片不会破坏布局 */
-:deep(.prose p) {
-  overflow: hidden;
-}
-
-/* 图片加载时的占位效果 */
-:deep(.prose img[loading="lazy"]) {
-  background: linear-gradient(90deg, #f0f0f0 25%, transparent 37%, #f0f0f0 63%);
-  background-size: 400% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 100% 50%;
-  }
-
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* 暗色主题下的图片占位效果 */
-[data-theme="dark"] :deep(.prose img[loading="lazy"]),
-[data-theme="night"] :deep(.prose img[loading="lazy"]),
-[data-theme="black"] :deep(.prose img[loading="lazy"]) {
-  background: linear-gradient(90deg, #2a2a2a 25%, transparent 37%, #2a2a2a 63%);
-  background-size: 400% 100%;
-}
-
-/* 图片模态框的响应式样式 */
-.image-modal {
-  backdrop-filter: blur(8px);
-}
-
-/* 确保模态框中的图片也是响应式的 */
-.image-modal img {
-  max-width: 95vw;
-  max-height: 95vh;
-  object-fit: contain;
-}
-
-/* 在极小屏幕上的特殊处理 */
-@media (max-width: 480px) {
-
-  :deep(.prose img),
-  :deep(.embedded-image),
-  :deep(.responsive-image) {
-    max-height: 40vh;
-    margin: 0.25rem auto;
-  }
-
-  .image-modal img {
-    max-width: 98vw;
-    max-height: 85vh;
-  }
-}
-/* 嵌入图片样式 */
-:deep(.embedded-image) {
-  max-width: 100%;
-  height: auto;
-  border-radius: 0.5rem;
-  margin: 1rem 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: block;
-  object-fit: contain;
-}
-
-/* 确保 Prism 高亮后的代码块也支持换行 */
-:deep(.prose pre[class*="language-"]) {
-  white-space: pre-wrap !important;
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  word-break: break-all !important; /* 强制在任意字符间换行 */
-}
-
-:deep(.prose pre[class*="language-"] code) {
-  white-space: pre-wrap !important;
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  word-break: break-all !important; /* 强制在任意字符间换行 */
-}
-
-
-
-
-/* 确保行内代码在不同背景下都有良好的对比度 */
-:deep(.prose p code:not(pre code)),
-:deep(.prose li code:not(pre code)),
-:deep(.prose td code:not(pre code)),
-:deep(.prose th code:not(pre code)),
-:deep(.prose blockquote code:not(pre code)) {
-  background-color: rgba(175, 184, 193, 0.2);
-  color: rgb(214, 51, 132);
-  padding: 0.125rem 0.25rem;
-  border-radius: 0.25rem;
-  font-size: 0.875em;
-  font-weight: 600;
-}
-
-
-
-
-@keyframes slideIn {
-  from { 
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to { 
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-/* 快速模板按钮样式 */
-.template-btn {
-  transition: all 0.2s ease;
-  border: 1px solid hsl(var(--bc) / 0.2);
-}
-
-.template-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  border-color: hsl(var(--primary));
-}
-
-/* 提示词编辑区样式 */
-.tip-prompt-textarea {
-  transition: border-color 0.2s ease;
-  resize: vertical;
-  min-height: 120px;
-  max-height: 300px;
-}
-
-.tip-prompt-textarea:focus {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.2);
-}
-
-/* 选中文本显示区域样式 */
-.selected-text-display {
-  border-left: 4px solid hsl(var(--primary));
-  background: linear-gradient(90deg, hsl(var(--primary) / 0.1), transparent);
-}
-
-/* 字符计数样式 */
-.char-count {
-  font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-/* 链接中的行内代码样式 */
-:deep(.prose a code:not(pre code)) {
-  color: inherit;
-  background-color: rgba(0, 0, 0, 0.1);
-}
-
-
-
-/* 目录相关样式 */
-.toc-container {
-  backdrop-filter: blur(8px);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-  border: 1px solid hsl(var(--bc) / 0.1);
-  user-select: none;
-  transition: all 0.2s ease;
-  right: 20px !important;
-  left: auto !important;
-  z-index: 1000;
-  width: 200px;
-  position: fixed !important;
-  background-color: var(--fallback-b1, oklch(var(--b1))) !important;
-  opacity: 0.95;
-}
-
-.toc-container:hover {
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-.toc-header {
-  cursor: grab;
-}
-
-.toc-header:active {
-  cursor: grabbing;
-}
-
-.toc-item {
-  transition: all 0.15s ease;
-  border-radius: 0.25rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.toc-item:hover {
-  background-color: hsl(var(--bc) / 0.05);
-  transform: translateX(2px);
-}
-
-.toc-item.active {
-  background-color: hsl(var(--primary) / 0.1);
-  color: hsl(var(--primary));
-  border-left: 2px solid hsl(var(--primary));
-  padding-left: calc(0.5rem - 2px);
-}
-
-/* 目录层级缩进视觉效果 */
-.toc-item[style*="padding-left: 12px"] {
-  border-left: 1px solid hsl(var(--bc) / 0.1);
-}
-
-.toc-item[style*="padding-left: 24px"] {
-  border-left: 1px solid hsl(var(--bc) / 0.1);
-  position: relative;
-}
-
-.toc-item[style*="padding-left: 24px"]::before {
-  content: '';
-  position: absolute;
-  left: 12px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: hsl(var(--bc) / 0.1);
-}
-
-.toc-item[style*="padding-left: 36px"] {
-  border-left: 1px solid hsl(var(--bc) / 0.1);
-  position: relative;
-}
-
-.toc-item[style*="padding-left: 36px"]::before {
-  content: '';
-  position: absolute;
-  left: 12px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: hsl(var(--bc) / 0.1);
-}
-
-.toc-item[style*="padding-left: 36px"]::after {
-  content: '';
-  position: absolute;
-  left: 24px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: hsl(var(--bc) / 0.1);
-}
-
-/* 滚动条样式 */
-.toc-container .overflow-y-auto::-webkit-scrollbar {
-  width: 4px;
-}
-
-.toc-container .overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.toc-container .overflow-y-auto::-webkit-scrollbar-thumb {
-  background: hsl(var(--bc) / 0.2);
-  border-radius: 2px;
-}
-
-.toc-container .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--bc) / 0.3);
-}
-
-/* 拖拽时的样式 */
-.toc-container.dragging {
-  transform: rotate(2deg);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-}
-
-/* 修复代码块样式冲突 */
-:deep(.prose pre) {
-  /* Prism 主题 CSS 将提供合适的背景色 */
-  padding: 0 !important;
-  margin: 1rem 0 !important;
-  border-radius: 0.5rem !important;
-  overflow: hidden !important;
-}
-
-:deep(.prose pre code) {
-  /* 继承父级背景色，避免强制透明导致主题失效 */
-  padding: 1rem !important;
-  border: none !important;
-  border-radius: 0 !important;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
-  font-size: 0.875rem !important;
-  line-height: 1.5 !important;
-  white-space: pre-wrap !important;
-  word-wrap: break-word !important;
-  overflow-wrap: break-word !important;
-  word-break: break-all !important;
-  display: block !important;
-  width: 100% !important;
-  /* 修复重影问题 */
-  text-shadow: none !important;
-  font-weight: normal !important;
-}
-
-/* 修复代码块容器样式 */
-:deep(.prose .code-block-container) {
-  border-radius: 0.5rem !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
-}
-
-
-
-:deep(.prose .code-language) {
-  color: rgba(var(--bc), 0.6) !important;
-  font-weight: 500 !important;
-  text-transform: uppercase !important;
-}
-
-:deep(.prose .copy-code-btn) {
-  opacity: 0.6 !important;
-  transition: opacity 0.2s ease !important;
-}
-
-:deep(.prose .copy-code-btn:hover) {
-  opacity: 1 !important;
-}
-
-
 </style>
+
+// Removed: WYSIWYG update handler

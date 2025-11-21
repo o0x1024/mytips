@@ -718,7 +718,13 @@ impl SyncManager {
         
         // 安全地构建远程数据库连接，使用错误处理避免空指针
         let remote_db = match if let Some(token) = auth_token {
-            Builder::new_remote_replica(replica_path_str.clone(), remote_url.clone(), token)
+            // 确保token包含完整的认证头格式 (scheme + token)
+            let full_auth_token = if token.contains(' ') {
+                token.clone()
+            } else {
+                format!("Bearer {}", token)
+            };
+            Builder::new_remote_replica(replica_path_str.clone(), remote_url.clone(), full_auth_token)
                 .build().await
         } else {
             Builder::new_remote_replica(replica_path_str.clone(), remote_url.clone(), String::new())
