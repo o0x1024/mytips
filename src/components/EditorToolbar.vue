@@ -166,8 +166,12 @@
           <button class="toolbar-btn" @click="emitCommand('toggle-fullscreen')"
             :title="isFullscreen ? t('noteEditor.exitFullscreenTooltip') : t('noteEditor.enterFullscreenTooltip')"
             aria-label="Fullscreen">
-            <i v-if="!isFullscreen" class="ri-fullscreen-line"></i>
-            <i v-else class="ri-fullscreen-exit-line"></i>
+            <div v-if="!isFullscreen">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 3V5H4V9H2V3H8ZM2 21V15H4V19H8V21H2ZM22 21H16V19H20V15H22V21ZM22 9H20V5H16V3H22V9Z"></path></svg>
+            </div>
+            <div v-else>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M18 7H22V9H16V3H18V7ZM8 9H2V7H6V3H8V9ZM18 17V21H16V15H22V17H18ZM8 15V21H6V17H2V15H8Z"></path></svg>
+            </div>
           </button>
         </div>
       </div>
