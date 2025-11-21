@@ -95,3 +95,7 @@ tauri-plugin-global-shortcut = "2"
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "processthreadsapi", "psapi"] }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.26"
+objc = "0.2"
+

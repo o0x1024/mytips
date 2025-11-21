@@ -34,6 +34,8 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                   <path d="M17 11V4H19V21H17V13H7V21H5V4H7V11H17Z"></path>
                 </svg>
+                <i class="ri-arrow-down-s-line text-xs"></i>
+
               </button>
             </div>
           </div>
@@ -41,20 +43,20 @@
           <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'list' }">
             <button class="toolbar-btn dropdown-toggle" @click="toggleDropdown('list', $event)"
               :title="t('noteEditor.listTooltip') || 'Lists'" aria-label="List" ref="listButton">
-              <i class="ri-list-unordered"></i>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 15.0006L7.75732 10.758L9.17154 9.34375L12 12.1722L14.8284 9.34375L16.2426 10.758L12 15.0006Z"></path></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 4H21V6H8V4ZM4.5 6.5C3.67157 6.5 3 5.82843 3 5C3 4.17157 3.67157 3.5 4.5 3.5C5.32843 3.5 6 4.17157 6 5C6 5.82843 5.32843 6.5 4.5 6.5ZM4.5 13.5C3.67157 13.5 3 12.8284 3 12C3 11.1716 3.67157 10.5 4.5 10.5C5.32843 10.5 6 11.1716 6 12C6 12.8284 5.32843 13.5 4.5 13.5ZM4.5 20.4C3.67157 20.4 3 19.7284 3 18.9C3 18.0716 3.67157 17.4 4.5 17.4C5.32843 17.4 6 18.0716 6 18.9C6 19.7284 5.32843 20.4 4.5 20.4ZM8 11H21V13H8V11ZM8 18H21V20H8V18Z"></path></svg>
+               <i class="ri-arrow-down-s-line text-xs"></i>
+
             </button>
           </div>
           <!-- 引用 -->
           <button class="toolbar-btn" @click="emitCommand('tiptap-blockquote')" :title="t('noteEditor.quoteTooltip')"
             aria-label="Blockquote">
-            <i class="ri-double-quotes-l"></i>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19.4167 6.67891C20.4469 7.77257 21.0001 9 21.0001 10.9897C21.0001 14.4891 18.5436 17.6263 14.9695 19.1768L14.0768 17.7992C17.4121 15.9946 18.0639 13.6539 18.3245 12.178C17.7875 12.4557 17.0845 12.5533 16.3954 12.4895C14.591 12.3222 13.1689 10.8409 13.1689 9C13.1689 7.067 14.7359 5.5 16.6689 5.5C17.742 5.5 18.7681 5.99045 19.4167 6.67891ZM9.41669 6.67891C10.4469 7.77257 11.0001 9 11.0001 10.9897C11.0001 14.4891 8.54359 17.6263 4.96951 19.1768L4.07682 17.7992C7.41206 15.9946 8.06392 13.6539 8.32447 12.178C7.78747 12.4557 7.08452 12.5533 6.39539 12.4895C4.59102 12.3222 3.16895 10.8409 3.16895 9C3.16895 7.067 4.73595 5.5 6.66895 5.5C7.742 5.5 8.76814 5.99045 9.41669 6.67891Z"></path></svg>
           </button>
           <!-- 代码块 -->
           <button class="toolbar-btn" @click="emitCommand('tiptap-codeblock')" :title="t('noteEditor.codeBlockTooltip')"
             aria-label="Code Block">
-            <i class="ri-code-block"></i>
-          </button>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3.41436 5.99995L5.70726 3.70706L4.29304 2.29285L0.585938 5.99995L4.29304 9.70706L5.70726 8.29285L3.41436 5.99995ZM9.58594 5.99995L7.29304 3.70706L8.70726 2.29285L12.4144 5.99995L8.70726 9.70706L7.29304 8.29285L9.58594 5.99995ZM14.0002 2.99995H21.0002C21.5524 2.99995 22.0002 3.44767 22.0002 3.99995V20C22.0002 20.5522 21.5524 21 21.0002 21H3.00015C2.44787 21 2.00015 20.5522 2.00015 20V12H4.00015V19H20.0002V4.99995H14.0002V2.99995Z"></path></svg>          </button>
         </div>
 
         <div class="tiptap-separator" data-orientation="vertical" role="none"></div>
@@ -96,7 +98,7 @@
           <!-- 下划线 -->
           <button class="toolbar-btn" @click="emitCommand('tiptap-underline')" :title="t('noteEditor.underlineTooltip')"
             aria-label="Underline">
-            <i class="ri-underline"></i>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 3V12C8 14.2091 9.79086 16 12 16C14.2091 16 16 14.2091 16 12V3H18V12C18 15.3137 15.3137 18 12 18C8.68629 18 6 15.3137 6 12V3H8ZM4 20H20V22H4V20Z"></path></svg>
           </button>
         </div>
 
@@ -134,11 +136,11 @@
         <div class="toolbar-section">
           <button class="toolbar-btn" @click="emitCommand('toggle-audio-recording')"
             :title="t('noteEditor.audioRecordingTooltip')" aria-label="Audio Recording">
-            <i class="ri-mic-line"></i>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M11.9998 3C10.3429 3 8.99976 4.34315 8.99976 6V10C8.99976 11.6569 10.3429 13 11.9998 13C13.6566 13 14.9998 11.6569 14.9998 10V6C14.9998 4.34315 13.6566 3 11.9998 3ZM11.9998 1C14.7612 1 16.9998 3.23858 16.9998 6V10C16.9998 12.7614 14.7612 15 11.9998 15C9.23833 15 6.99976 12.7614 6.99976 10V6C6.99976 3.23858 9.23833 1 11.9998 1ZM3.05469 11H5.07065C5.55588 14.3923 8.47329 17 11.9998 17C15.5262 17 18.4436 14.3923 18.9289 11H20.9448C20.4837 15.1716 17.1714 18.4839 12.9998 18.9451V23H10.9998V18.9451C6.82814 18.4839 3.51584 15.1716 3.05469 11Z"></path></svg>
           </button>
           <button class="toolbar-btn" @click="emitCommand('toggle-audio-player')"
             :title="t('noteEditor.audioPlayerTooltip')" aria-label="Audio Player">
-            <i class="ri-music-2-line"></i>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 3V17C20 19.2091 18.2091 21 16 21C13.7909 21 12 19.2091 12 17C12 14.7909 13.7909 13 16 13C16.7286 13 17.4117 13.1948 18 13.5351V5H9V17C9 19.2091 7.20914 21 5 21C2.79086 21 1 19.2091 1 17C1 14.7909 2.79086 13 5 13C5.72857 13 6.41165 13.1948 7 13.5351V3H20ZM5 19C6.10457 19 7 18.1046 7 17C7 15.8954 6.10457 15 5 15C3.89543 15 3 15.8954 3 17C3 18.1046 3.89543 19 5 19ZM16 19C17.1046 19 18 18.1046 18 17C18 15.8954 17.1046 15 16 15C14.8954 15 14 15.8954 14 17C14 18.1046 14.8954 19 16 19Z"></path></svg>
           </button>
         </div>
 
@@ -146,19 +148,19 @@
         <div class="toolbar-section">
           <button class="toolbar-btn" :class="{ active: showToc }" @click="emitCommand('toggle-toc')"
             :title="t('noteEditor.toggleTocTooltip')" aria-label="Table of Contents">
-            <i class="ri-list-check"></i>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 22H4C3.44772 22 3 21.5523 3 21V3C3 2.44772 3.44772 2 4 2H20C20.5523 2 21 2.44772 21 3V21C21 21.5523 20.5523 22 20 22ZM19 20V4H5V20H19ZM8 7H16V9H8V7ZM8 11H16V13H8V11ZM8 15H16V17H8V15Z"></path></svg>
           </button>
         </div>
 
         <!-- 主题和显示 -->
         <div class="toolbar-section">
-          <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'theme' }">
+          <!-- <div class="dropdown" :class="{ 'dropdown-open': openDropdown === 'theme' }">
             <button class="toolbar-btn dropdown-toggle" @click="toggleDropdown('theme', $event)"
               :title="t('noteEditor.themeTooltip')" aria-label="Theme" ref="themeButton">
               <i class="ri-palette-line"></i>
               <i class="ri-arrow-down-s-line text-xs"></i>
             </button>
-          </div>
+          </div> -->
 
           <!-- 全屏 -->
           <button class="toolbar-btn" @click="emitCommand('toggle-fullscreen')"

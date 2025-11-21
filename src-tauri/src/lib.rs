@@ -12,6 +12,13 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+use cocoa::appkit::NSApplication;
+#[cfg(target_os = "macos")]
+use cocoa::base::nil;
+#[cfg(target_os = "macos")]
+use objc::{runtime::Object, *};
+
 // Directly import all public APIs provided by the api module
 use api::ai::conversations::{
     add_ai_message, clear_ai_conversation, create_ai_conversation, delete_ai_conversation,
@@ -53,6 +60,26 @@ use crate::api::database_manager::cleanup_local_database_files;
 fn open_devtools(app: tauri::AppHandle) {
     let window = app.get_webview_window("main").unwrap();
     window.open_devtools();
+}
+
+// macOS Dock 图标控制函数
+#[cfg(target_os = "macos")]
+fn set_dock_icon_visible(visible: bool) {
+    use cocoa::appkit::NSApplicationActivationPolicy;
+    
+    unsafe {
+        let app = cocoa::appkit::NSApp();
+        if visible {
+            app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyRegular);
+        } else {
+            app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_dock_icon_visible(_visible: bool) {
+    // 非 macOS 平台不执行任何操作
 }
 
 /// 初始化日志系统
@@ -119,6 +146,8 @@ pub fn run() -> anyhow::Result<()> {
             .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
                 println!("{}, {args:?}, {cwd}", app.package_info().name);
                 if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    set_dock_icon_visible(true);
                     let _ = window.unminimize();
                     let _ = window.show();
                     let _ = window.set_focus();
@@ -151,6 +180,9 @@ pub fn run() -> anyhow::Result<()> {
                         #[cfg(desktop)]
                         {
                             let _ = window_clone.hide();
+                            // 在 macOS 上隐藏 Dock 图标
+                            #[cfg(target_os = "macos")]
+                            set_dock_icon_visible(false);
                         }
                     }
                 });
@@ -439,6 +471,8 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    set_dock_icon_visible(true);
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();
@@ -447,6 +481,8 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
             "hide" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
+                    #[cfg(target_os = "macos")]
+                    set_dock_icon_visible(false);
                 }
             }
             "quit" => {
@@ -464,6 +500,8 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                     tracing::info!("Tray icon clicked, trying to show window");
                     if let Some(app) = tray.app_handle().get_webview_window("main") {
                         tracing::info!("Found main window, showing it");
+                        #[cfg(target_os = "macos")]
+                        set_dock_icon_visible(true);
                         let _ = app.show();
                         let _ = app.unminimize();
                         let _ = app.set_focus();
@@ -471,6 +509,8 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                         tracing::error!("Main window not found, cannot show it");
                         // 如果窗口不存在，尝试创建一个新窗口
                         let app_handle = tray.app_handle().clone();
+                        #[cfg(target_os = "macos")]
+                        set_dock_icon_visible(true);
                         let _ = tauri::WebviewWindowBuilder::new(
                             &app_handle,
                             "main",
@@ -491,6 +531,8 @@ fn setup_system_tray(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Err
                     tracing::info!("Tray icon double-clicked, trying to show window");
                     if let Some(app) = tray.app_handle().get_webview_window("main") {
                         tracing::info!("Found main window, showing it");
+                        #[cfg(target_os = "macos")]
+                        set_dock_icon_visible(true);
                         let _ = app.show();
                         let _ = app.unminimize();
                         let _ = app.set_focus();
